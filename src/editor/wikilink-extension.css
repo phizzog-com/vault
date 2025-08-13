@@ -1,0 +1,145 @@
+/* WikiLink Extension Styles */
+
+/* Existing WikiLinks - styled as active links with solid underline */
+.cm-wikilink-exists {
+  color: #2e6da4;
+  text-decoration: none;
+  cursor: pointer;
+  border-bottom: 1px solid #2e6da4;
+  transition: all 0.2s ease;
+  position: relative;
+  z-index: 1;
+  background-color: rgba(46, 109, 164, 0.1);
+  border-radius: 2px;
+  padding: 1px 2px;
+  font-weight: 500;
+}
+
+.cm-wikilink-exists:hover {
+  color: #1a4d7a;
+  border-bottom-color: #1a4d7a;
+  background-color: rgba(46, 109, 164, 0.2);
+  transform: translateY(-0.5px);
+  box-shadow: 0 2px 4px rgba(46, 109, 164, 0.2);
+}
+
+/* Non-existent WikiLinks - styled as "create new" links with dashed underline */
+.cm-wikilink-missing {
+  color: #dc3545;
+  text-decoration: none;
+  cursor: pointer;
+  border-bottom: 1px dashed #dc3545;
+  transition: all 0.2s ease;
+  position: relative;
+  z-index: 1;
+  background-color: rgba(220, 53, 69, 0.1);
+  border-radius: 2px;
+  padding: 1px 2px;
+  font-weight: 500;
+  opacity: 0.8;
+}
+
+.cm-wikilink-missing:hover {
+  color: #a02834;
+  border-bottom-color: #a02834;
+  background-color: rgba(220, 53, 69, 0.2);
+  opacity: 1;
+  transform: translateY(-0.5px);
+  box-shadow: 0 2px 4px rgba(220, 53, 69, 0.2);
+}
+
+/* Add subtle animation for newly created WikiLinks */
+.cm-wikilink-exists.newly-created {
+  animation: wikilink-created 0.8s ease-out;
+}
+
+@keyframes wikilink-created {
+  0% {
+    background-color: rgba(40, 167, 69, 0.3);
+    border-bottom-color: #28a745;
+    color: #28a745;
+  }
+  100% {
+    background-color: rgba(46, 109, 164, 0.1);
+    border-bottom-color: #2e6da4;
+    color: #2e6da4;
+  }
+}
+
+/* Dark theme overrides */
+.cm-theme-dark .cm-wikilink-exists {
+  color: #4fc3f7;
+  border-bottom-color: #4fc3f7;
+  background-color: rgba(79, 195, 247, 0.15);
+}
+
+.cm-theme-dark .cm-wikilink-exists:hover {
+  color: #29b6f6;
+  border-bottom-color: #29b6f6;
+  background-color: rgba(79, 195, 247, 0.25);
+  box-shadow: 0 2px 4px rgba(79, 195, 247, 0.3);
+}
+
+.cm-theme-dark .cm-wikilink-missing {
+  color: #f48fb1;
+  border-bottom-color: #f48fb1;
+  background-color: rgba(244, 143, 177, 0.15);
+}
+
+.cm-theme-dark .cm-wikilink-missing:hover {
+  color: #ec407a;
+  border-bottom-color: #ec407a;
+  background-color: rgba(244, 143, 177, 0.25);
+  box-shadow: 0 2px 4px rgba(244, 143, 177, 0.3);
+}
+
+/* High contrast mode support */
+@media (prefers-contrast: high) {
+  .cm-wikilink-exists {
+    border-bottom-width: 2px;
+    font-weight: 600;
+  }
+  
+  .cm-wikilink-missing {
+    border-bottom-width: 2px;
+    font-weight: 600;
+  }
+}
+
+/* Reduced motion support */
+@media (prefers-reduced-motion: reduce) {
+  .cm-wikilink-exists,
+  .cm-wikilink-missing {
+    transition: none;
+    transform: none;
+  }
+  
+  .cm-wikilink-exists:hover,
+  .cm-wikilink-missing:hover {
+    transform: none;
+    box-shadow: none;
+  }
+  
+  .cm-wikilink-exists.newly-created {
+    animation: none;
+  }
+}
+
+/* Focus styles for keyboard navigation */
+.cm-wikilink-exists:focus,
+.cm-wikilink-missing:focus {
+  outline: 2px solid #005fcc;
+  outline-offset: 1px;
+  border-radius: 3px;
+}
+
+/* Print styles - remove interactive elements for print */
+@media print {
+  .cm-wikilink-exists,
+  .cm-wikilink-missing {
+    background-color: transparent !important;
+    border-bottom: 1px solid currentColor !important;
+    box-shadow: none !important;
+    transform: none !important;
+  }
+}

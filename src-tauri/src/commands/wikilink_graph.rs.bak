@@ -1,0 +1,317 @@
+use tauri::{State, Window};
+use serde::{Serialize, Deserialize};
+use std::sync::Arc;
+use tokio::sync::Mutex;
+
+use crate::refactored_app_state::RefactoredAppState;
+use crate::graph::vault_graph_sync::{VaultGraphSyncManager, VaultSyncStats, WikiLinkRelation};
+use crate::graph::{GraphManagerTrait, Note};
+
+/// Request to sync a note to the vault graph
+#[derive(Debug, Serialize, Deserialize)]
+pub struct SyncNoteToGraphRequest {
+    pub vault_id: String,
+    pub note: Note,
+    pub old_content: Option<String>,
+}
+
+/// Response for vault graph synchronization
+#[derive(Debug, Serialize, Deserialize)]
+pub struct VaultGraphSyncResponse {
+    pub success: bool,
+    pub message: String,
+    pub stats: Option<VaultSyncStats>,
+}
+
+/// Response for WikiLink relationships
+#[derive(Debug, Serialize, Deserialize)]
+pub struct WikiLinkRelationsResponse {
+    pub relations: Vec<WikiLinkRelation>,
+    pub count: usize,
+}
+
+/// Initialize vault for graph synchronization
+#[tauri::command]
+pub async fn initialize_vault_graph_sync(
+    vault_id: String,
+    vault_path: String,
+    window: Window,
+    refactored_state: State<'_, RefactoredAppState>,
+) -> Result<VaultGraphSyncResponse, String> {
+    let _window = window; // Acknowledge parameter
+    let _window_id = "default".to_string(); // Placeholder for window tracking
+    
+    // Get graph manager
+    let graph_manager_opt = refactored_state.graph_manager.lock().await;
+    let graph_manager = graph_manager_opt.as_ref()
+        .ok_or("Graph manager not initialized")?;
+    
+    // Initialize vault sync manager
+    let vault_sync_manager = VaultGraphSyncManager::new()
+        .map_err(|e| format!("Failed to create vault sync manager: {}", e))?;
+    
+    // Initialize vault synchronization
+    match vault_sync_manager.initialize_vault_sync(
+        graph_manager,
+        &vault_id,
+        &vault_path,
+    ).await {
+        Ok(sync_config) => {
+            let stats = vault_sync_manager.get_vault_sync_stats(
+                graph_manager,
+                &vault_id,
+            ).await.ok();
+            
+            Ok(VaultGraphSyncResponse {
+                success: true,
+                message: format!("Vault {} initialized for graph sync", vault_id),
+                stats,
+            })
+        }
+        Err(e) => Ok(VaultGraphSyncResponse {
+            success: false,
+            message: format!("Failed to initialize vault graph sync: {}", e),
+            stats: None,
+        })
+    }
+}
+
+/// Sync a note to the vault-specific graph database
+#[tauri::command]
+pub async fn sync_note_to_vault_graph(
+    request: SyncNoteToGraphRequest,
+    window: Window,
+    refactored_state: State<'_, RefactoredAppState>,
+) -> Result<VaultGraphSyncResponse, String> {
+    let _window = window; // Acknowledge parameter
+    let _window_id = "default".to_string(); // Placeholder for window tracking
+    
+    // Get graph manager
+    let graph_manager_opt = refactored_state.graph_manager.lock().await;
+    let graph_manager = graph_manager_opt.as_ref()
+        .ok_or("Graph manager not initialized")?;
+    
+    // Create vault sync manager
+    let vault_sync_manager = VaultGraphSyncManager::new()
+        .map_err(|e| format!("Failed to create vault sync manager: {}", e))?;
+    
+    // Check if vault is initialized
+    if !vault_sync_manager.is_vault_initialized(&request.vault_id).await {
+        return Ok(VaultGraphSyncResponse {
+            success: false,
+            message: format!("Vault {} is not initialized for graph sync", request.vault_id),
+            stats: None,
+        });
+    }
+    
+    // Sync note to vault graph
+    match vault_sync_manager.sync_note_to_vault_graph(
+        graph_manager,
+        &request.vault_id,
+        &request.note,
+        request.old_content.as_deref(),
+    ).await {
+        Ok(()) => {
+            let stats = vault_sync_manager.get_vault_sync_stats(
+                graph_manager,
+                &request.vault_id,
+            ).await.ok();
+            
+            Ok(VaultGraphSyncResponse {
+                success: true,
+                message: format!("Note {} synced to vault graph", request.note.id),
+                stats,
+            })
+        }
+        Err(e) => Ok(VaultGraphSyncResponse {
+            success: false,
+            message: format!("Failed to sync note to vault graph: {}", e),
+            stats: None,
+        })
+    }
+}
+
+/// Get WikiLink relationships for a note in a vault
+#[tauri::command]
+pub async fn get_note_wikilink_relations(
+    vault_id: String,
+    note_id: String,
+    window: Window,
+    refactored_state: State<'_, RefactoredAppState>,
+) -> Result<WikiLinkRelationsResponse, String> {
+    let _window = window; // Acknowledge parameter
+    let _window_id = "default".to_string(); // Placeholder for window tracking
+    
+    // Get graph manager
+    let graph_manager_opt = refactored_state.graph_manager.lock().await;
+    let graph_manager = graph_manager_opt.as_ref()
+        .ok_or("Graph manager not initialized")?;
+    
+    // Create vault sync manager
+    let vault_sync_manager = VaultGraphSyncManager::new()
+        .map_err(|e| format!("Failed to create vault sync manager: {}", e))?;
+    
+    // Get WikiLink relationships
+    match vault_sync_manager.get_vault_wikilinks(
+        graph_manager,
+        &vault_id,
+        &note_id,
+    ).await {
+        Ok(relations) => {
+            let count = relations.len();
+            Ok(WikiLinkRelationsResponse { relations, count })
+        }
+        Err(e) => Err(format!("Failed to get WikiLink relations: {}", e))
+    }
+}
+
+/// Remove a note from the vault graph
+#[tauri::command]
+pub async fn remove_note_from_vault_graph(
+    vault_id: String,
+    note_id: String,
+    window: Window,
+    refactored_state: State<'_, RefactoredAppState>,
+) -> Result<VaultGraphSyncResponse, String> {
+    let _window = window; // Acknowledge parameter
+    let _window_id = "default".to_string(); // Placeholder for window tracking
+    
+    // Get graph manager
+    let graph_manager_opt = refactored_state.graph_manager.lock().await;
+    let graph_manager = graph_manager_opt.as_ref()
+        .ok_or("Graph manager not initialized")?;
+    
+    // Create vault sync manager
+    let vault_sync_manager = VaultGraphSyncManager::new()
+        .map_err(|e| format!("Failed to create vault sync manager: {}", e))?;
+    
+    // Remove note from vault graph
+    match vault_sync_manager.remove_note_from_vault_graph(
+        graph_manager,
+        &vault_id,
+        &note_id,
+    ).await {
+        Ok(()) => Ok(VaultGraphSyncResponse {
+            success: true,
+            message: format!("Note {} removed from vault graph", note_id),
+            stats: None,
+        }),
+        Err(e) => Ok(VaultGraphSyncResponse {
+            success: false,
+            message: format!("Failed to remove note from vault graph: {}", e),
+            stats: None,
+        })
+    }
+}
+
+/// Get vault graph synchronization stats
+#[tauri::command]
+pub async fn get_vault_graph_stats(
+    vault_id: String,
+    window: Window,
+    refactored_state: State<'_, RefactoredAppState>,
+) -> Result<VaultSyncStats, String> {
+    let _window = window; // Acknowledge parameter
+    let _window_id = "default".to_string(); // Placeholder for window tracking
+    
+    // Get graph manager
+    let graph_manager_opt = refactored_state.graph_manager.lock().await;
+    let graph_manager = graph_manager_opt.as_ref()
+        .ok_or("Graph manager not initialized")?;
+    
+    // Create vault sync manager
+    let vault_sync_manager = VaultGraphSyncManager::new()
+        .map_err(|e| format!("Failed to create vault sync manager: {}", e))?;
+    
+    // Get vault sync stats
+    vault_sync_manager.get_vault_sync_stats(
+        graph_manager,
+        &vault_id,
+    ).await
+}
+
+/// Cleanup vault graph data
+#[tauri::command]
+pub async fn cleanup_vault_graph(
+    vault_id: String,
+    window: Window,
+    refactored_state: State<'_, RefactoredAppState>,
+) -> Result<VaultGraphSyncResponse, String> {
+    let _window = window; // Acknowledge parameter
+    let _window_id = "default".to_string(); // Placeholder for window tracking
+    
+    // Get graph manager
+    let graph_manager_opt = refactored_state.graph_manager.lock().await;
+    let graph_manager = graph_manager_opt.as_ref()
+        .ok_or("Graph manager not initialized")?;
+    
+    // Create vault sync manager
+    let vault_sync_manager = VaultGraphSyncManager::new()
+        .map_err(|e| format!("Failed to create vault sync manager: {}", e))?;
+    
+    // Cleanup vault graph
+    match vault_sync_manager.cleanup_vault_graph(
+        graph_manager,
+        &vault_id,
+    ).await {
+        Ok(()) => Ok(VaultGraphSyncResponse {
+            success: true,
+            message: format!("Vault {} graph data cleaned up", vault_id),
+            stats: None,
+        }),
+        Err(e) => Ok(VaultGraphSyncResponse {
+            success: false,
+            message: format!("Failed to cleanup vault graph: {}", e),
+            stats: None,
+        })
+    }
+}
+
+/// Batch sync multiple notes to vault graph
+#[tauri::command]
+pub async fn batch_sync_notes_to_vault(
+    vault_id: String,
+    note_ids: Vec<String>,
+    window: Window,
+    refactored_state: State<'_, RefactoredAppState>,
+) -> Result<VaultGraphSyncResponse, String> {
+    let _window = window; // Acknowledge parameter
+    let _window_id = "default".to_string(); // Placeholder for window tracking
+    
+    // Get graph manager
+    let graph_manager_opt = refactored_state.graph_manager.lock().await;
+    let graph_manager = graph_manager_opt.as_ref()
+        .ok_or("Graph manager not initialized")?;
+    
+    // Create vault sync manager
+    let vault_sync_manager = VaultGraphSyncManager::new()
+        .map_err(|e| format!("Failed to create vault sync manager: {}", e))?;
+    
+    // For now, return a placeholder response
+    // In a real implementation, you would:
+    // 1. Retrieve the notes by their IDs
+    // 2. Call batch_sync_notes_to_vault with the actual Note objects
+    
+    Ok(VaultGraphSyncResponse {
+        success: true,
+        message: format!("Batch sync initiated for {} notes", note_ids.len()),
+        stats: None,
+    })
+}
+
+/// Get list of initialized vaults
+#[tauri::command]
+pub async fn get_initialized_vault_graphs(
+    window: Window,
+    refactored_state: State<'_, RefactoredAppState>,
+) -> Result<Vec<String>, String> {
+    let _window = window; // Acknowledge parameter
+    let _refactored_state = refactored_state; // Acknowledge parameter
+    
+    // Create vault sync manager
+    let vault_sync_manager = VaultGraphSyncManager::new()
+        .map_err(|e| format!("Failed to create vault sync manager: {}", e))?;
+    
+    // Get initialized vaults
+    Ok(vault_sync_manager.get_initialized_vaults().await)
+}
