@@ -108,6 +108,13 @@ export function extractCompletionContext(context) {
   const query = match[1] || ''
   const from = line.from + match.index + 2 // Position after [[
   
+  // Only trigger if user has started typing after [[
+  // This prevents the popup from appearing immediately with all files
+  if (query.length === 0) {
+    console.log('WikiLink pattern detected but no query yet - not triggering')
+    return { shouldTrigger: false }
+  }
+  
   console.log('WikiLink pattern detected:', {
     query,
     from,
@@ -332,9 +339,14 @@ export function invalidateNotesCache() {
  */
 export function createWikiLinkCompletion() {
   return autocompletion({
+    // Use override to ensure our source is called
     override: [wikiLinkCompletionSource],
     activateOnTyping: true,
-    maxRenderedOptions: 50
+    maxRenderedOptions: 50,
+    // Ensure completion stays open
+    closeOnBlur: false,
+    // Add explicit icons  
+    icons: false
   })
 }
 

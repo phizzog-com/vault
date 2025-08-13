@@ -420,10 +420,14 @@ export class MarkdownEditor {
       indentOnInput(),
       syntaxHighlighting(defaultHighlightStyle, { fallback: true }),
       bracketMatching(),
+      // Configure closeBrackets to exclude square brackets for WikiLinks
       closeBrackets({
-        // Don't auto-close square brackets to avoid interfering with WikiLinks
-        brackets: ["(", "{", '"', "'", "`"]
+        // Only include opening brackets we want to auto-close (exclude [ ])
+        brackets: ["(", "{", '"', "'", "`"],
+        before: ")]}\"'`"
       }),
+      
+      // WikiLink completion with autocompletion
       createWikiLinkCompletion(),
       rectangularSelection(),
       crosshairCursor(),
@@ -682,19 +686,7 @@ export class MarkdownEditor {
       
       // Input handler for == and ** wrapping
       EditorView.inputHandler.of((view, from, to, text) => {
-        // Check if typing '[' after another '[' for WikiLink completion
-        if (text === '[') {
-          const pos = view.state.selection.main.head
-          const before = view.state.doc.sliceString(Math.max(0, pos - 1), pos)
-          if (before === '[') {
-            console.log('Detected [[ pattern, explicitly triggering completion')
-            // Let the default input happen first, then force trigger completion
-            setTimeout(() => {
-              console.log('Calling startCompletion')
-              startCompletion(view)
-            }, 50)
-          }
-        }
+        // Removed automatic trigger on [[ since we want to wait for user to start typing
         
         // Check if typing '=' with selected text for highlighting
         if (text === '=' && from !== to) {
@@ -981,11 +973,27 @@ export class MarkdownEditor {
       window.updateWordCount()
     }
     
-    // Debounce auto-save
+    // Check if we're in the middle of a WikiLink completion
+    const currentContent = this.view?.state?.doc?.toString() || '';
+    const cursorPos = this.view?.state?.selection?.main?.head;
+    const textBeforeCursor = currentContent.slice(Math.max(0, cursorPos - 10), cursorPos);
+    
+    // Check for WikiLink pattern - look for [[ without closing ]]
+    const hasOpenWikiLink = textBeforeCursor.includes('[[') && 
+                            !textBeforeCursor.includes(']]') &&
+                            textBeforeCursor.lastIndexOf('[[') > textBeforeCursor.lastIndexOf(']]');
+    
+    // Debounce auto-save (extend delay if WikiLink is active)
     clearTimeout(this.autoSaveTimeout)
+    const saveDelay = hasOpenWikiLink ? 10000 : 2000; // 10 seconds if WikiLink active, 2 seconds otherwise
+    
+    if (hasOpenWikiLink) {
+      console.log('WikiLink detected - extending auto-save delay to 10 seconds');
+    }
+    
     this.autoSaveTimeout = setTimeout(() => {
       this.autoSave()
-    }, 2000)
+    }, saveDelay)
   }
 
   async setupTauriListeners() {
@@ -1457,6 +1465,25 @@ export class MarkdownEditor {
   }
 
   async autoSave() {
+    // Additional check - don't save if WikiLink is still open
+    const currentContent = this.view?.state?.doc?.toString() || '';
+    const cursorPos = this.view?.state?.selection?.main?.head;
+    const textBeforeCursor = currentContent.slice(Math.max(0, cursorPos - 10), cursorPos);
+    
+    const hasOpenWikiLink = textBeforeCursor.includes('[[') && 
+                            !textBeforeCursor.includes(']]') &&
+                            textBeforeCursor.lastIndexOf('[[') > textBeforeCursor.lastIndexOf(']]');
+    
+    if (hasOpenWikiLink) {
+      console.log('Skipping auto-save - WikiLink still open');
+      // Reschedule for later
+      clearTimeout(this.autoSaveTimeout)
+      this.autoSaveTimeout = setTimeout(() => {
+        this.autoSave()
+      }, 5000)
+      return;
+    }
+    
     if (this.hasUnsavedChanges && this.currentFile) {
       await this.save()
     }
