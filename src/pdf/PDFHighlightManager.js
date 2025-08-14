@@ -271,16 +271,73 @@ export async function extractHighlightsToMarkdown(filePath) {
     const pdfName = await basename(filePath);
     const pdfNameWithoutExt = pdfName.replace(/\.pdf$/i, '');
     
-    // console.log('Debug: EXTRACT - Highlights data:', highlights);
-    // console.log('Debug: EXTRACT - Number of pages with highlights:', Object.keys(highlights).length);
-    // console.log('Debug: EXTRACT - Highlights keys:', Object.keys(highlights));
+    // Prepare the markdown file path
+    const pdfDir = await dirname(filePath);
+    const markdownPath = await join(pdfDir, `${pdfNameWithoutExt}-highlights.md`);
     
-    // Generate markdown content
-    let markdown = `# PDF Highlights: ${pdfName}\n\n`;
+    // Check if file exists and has frontmatter
+    let existingFrontmatter = '';
+    let existingContent = '';
+    try {
+      const existing = await invoke('read_file_content', { filePath: markdownPath });
+      
+      // Parse existing frontmatter if present
+      if (existing.startsWith('---\n')) {
+        const frontmatterEnd = existing.indexOf('\n---\n', 4);
+        if (frontmatterEnd !== -1) {
+          // Extract frontmatter including the closing ---
+          existingFrontmatter = existing.substring(0, frontmatterEnd + 5);
+          // Keep any content after frontmatter that isn't our generated highlights
+          const afterFrontmatter = existing.substring(frontmatterEnd + 5);
+          // Look for our marker to identify generated content
+          if (!afterFrontmatter.includes('# PDF Highlights:')) {
+            existingContent = afterFrontmatter;
+          }
+        }
+      }
+    } catch (error) {
+      // File doesn't exist, which is fine
+      console.log('No existing highlights file found, creating new one');
+    }
+    
+    // Generate frontmatter if none exists
+    if (!existingFrontmatter) {
+      const now = new Date();
+      existingFrontmatter = `---
+title: "${pdfNameWithoutExt} Highlights"
+source: "${pdfName}"
+created_at: ${now.toISOString()}
+updated_at: ${now.toISOString()}
+type: pdf-highlights
+tags: []
+---`;
+    } else {
+      // Update the updated_at field in existing frontmatter
+      const now = new Date();
+      existingFrontmatter = existingFrontmatter.replace(
+        /updated_at:.*$/m,
+        `updated_at: ${now.toISOString()}`
+      );
+      // If no updated_at field exists, add it before the closing ---
+      if (!existingFrontmatter.includes('updated_at:')) {
+        existingFrontmatter = existingFrontmatter.replace(
+          /\n---$/,
+          `\nupdated_at: ${now.toISOString()}\n---`
+        );
+      }
+    }
+    
+    // Generate highlights content
+    let highlightsContent = `\n# PDF Highlights: ${pdfName}\n\n`;
     
     if (Object.keys(highlights).length === 0) {
-      markdown += '*No highlights found in this PDF.*\n';
+      highlightsContent += '*No highlights found in this PDF.*\n';
     } else {
+      // Add summary
+      const totalHighlights = Object.values(highlights).reduce((sum, pageHighlights) => 
+        sum + (pageHighlights ? pageHighlights.length : 0), 0);
+      highlightsContent += `*Total highlights: ${totalHighlights}*\n\n`;
+      
       // Sort pages numerically
       const sortedPages = Object.keys(highlights).sort((a, b) => parseInt(a) - parseInt(b));
       
@@ -288,29 +345,31 @@ export async function extractHighlightsToMarkdown(filePath) {
         const pageHighlights = highlights[pageNum];
         
         if (pageHighlights && pageHighlights.length > 0) {
-          markdown += `## Page ${pageNum}\n\n`;
+          highlightsContent += `## Page ${pageNum}\n\n`;
           
           pageHighlights.forEach((highlight, index) => {
-            markdown += `- "${highlight.text}"\n`;
+            highlightsContent += `- "${highlight.text}"\n`;
           });
           
-          markdown += '\n';
+          highlightsContent += '\n';
         }
       }
     }
     
-    // Add metadata
-    markdown += `---\n\n`;
-    markdown += `*Extracted on: ${new Date().toLocaleString()}*\n`;
-    markdown += `*Source: ${pdfName}*\n`;
+    // Add extraction metadata at the bottom
+    highlightsContent += `---\n\n`;
+    highlightsContent += `*Last extracted: ${new Date().toLocaleString()}*\n`;
+    highlightsContent += `*Source: ${pdfName}*\n`;
     
-    // Save markdown file
-    const pdfDir = await dirname(filePath);
-    const markdownPath = await join(pdfDir, `${pdfNameWithoutExt}-highlights.md`);
+    // Combine everything: frontmatter at top, then any existing content, then highlights
+    const finalContent = existingFrontmatter + '\n' + 
+                        (existingContent ? existingContent + '\n' : '') + 
+                        highlightsContent;
     
+    // Save the file
     await invoke('write_file_content', { 
       filePath: markdownPath, 
-      content: markdown 
+      content: finalContent 
     });
     console.log(`Extracted highlights to: ${markdownPath}`);
     

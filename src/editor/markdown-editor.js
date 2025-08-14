@@ -1023,7 +1023,7 @@ export class MarkdownEditor {
   }
 
   // Content manipulation methods
-  setContent(content) {
+  setContent(content, preserveScroll = false) {
     const startTime = Date.now();
     
     // Track performance for large content
@@ -1036,6 +1036,14 @@ export class MarkdownEditor {
       return;
     }
     
+    // Preserve scroll position if requested
+    let scrollTop = 0;
+    let scrollLeft = 0;
+    if (preserveScroll) {
+      scrollTop = this.view.scrollDOM.scrollTop;
+      scrollLeft = this.view.scrollDOM.scrollLeft;
+    }
+    
     this.view.dispatch({
       changes: {
         from: 0,
@@ -1043,6 +1051,14 @@ export class MarkdownEditor {
         insert: content
       }
     });
+    
+    // Restore scroll position if it was preserved
+    if (preserveScroll) {
+      requestAnimationFrame(() => {
+        this.view.scrollDOM.scrollTop = scrollTop;
+        this.view.scrollDOM.scrollLeft = scrollLeft;
+      });
+    }
     
     // Track completion time
     if (window.perfMonitor) {
@@ -1389,7 +1405,10 @@ export class MarkdownEditor {
   async save() {
     if (this.currentFile) {
       try {
-        console.log('💾 Saving file:', this.currentFile)
+        // Capture scroll position at the very start of save
+        const initialScrollTop = this.view?.scrollDOM?.scrollTop || 0
+        const initialScrollLeft = this.view?.scrollDOM?.scrollLeft || 0
+        console.log(`💾 Saving file: ${this.currentFile} (scroll: top=${initialScrollTop}, left=${initialScrollLeft})`)
         const content = this.getContent()
         const newTimestamp = await invoke('write_file_content', {
           filePath: this.currentFile,
@@ -1419,8 +1438,10 @@ export class MarkdownEditor {
               const newContent = lines.join('\n')
               const view = this.view
               if (view) {
-                // Get current cursor position
+                // Get current cursor and scroll positions BEFORE making changes
                 const cursorPos = view.state.selection.main.head
+                const scrollTop = view.scrollDOM.scrollTop
+                const scrollLeft = view.scrollDOM.scrollLeft
                 
                 // Create a transaction to update the content
                 const transaction = view.state.update({
@@ -1444,10 +1465,30 @@ export class MarkdownEditor {
                   })
                 }
                 
+                // IMPORTANT: Restore scroll position after content update
+                // Use requestAnimationFrame to ensure DOM has been updated
+                requestAnimationFrame(() => {
+                  view.scrollDOM.scrollTop = scrollTop
+                  view.scrollDOM.scrollLeft = scrollLeft
+                  console.log(`📍 Restored scroll position: top=${scrollTop}, left=${scrollLeft}`)
+                })
+                
                 console.log('📝 Updated timestamp in editor to:', newTimestamp)
               }
               break
             }
+          }
+        }
+        
+        // Fallback: If no timestamp update was done, still ensure scroll position is preserved
+        // This handles cases where the backend might not return a timestamp
+        if (!newTimestamp && this.view) {
+          const currentScrollTop = this.view.scrollDOM.scrollTop
+          const currentScrollLeft = this.view.scrollDOM.scrollLeft
+          if (currentScrollTop !== initialScrollTop || currentScrollLeft !== initialScrollLeft) {
+            console.log(`⚠️ Scroll position changed during save without timestamp update. Restoring...`)
+            this.view.scrollDOM.scrollTop = initialScrollTop
+            this.view.scrollDOM.scrollLeft = initialScrollLeft
           }
         }
         
