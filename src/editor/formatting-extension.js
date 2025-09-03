@@ -1104,7 +1104,7 @@ export const inlineFormattingStyles = EditorView.theme({
   
   '.cm-table-formatted th': {
     backgroundColor: 'var(--bg-secondary, #f8f9fa) !important',
-    color: 'var(--text-primary, #1a1a1a) !important',
+    color: 'var(--editor-text-color, #2c3e50) !important',
     fontWeight: '600 !important',
     padding: '12px 16px !important',
     borderBottom: '2px solid var(--border-color, #e9e9e7) !important',
@@ -1121,7 +1121,7 @@ export const inlineFormattingStyles = EditorView.theme({
     padding: '10px 16px !important',
     borderBottom: '1px solid var(--border-color, #e9e9e7) !important',
     borderRight: '1px solid var(--border-color, #e9e9e7) !important',
-    color: 'var(--text-primary, #1a1a1a) !important',
+    color: 'var(--editor-text-color, #2c3e50) !important',
     minWidth: '40px !important',
     whiteSpace: 'nowrap !important',
     overflow: 'hidden !important',
@@ -1151,7 +1151,7 @@ export const inlineFormattingStyles = EditorView.theme({
   
   '.cm-table-formatted code': {
     backgroundColor: 'var(--bg-secondary, #f8f9fa) !important',
-    color: 'var(--text-primary, #1a1a1a) !important',
+    color: 'var(--editor-text-color, #2c3e50) !important',
     padding: '2px 4px !important',
     borderRadius: '3px !important',
     fontSize: '13px !important',
@@ -1208,7 +1208,7 @@ export const inlineFormattingStyles = EditorView.theme({
     fontFamily: 'inherit !important',
     fontSize: 'inherit !important',
     lineHeight: 'inherit !important',
-    color: 'var(--text-primary, #1a1a1a) !important',
+    color: 'var(--editor-text-color, #2c3e50) !important',
     backgroundColor: 'transparent !important',
     border: 'none !important',
     whiteSpace: 'pre !important',

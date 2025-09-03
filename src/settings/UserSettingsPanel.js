@@ -10,6 +10,7 @@ export class UserSettingsPanel {
             editor: {
                 fontSize: 16,
                 fontFamily: "'SF Mono', Monaco, 'Cascadia Code', monospace",
+                fontColor: '#2c3e50',
                 theme: 'default',
                 lineNumbers: true,
                 lineWrapping: true,
@@ -101,6 +102,7 @@ export class UserSettingsPanel {
                 ...this.state.editor,
                 fontSize: settings.editor.font_size || this.state.editor.fontSize,
                 fontFamily: settings.editor.font_family || this.state.editor.fontFamily,
+                fontColor: settings.editor.font_color || this.state.editor.fontColor,
                 theme: settings.editor.theme || this.state.editor.theme,
                 lineNumbers: settings.editor.line_numbers !== undefined ? settings.editor.line_numbers : this.state.editor.lineNumbers,
                 lineWrapping: settings.editor.line_wrapping !== undefined ? settings.editor.line_wrapping : this.state.editor.lineWrapping,
@@ -133,6 +135,7 @@ export class UserSettingsPanel {
                 editor: {
                     font_size: this.state.editor.fontSize,
                     font_family: this.state.editor.fontFamily,
+                    font_color: this.state.editor.fontColor,
                     theme: this.state.editor.theme,
                     line_numbers: this.state.editor.lineNumbers,
                     line_wrapping: this.state.editor.lineWrapping,
@@ -182,6 +185,7 @@ export class UserSettingsPanel {
                 ...this.state.editor,
                 fontSize: settings.editor.font_size || this.state.editor.fontSize,
                 fontFamily: settings.editor.font_family || this.state.editor.fontFamily,
+                fontColor: settings.editor.font_color || this.state.editor.fontColor,
                 theme: settings.editor.theme || this.state.editor.theme,
                 lineNumbers: settings.editor.line_numbers !== undefined ? settings.editor.line_numbers : this.state.editor.lineNumbers,
                 lineWrapping: settings.editor.line_wrapping !== undefined ? settings.editor.line_wrapping : this.state.editor.lineWrapping,
@@ -231,6 +235,7 @@ export class UserSettingsPanel {
             if (window.themeManager) {
                 window.themeManager.setFontSize(this.state.editor.fontSize);
                 window.themeManager.setFontFamily(this.state.editor.fontFamily);
+                window.themeManager.setFontColor(this.state.editor.fontColor);
                 window.themeManager.applyTheme(this.state.editor.theme);
                 
                 // Apply line numbers setting to current editor
@@ -251,6 +256,27 @@ export class UserSettingsPanel {
                     if (currentVisible !== this.state.editor.showStatusBar) {
                         window.toggleStatusBar();
                     }
+                }
+                
+                // Force refresh theme on all editors to pick up font color change
+                // Use a small delay to ensure CSS variables have propagated
+                if (this.state.editor.fontColor) {
+                    setTimeout(() => {
+                        // Apply to all editors in all panes
+                        if (window.paneManager && window.paneManager.panes) {
+                            for (const pane of window.paneManager.panes.values()) {
+                                const tabManager = pane.tabManager;
+                                if (tabManager && tabManager.tabs) {
+                                    for (const tab of tabManager.tabs.values()) {
+                                        if (tab.editor && tab.type === 'markdown' && tab.editor.refreshTheme) {
+                                            console.log('Refreshing theme for font color preview');
+                                            tab.editor.refreshTheme();
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }, 50); // Small delay to ensure CSS variable is set
                 }
             }
         }, 300);
@@ -490,6 +516,21 @@ export class UserSettingsPanel {
                                         `).join('')}
                                     </select>
                                     <div class="font-size-preview">${this.state.editor.fontSize}px</div>
+                                </div>
+                            </div>
+                            
+                            <div class="form-group">
+                                <label>Font Color:</label>
+                                <div class="color-picker-control">
+                                    <input type="color" 
+                                           value="${this.state.editor.fontColor}"
+                                           onchange="userSettingsPanel.updateEditorSetting('fontColor', this.value)"
+                                           class="color-input">
+                                    <input type="text" 
+                                           value="${this.state.editor.fontColor}"
+                                           onchange="userSettingsPanel.updateEditorSetting('fontColor', this.value)"
+                                           class="color-text-input"
+                                           placeholder="#2c3e50">
                                 </div>
                             </div>
                             

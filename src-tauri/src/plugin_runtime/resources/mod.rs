@@ -274,6 +274,18 @@ impl ResourceMonitor {
         // Return a dummy handle for testing
         tokio::spawn(async {})
     }
+    
+    #[cfg(test)]
+    /// Test helper to manually set usage for a plugin
+    pub fn set_usage_for_test(&mut self, plugin_id: &str, usage: ResourceUsage) {
+        use std::sync::Arc;
+        use tokio::sync::RwLock;
+        
+        // Get a mutable reference to the usage map
+        if let Ok(mut usage_map) = self.usage.try_write() {
+            usage_map.insert(plugin_id.to_string(), usage);
+        }
+    }
 
     /// Check if monitoring is active for a plugin
     pub async fn is_monitoring(&self, plugin_id: &str) -> bool {

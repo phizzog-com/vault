@@ -221,7 +221,7 @@ async fn test_atomic_write() {
     let content = "# Test Document";
     
     // Write atomically
-    FrontMatterWriter::write_atomic(&file_path, &fm, content).await.unwrap();
+    FrontMatterWriter::write_atomic(&file_path, &fm, content).unwrap();
     
     // Verify file exists and has correct content
     assert!(file_path.exists());
@@ -243,7 +243,7 @@ async fn test_atomic_write_preserves_body() {
     
     // Update with new front matter
     let fm = FrontMatter::with_id("new-uuid-456".to_string());
-    FrontMatterWriter::write_atomic(&file_path, &fm, "").await.unwrap();
+    FrontMatterWriter::write_atomic(&file_path, &fm, "").unwrap();
     
     // Read and verify
     let updated = fs::read_to_string(&file_path).unwrap();

@@ -68,11 +68,12 @@ mod tests {
         monitor.set_limit(plugin_id, ResourceLimit {
             max_memory: Some(100 * 1024 * 1024), // 100MB
             max_cpu_percent: Some(50.0),
+            max_storage: None,
             max_network_bandwidth: None,
         });
         
         // Simulate usage below limit
-        monitor.update_usage(plugin_id, ResourceUsage {
+        monitor.set_usage_for_test(plugin_id, ResourceUsage {
             memory_bytes: 50 * 1024 * 1024, // 50MB
             cpu_percent: 25.0,
             network_bytes_sent: 0,
@@ -83,7 +84,7 @@ mod tests {
         assert!(!monitor.is_limit_exceeded(plugin_id));
         
         // Simulate usage above limit
-        monitor.update_usage(plugin_id, ResourceUsage {
+        monitor.set_usage_for_test(plugin_id, ResourceUsage {
             memory_bytes: 150 * 1024 * 1024, // 150MB
             cpu_percent: 25.0,
             network_bytes_sent: 0,
@@ -103,6 +104,7 @@ mod tests {
         enforcer.register_plugin(plugin_id, ResourceLimit {
             max_memory: Some(100 * 1024 * 1024),
             max_cpu_percent: Some(50.0),
+            max_storage: None,
             max_network_bandwidth: None,
         });
         
@@ -126,11 +128,12 @@ mod tests {
         monitor.set_limit(plugin_id, ResourceLimit {
             max_memory: Some(100 * 1024 * 1024),
             max_cpu_percent: None,
+            max_storage: None,
             max_network_bandwidth: None,
         });
         
         // Test warning at 80% threshold
-        monitor.update_usage(plugin_id, ResourceUsage {
+        monitor.set_usage_for_test(plugin_id, ResourceUsage {
             memory_bytes: 85 * 1024 * 1024, // 85MB - 85% of limit
             cpu_percent: 0.0,
             network_bytes_sent: 0,
@@ -154,7 +157,7 @@ mod tests {
         });
         
         telemetry.record(plugin_id, TelemetryEvent::LimitExceeded {
-            resource_type: "memory",
+            resource_type: "memory".to_string(),
             limit: 100 * 1024 * 1024,
             actual: 150 * 1024 * 1024,
         });
@@ -169,7 +172,7 @@ mod tests {
         let plugin_id = "test-plugin";
         
         // Start periodic monitoring
-        let handle = monitor.start_monitoring(plugin_id, Duration::from_millis(100));
+        let handle = monitor.start_monitoring_periodic(plugin_id, Duration::from_millis(100));
         
         // Let it run for a bit
         sleep(Duration::from_millis(350)).await;
@@ -188,7 +191,7 @@ mod tests {
         let plugin_id = "test-plugin";
         
         // Add some resource tracking
-        monitor.update_usage(plugin_id, ResourceUsage {
+        monitor.set_usage_for_test(plugin_id, ResourceUsage {
             memory_bytes: 50 * 1024 * 1024,
             cpu_percent: 10.0,
             network_bytes_sent: 1024,

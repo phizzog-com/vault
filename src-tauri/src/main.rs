@@ -36,6 +36,7 @@ mod window_commands_basic;
 mod plugin_runtime;
 mod plugins;
 mod identity;
+mod tasks;
 
 use vault::Vault;
 use identity::IdentityManager;
@@ -139,13 +140,16 @@ async fn window_closing(window: tauri::Window, refactored_state: State<'_, Refac
 
 #[tauri::command]
 async fn open_vault(path: String, window: tauri::Window, app: tauri::AppHandle, refactored_state: State<'_, RefactoredAppState>) -> Result<VaultInfo, String> {
+    println!("🔓 open_vault called with path: {}", path);
     let vault_path = PathBuf::from(&path);
     
     if !vault_path.exists() {
+        println!("❌ Vault directory does not exist: {}", path);
         return Err("Vault directory does not exist".to_string());
     }
     
     if !vault_path.is_dir() {
+        println!("❌ Path is not a directory: {}", path);
         return Err("Path is not a directory".to_string());
     }
     
@@ -157,16 +161,73 @@ async fn open_vault(path: String, window: tauri::Window, app: tauri::AppHandle, 
             .to_string(),
     };
     
+    println!("📁 Vault info: {:?}", vault_info);
+    
     // Get window ID and register with vault
     let window_id = extract_window_id(&window);
+    println!("🪟 Window ID: {}", window_id);
     
     // Register window if not already registered
     if refactored_state.get_window_state(&window_id).await.is_none() {
+        println!("📝 Registering window with ID: {}", window_id);
         refactored_state.register_window_with_id(window_id.clone(), app.clone()).await?;
     }
     
     // Register the window with the vault
+    println!("🔗 Registering window with vault...");
     refactored_state.register_window_vault(&window_id, vault_path.clone()).await?;
+    println!("✅ Window registered with vault");
+
+    // Reinitialize IdentityManager to use this vault path so task index and UUID ops target the right vault
+    // Update both RwLock- and Mutex-backed managers that are managed in state
+    println!("🔄 Starting IdentityManager reinitialization...");
+    {
+        // RwLock-based IdentityManager (used by various UUID commands)
+        if let Some(state) = app.try_state::<Arc<RwLock<IdentityManager>>>() {
+            println!("  📝 Found RwLock IdentityManager state");
+            let mut mgr = state.write();
+            *mgr = IdentityManager::new(vault_path.clone());
+            println!("  ✅ IdentityManager (RwLock) reinitialized for vault: {}", vault_path.display());
+        } else {
+            println!("  ⚠️ RwLock IdentityManager state not found");
+        }
+    }
+    {
+        // Mutex-based IdentityManager (used by task commands)
+        if let Some(state) = app.try_state::<Arc<tokio::sync::Mutex<IdentityManager>>>() {
+            println!("  📝 Found Mutex IdentityManager state");
+            let mut mgr = state.lock().await;
+            *mgr = IdentityManager::new(vault_path.clone());
+            println!("  ✅ IdentityManager (Mutex) reinitialized for vault: {}", vault_path.display());
+        } else {
+            println!("  ⚠️ Mutex IdentityManager state not found");
+        }
+    }
+    println!("✅ IdentityManager reinitialization complete");
+    
+    // Manually trigger task scanning after vault is open (avoiding deadlock)
+    {
+        println!("📚 Triggering manual task index population...");
+        let vault_path_for_scan = vault_path.clone();
+        // Get the state before app is moved
+        if let Some(identity_mgr) = app.try_state::<Arc<tokio::sync::Mutex<IdentityManager>>>() {
+            let identity_mgr = identity_mgr.inner().clone();
+            
+            // Spawn scanning task to avoid blocking
+            tokio::spawn(async move {
+                tokio::time::sleep(tokio::time::Duration::from_millis(500)).await; // Small delay to ensure vault is fully ready
+                println!("🔍 Starting background task scan for vault: {:?}", vault_path_for_scan);
+                let manager = identity_mgr.lock().await;
+                if let Err(e) = manager.scan_vault_for_tasks_async().await {
+                    eprintln!("⚠️ Failed to scan vault for tasks: {}", e);
+                } else {
+                    println!("✅ Background task scan completed");
+                }
+            });
+        } else {
+            println!("⚠️ Could not get IdentityManager state for task scanning");
+        }
+    }
     
     // Initialize and start Neo4j/Qdrant containers using SharedDockerManager
     let docker_manager = refactored_state.docker_manager.clone();
@@ -230,10 +291,12 @@ async fn open_vault(path: String, window: tauri::Window, app: tauri::AppHandle, 
     });
     
     // Update recent vaults
+    println!("📝 Updating recent vaults...");
     let mut persistence = crate::window_lifecycle::AppPersistenceState::load().unwrap_or_default();
-    persistence.add_recent_vault(path);
+    persistence.add_recent_vault(path.clone());
     let _ = persistence.save();
     
+    println!("🎉 open_vault completed successfully, returning vault_info");
     Ok(vault_info)
 }
 
@@ -565,8 +628,27 @@ async fn write_file_content(
                         use identity::frontmatter::{FrontMatterParser, FrontMatterWriter};
                         
                         // Parse existing frontmatter
-                        let (existing_fm, body) = FrontMatterParser::parse(&content)
+                        let (existing_fm, raw_body) = FrontMatterParser::parse(&content)
                             .unwrap_or((None, content.clone()));
+
+                        // Sanitize body: if it accidentally contains a leading frontmatter block,
+                        // strip it to avoid duplicate YAML headers on save.
+                        fn strip_leading_frontmatter(mut s: String) -> String {
+                            let starts_with_yaml = s.starts_with("---\n") || s.starts_with("---\r\n");
+                            if !starts_with_yaml { return s; }
+                            // Determine the line ending style within this body segment
+                            let has_crlf = s.contains("\r\n");
+                            let search_start = if s.starts_with("---\r\n") { 5 } else { 4 };
+                            let pattern_start = if has_crlf { "\r\n---" } else { "\n---" };
+                            let closing_pattern = if has_crlf { "\r\n---\r\n" } else { "\n---\n" };
+                            if let Some(end_pos) = s[search_start..].find(pattern_start) {
+                                let end_index = search_start + end_pos + closing_pattern.len();
+                                if end_index <= s.len() { return s[end_index..].to_string(); }
+                            }
+                            s
+                        }
+
+                        let body = strip_leading_frontmatter(raw_body);
                         
                         // If there's frontmatter with an ID, update the timestamp
                         if let Some(mut fm) = existing_fm {
@@ -1551,6 +1633,16 @@ fn main() {
             commands::graph::graph_enable_sync,
             commands::search::hybrid_search,
             commands::search::search_with_mode,
+            commands::task_index_commands::query_tasks,
+            commands::task_index_commands::query_tasks_by_status,
+            commands::task_index_commands::query_tasks_today,
+            commands::task_index_commands::query_tasks_overdue,
+            commands::task_index_commands::query_tasks_by_date_range,
+            commands::task_index_commands::get_task_source_by_id,
+            commands::task_index_commands::sync_file_tasks_to_index,
+            commands::task_commands::toggle_task_status,
+            commands::task_commands::toggle_task_by_id,
+            commands::task_commands::open_file_at_line,
             commands::search::get_search_capabilities,
             commands::search::resolve_node_id_to_path,
             commands::search::batch_resolve_node_ids,
@@ -1570,6 +1662,16 @@ fn main() {
             commands::uuid_commands::is_legacy_id,
             commands::uuid_commands::is_uuid,
             commands::uuid_commands::add_uuids_to_vault,
+            // Task commands
+            commands::task_commands::ensure_task_uuid,
+            commands::task_commands::get_tasks_for_note,
+            commands::task_commands::toggle_task_status,
+            commands::task_commands::update_task_properties,
+            commands::task_commands::batch_ensure_task_uuids,
+            commands::task_commands::get_task_by_id,
+            commands::task_commands::find_duplicate_task_ids,
+            commands::task_commands::add_task_uuids_to_vault,
+            commands::task_commands::rollback_task_migration,
             // Ghostty terminal commands
             register_ghostty_commands,
             ghostty_spawn,
@@ -1653,7 +1755,9 @@ fn main() {
             // Create app state
             let docker_manager = Arc::new(DockerManager::new());
             // Initialize IdentityManager with the vault path
-            let identity_manager = Arc::new(RwLock::new(IdentityManager::new(vault_path)));
+            let identity_manager = Arc::new(RwLock::new(IdentityManager::new(vault_path.clone())));
+            // Create a Mutex version for commands that expect it
+            let identity_manager_mutex = Arc::new(tokio::sync::Mutex::new(IdentityManager::new(vault_path)));
             let app_state = AppState {
                 vault: Arc::new(Mutex::new(None)),
                 identity_manager: identity_manager.clone(),
@@ -1669,8 +1773,11 @@ fn main() {
             // Manage the state
             app.manage(app_state);
             
-            // Also manage IdentityManager separately for UUID commands
+            // Also manage IdentityManager separately for UUID commands (RwLock version)
             app.manage(identity_manager);
+            
+            // Also manage IdentityManager for task commands (Mutex version) 
+            app.manage(identity_manager_mutex);
             
             // Also manage MCP manager separately for the MCP commands
             app.manage(mcp_manager);

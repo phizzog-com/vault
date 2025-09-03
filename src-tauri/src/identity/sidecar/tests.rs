@@ -50,7 +50,7 @@ async fn test_write_and_read_sidecar() {
     );
     
     // Write sidecar
-    SidecarManager::write(&file_path, &data).await.unwrap();
+    SidecarManager::write(&file_path, &data).unwrap();
     
     // Verify sidecar file exists
     let sidecar_path = SidecarManager::sidecar_path(&file_path);
@@ -76,13 +76,13 @@ async fn test_update_sidecar() {
         "test-uuid-123".to_string(),
         file_path.to_string_lossy().to_string(),
     );
-    SidecarManager::write(&file_path, &data).await.unwrap();
+    SidecarManager::write(&file_path, &data).unwrap();
     
     // Update
     SidecarManager::update(&file_path, |data| {
         data.legacy_ids = Some(vec!["old-id-1".to_string()]);
         data.file_hash = Some("hash123".to_string());
-    }).await.unwrap();
+    }).unwrap();
     
     // Read and verify
     let updated = SidecarManager::read(&file_path).unwrap().unwrap();

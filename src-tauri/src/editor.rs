@@ -4,11 +4,17 @@ use std::path::PathBuf;
 use tauri::State;
 use tokio::sync::Mutex;
 
+fn default_font_color() -> String {
+    "#2c3e50".to_string()
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct EditorPreferences {
     pub theme: String,
     pub font_size: u32,
     pub font_family: String,
+    #[serde(default = "default_font_color")]
+    pub font_color: String,
     pub line_height: f32,
     pub line_wrapping: bool,
     pub vim_mode: bool,
@@ -23,6 +29,7 @@ impl Default for EditorPreferences {
             theme: "default".to_string(),
             font_size: 14,
             font_family: "'SF Mono', Monaco, 'Cascadia Code', monospace".to_string(),
+            font_color: "#2c3e50".to_string(),
             line_height: 1.6,
             line_wrapping: true,
             vim_mode: false,
@@ -121,6 +128,7 @@ pub async fn save_editor_preference(
         "theme" => prefs.theme = value,
         "font_size" => prefs.font_size = value.parse().map_err(|e| format!("Invalid font size: {}", e))?,
         "font_family" => prefs.font_family = value,
+        "font_color" => prefs.font_color = value,
         "line_height" => prefs.line_height = value.parse().map_err(|e| format!("Invalid line height: {}", e))?,
         "line_wrapping" => prefs.line_wrapping = value.parse().map_err(|e| format!("Invalid line wrapping: {}", e))?,
         "vim_mode" => prefs.vim_mode = value.parse().map_err(|e| format!("Invalid vim mode: {}", e))?,

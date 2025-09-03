@@ -29,9 +29,9 @@
 }
 
 .widget-sidebar.visible {
-    width: 300px;
-    min-width: 250px;
-    max-width: 600px;
+    width: 400px;
+    min-width: 400px;
+    max-width: 500px;
 }
 
 /* Tab bar */
@@ -671,11 +671,107 @@ body.dark-theme .preview-content {
     .widget-sidebar {
         --widget-sidebar-width: 250px;
     }
+    
+    .widget-sidebar.visible {
+        width: 250px;
+        min-width: 200px;
+    }
 }
 
 @media (max-width: 900px) {
     /* Stack sidebars on small screens */
     .editor-container.both-sidebars-visible .widget-sidebar {
         display: none;
+    }
+}
+
+@media (max-width: 768px) {
+    /* Mobile responsive design */
+    .widget-sidebar {
+        position: fixed;
+        top: 0;
+        right: 0;
+        bottom: 0;
+        z-index: 1000;
+        width: 0;
+        max-width: 100vw;
+    }
+    
+    .widget-sidebar.visible {
+        width: 100vw;
+        min-width: unset;
+        max-width: unset;
+    }
+    
+    /* Hide resize handle on mobile */
+    .widget-resize-handle {
+        display: none;
+    }
+    
+    /* Adjust tab sizes for mobile */
+    .widget-tab {
+        padding: 0 12px;
+        font-size: 12px;
+    }
+    
+    /* Adjust content padding for mobile */
+    .widget-content {
+        padding: 12px;
+    }
+    
+    /* Task widget mobile optimizations */
+    .task-filter-tabs {
+        flex-wrap: wrap;
+        gap: 4px;
+    }
+    
+    .task-filter-tab {
+        flex: 1;
+        min-width: 80px;
+        font-size: 12px;
+        padding: 6px 8px;
+    }
+    
+    .task-item {
+        padding: 10px;
+    }
+    
+    .task-metadata {
+        font-size: 11px;
+    }
+    
+    /* Calendar widget mobile optimizations */
+    .calendar-day {
+        font-size: 11px;
+    }
+    
+    .calendar-weekday {
+        font-size: 10px;
+    }
+}
+
+@media (max-width: 480px) {
+    /* Small mobile screens */
+    .widget-tabs {
+        padding: 0 4px;
+        gap: 2px;
+    }
+    
+    .widget-tab {
+        padding: 0 8px;
+        font-size: 11px;
+    }
+    
+    .task-search-input {
+        font-size: 14px;
+        padding: 8px;
+    }
+    
+    .task-project-group h4 {
+        font-size: 13px;
+    }
+    
+    .task-text {
+        font-size: 13px;
     }
 }

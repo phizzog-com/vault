@@ -16,6 +16,8 @@ pub struct VaultSettings {
 pub struct EditorSettings {
     pub font_size: u32,
     pub font_family: String,
+    #[serde(default = "default_font_color")]
+    pub font_color: String,
     pub theme: String,
     pub line_numbers: bool,
     pub line_wrapping: bool,
@@ -34,6 +36,10 @@ fn default_daily_notes_folder() -> String {
     "Daily Notes".to_string()
 }
 
+fn default_font_color() -> String {
+    "#2c3e50".to_string()
+}
+
 impl Default for VaultSettings {
     fn default() -> Self {
         VaultSettings {
@@ -50,6 +56,7 @@ impl Default for EditorSettings {
         EditorSettings {
             font_size: 16,
             font_family: "'SF Mono', Monaco, 'Cascadia Code', monospace".to_string(),
+            font_color: "#2c3e50".to_string(),
             theme: "default".to_string(),
             line_numbers: true,
             line_wrapping: true,

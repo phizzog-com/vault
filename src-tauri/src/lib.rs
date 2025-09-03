@@ -18,6 +18,7 @@ pub mod commands;
 pub mod search;
 pub mod plugin_runtime;
 pub mod identity;
+pub mod tasks;
 
 pub use app_state::AppState;
 pub use window_state::{WindowState, WindowRegistry};

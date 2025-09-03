@@ -18,6 +18,7 @@ notify = "6"
 walkdir = "2"
 regex = "1"
 chrono = { version = "0.4", features = ["serde"] }
+chrono-english = "0.1"
 reqwest = { version = "0.11", features = ["json", "stream"] }
 base64 = "0.21"
 headless_chrome = "1.0"
@@ -48,6 +49,8 @@ dirs = "5.0"
 uuid = { version = "1.11", features = ["v4", "v7", "serde"] }
 # For LRU cache
 lru = "0.12"
+# For binary serialization
+bincode = "1.3"
 # For efficient thread-safe locks
 parking_lot = "0.12"
 # For YAML parsing and writing

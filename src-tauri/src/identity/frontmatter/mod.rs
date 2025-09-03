@@ -1,3 +1,5 @@
+pub mod tasks;
+
 use std::collections::BTreeMap;
 use std::path::Path;
 use std::fs;
@@ -7,6 +9,8 @@ use serde::{Serialize, Deserialize};
 use anyhow::{Result, Context};
 use tempfile::NamedTempFile;
 use chrono::{DateTime, Utc};
+
+pub use tasks::{TaskProperties, TaskStatus, Priority, TaskFrontMatter};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct FrontMatter {
@@ -300,3 +304,7 @@ impl FrontMatterWriter {
 
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod task_tests;
+#[cfg(test)]
+mod task_integration_tests;

@@ -1,6 +1,6 @@
 # Vault
 
-**Secure-first notes context engine that turns your knowledge into AI superpowers.**
+**Fast, private, and beautiful open-source notes app with AI-powered contextual knowledge discovery for privacy-conscious professionals**
 
 Vault is more than an app—it's the platform for the next evolution of human capability. The human-AI bridge where your domain knowledge becomes the foundation for achieving superhuman intelligence.
 
@@ -15,23 +15,25 @@ Here's the breakthrough: Vault progressively synthesizes your knowledge into a l
 Secure by Design: No Cloud. No Tracking. No BS. Every note stays local as plain Markdown. Total control, total privacy.
 
 Your context vault is yours. Forever. No lock-in, no proprietary formats.
-
 ---
 
 ## 🛠️ The Context Engine Stack
 
 *   **🔮 Progressive Context Synthesis:** Every note, highlight, and tag compounds into deeper AI understanding
 *   **📄 Universal Ingestion:** PDFs, images, code, markdown—everything becomes context
-*   **⚡ Living Knowledge Vault:** Local-first, secure, and blazing fast with Tauri + Rust
+*   **⚡ Living Knowledge Vault:** Local-first, secure, and blazing fast with Tauri v2 + Rust
 *   **🪟 Multi-Vault Windows:** Work with multiple knowledge vaults simultaneously in separate windows
 *   **🤖 MCP-Native Agent Integration:** Built for the agent future with Model Context Protocol at its core
 *   **🏷️ AI-First Tags:** Tags aren't metadata—they're context amplifiers that expand AI's understanding
-*   **🎯 Multi-Model Support:** OpenAI, Gemini, Ollama, LM Studio—all with persistent context
+*   **🎯 Multi-Model Support:** OpenAI, Gemini, Claude, Ollama, LM Studio—all with persistent context
+*   **📝 WikiLinks Support:** [[Note linking]] with auto-completion and smart reference updates
 *   **🖥️ Plugin System:** Complete plugin management interface with 4-view Hub (Discover, Installed, Permissions, Resources)
-*   **📚 Readwise Plugin Integration:** Complete production plugin with API pagination, content organization, and enhanced markdown formatting
-*   **🆔 UUID Identity System:** Production-ready note identity system maintaining stable note identity across renames, moves, and multi-machine synchronization
-*   **📋 Frontmatter Properties Widget:** Properties widget with clean YAML frontmatter display
-*   **🖥️ Claude Code CLI Integration:** Embedded terminal with full vault context and MCP integration
+*   **📚 Readwise Integration:** Production plugin with automatic UUID support, pagination, and enhanced formatting
+*   **🆔 UUID Identity System:** Stable note & task identity with UUIDv7 across renames, moves, and multi-machine sync
+*   **✅ Task Management System:** Complete task tracking with UUIDs, properties, TID autocomplete, and multiple views
+*   **🖥️ Claude Code CLI Integration:** Embedded with full vault context and MCP support
+*   **📅 Calendar & Daily Notes:** Time-based organization with calendar view
+*   **🎨 Zen Mode:** Distraction-free writing environment
 
 ## ⚡ What Makes This Different
 
@@ -50,26 +52,32 @@ Your context vault is yours. Forever. No lock-in, no proprietary formats.
 ## ⌨️ Keyboard Shortcuts
 
 ### Essential Shortcuts
-- **Cmd+F** - Global search across all notes (semantic + keyword hybrid search)
+- **Cmd+F** - Global search across all notes
 - **Cmd+Shift+F** - Local text search within current note
+- **Cmd+P** - Quick file switcher
 - **Cmd+Shift+P** - Open Plugin Hub for plugin management
-- **Cmd+`** - Toggle between Chat and CLI modes
+- **Cmd+Shift+T** - Open Task Dashboard with multiple views
+- **Cmd+`** - Toggle between Chat and Terminal modes
 - **Cmd+N** - Create new note
 - **Cmd+W** - Close current tab
+- **[[** - Trigger WikiLink auto-completion
+- **[[tid:** - Trigger TID (Task ID) autocomplete for task references
 
 ### Multi-Vault Features
 - **Multiple Windows** - Work with different vaults simultaneously
-- **Automatic Sync** - Knowledge graph and semantic search activate automatically on vault open
-- **Vault Isolation** - Each vault maintains separate context and search indices
+- **Vault Isolation** - Each vault maintains separate context
+- **Session Restoration** - Remembers open tabs and window positions
+- **Cross-Vault Navigation** - Quick switching between vaults
 
 ## 🚀 Getting Started (Beta)
 
 Vault is open source and we welcome contributions!
 
 ### Prerequisites
-- **Rust:** Required for building the Tauri app
+- **Rust:** 2021 Edition or later (for building Tauri v2)
 - **Node.js:** Version 22 or later
 - **npm:** Version 10 or later
+- **Platform:** macOS, Windows, or Linux
 
 ### Quick Start
 
@@ -96,10 +104,6 @@ node --version && npm --version
 # Install dependencies
 npm install
 
-# Build MCP servers (required for first run)
-chmod +x scripts/build-mcp-servers.sh
-./scripts/build-mcp-servers.sh
-
 # Run the development server
 npm run tauri dev
 ```
@@ -120,23 +124,40 @@ Join us in building the future of human-AI collaboration:
 
 ## 📚 Documentation
 
-- [Quick Start Guide](docs/QUICK_START_GUIDE.md) - Get up and running with Vault quickly
-- [User Guide](docs/USER_GUIDE.md) - Complete guide to using Vault's features including multi-vault windows
-- [AI Setup](docs/AI_SETUP.md) - Configure AI models and integrations
-- [MCP Settings Example](docs/MCP_SETTINGS_EXAMPLE.md) - Model Context Protocol configuration examples
-- [Data Storage Guide](docs/DATA_STORAGE.md) - Understanding your context vault structure
-- [Contributing](docs/CONTRIBUTING.md) - Guidelines for contributing to Vault
+- [User Guide](docs/USER_GUIDE.md) - Complete guide to using Vault's features
+- [Quick Start Guide](docs/QUICK_START_GUIDE.md) - Get up and running quickly
+- [Development Setup](docs/DEVELOPMENT_SETUP.md) - Set up your development environment
+- [Contributing Guide](docs/CONTRIBUTING.md) - How to contribute to Vault
+- [Data Storage Guide](docs/DATA_STORAGE.md) - Understanding your vault structure
+- [AI Setup Guide](docs/AI_SETUP.md) - Configure AI providers
+- [MCP Settings Example](docs/MCP_SETTINGS_EXAMPLE.md) - Model Context Protocol configuration
 
 ## 🗺️ The Road to Superhuman Intelligence
 
+### ✅ Recently Shipped
+*   **✅ Task UUID System:** Complete task management with UUIDv7 identifiers, TID autocomplete (<50ms), and 8 new Tauri commands
+*   **📊 Task Widget:** Consolidated 400-500px sidebar widget with Dashboard, List, Kanban, and Calendar views
+*   **🎨 Task Visual Polish:** Project pills (🗂️ light green), priority colors (!low light blue), dark mode support
+*   **🆔 UUID Identity System:** Complete note & task identity tracking across all operations
+*   **📝 WikiLinks:** Full [[note linking]] and [[tid:xxx]] task linking with auto-completion
+*   **📋 Properties Widget:** Smart frontmatter display with field ordering
+*   **🎨 Editor UX:** Scroll preservation, smart auto-save, highlight placement
+*   **🖥️ Claude Code CLI Integration:** Embedded Claude Code CLI in terminal with MCP support
+*   **📄 Frontmatter/Properties Stabilization:** Body-only editing with Properties widget; no raw YAML or spacing issues
+
 ### 🚧 Building Now
-*   **🧪 Production Deployment:** Final validation and deployment preparation for complete plugin system
-*   **📱 Additional Plugins:** Development of next production plugins using validated architecture
+*   **🧪 Plugin System:** Production deployment of complete plugin architecture
+*   **📱 Additional Plugins:** Expanding ecosystem with validated plugin API
 
 ### 🚀 The Horizon
-*   **📱 Mobile Context:** iOS app for capturing context on the go
+*   **📱 Mobile App:** iOS/Android apps for capturing context on the go
+*   **🌐 Web Clipper:** Browser extension for saving web content
+*   **🎙️ Voice Notes:** Audio recording with transcription
+*   **👥 Collaboration:** Shared vaults and real-time editing
 *   **🧠 Context Analytics:** Visualize how your knowledge compounds
-*   **🖥️ Vault Themes Marketplace:** Purpose built theme templates for specific functions like research, projects, etc. 
+*   **🎨 Themes Marketplace:** Custom themes for specific workflows
+*   **🔐 E2E Encryption:** End-to-end encryption for cloud sync
+*   **🔄 P2P Sync:** Peer-to-peer synchronization 
 
 ## 📄 License
 

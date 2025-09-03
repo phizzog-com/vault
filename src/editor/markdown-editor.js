@@ -1,7 +1,7 @@
 import { EditorView, keymap, drawSelection, highlightActiveLine, 
          lineNumbers, highlightActiveLineGutter, rectangularSelection,
-         crosshairCursor, dropCursor, ViewPlugin, Decoration } from '@codemirror/view'
-import { EditorState, Compartment, RangeSet, Facet } from '@codemirror/state'
+         crosshairCursor, dropCursor, ViewPlugin, Decoration, WidgetType } from '@codemirror/view'
+import { EditorState, Compartment, RangeSet, Facet, StateField, StateEffect } from '@codemirror/state'
 import { defaultKeymap, history, historyKeymap, indentWithTab } from '@codemirror/commands'
 import { autocompletion, completionKeymap, closeBrackets, 
          closeBracketsKeymap, startCompletion } from '@codemirror/autocomplete'
@@ -18,10 +18,12 @@ import { inlineFormattingExtension, inlineFormattingStyles, blockWidgetExtension
 import { imageEmbedPlugin } from './image-extension.js'
 import { linkPlugin, linkStyles } from './link-extension.js'
 import { wikiLinkPlugin, wikiLinkStyles } from './wikilink-extension.js'
-import { createWikiLinkCompletion } from './wikilink-autocompletion.js'
+import { wikiLinkCompletionSource, createWikiLinkCompletion } from './wikilink-autocompletion.js'
+import { tidCompletionSource } from './tid-autocomplete.js'
 import { imagePasteExtension } from './image-paste-extension.js'
 import { summarizeHighlightsCommand } from './highlights-extension.js'
 import { bulletListExtension } from './bullet-list-extension.js'
+import { taskExtensionConfig } from './task-extension.js'
 
 // Compartments for dynamic configuration
 const themeCompartment = new Compartment()
@@ -29,6 +31,24 @@ const lineWrappingCompartment = new Compartment()
 const fontSizeCompartment = new Compartment()
 const lineNumbersCompartment = new Compartment()
 const frontmatterCompartment = new Compartment()
+
+// State field to store the current file path
+const currentFilePathField = StateField.define({
+  create() { return null },
+  update(value, tr) {
+    for (let effect of tr.effects) {
+      if (effect.is(setCurrentFilePath)) {
+        return effect.value
+      }
+    }
+    return value
+  }
+})
+
+const setCurrentFilePath = StateEffect.define()
+
+// Make the field globally accessible for the bullet-list extension
+window.currentFilePath = currentFilePathField
 
 export class MarkdownEditor {
   constructor(container, initialContent = '') {
@@ -47,6 +67,30 @@ export class MarkdownEditor {
     this.currentFile = null
     this.showLineNumbers = false // Default to hiding line numbers
     this.lineWrapping = true // Default to enabling line wrapping
+    
+    // Stored frontmatter for body-only editing
+    this.frontmatterRaw = ''
+    this.frontmatterFields = new Map()
+    
+    // Make reload method available globally for bullet-list extension
+    window.reloadCurrentFile = async () => {
+      if (this.currentFile) {
+        try {
+          const { invoke } = await import('@tauri-apps/api/core');
+          const content = await invoke('read_file_content', { filePath: this.currentFile });
+          // Preserve cursor position
+          const cursor = this.view.state.selection.main.head;
+          this.setContent(content, false, this.currentFile, true);
+          // Restore cursor position
+          this.view.dispatch({
+            selection: { anchor: cursor, head: cursor },
+            scrollIntoView: true
+          });
+        } catch (error) {
+          console.error('[MarkdownEditor] Failed to reload file:', error);
+        }
+      }
+    }
     
     this.setupEditor(initialContent)
     this.setupTauriListeners()
@@ -77,6 +121,92 @@ export class MarkdownEditor {
         }, 100)
       }
     }
+  }
+
+  // Parse YAML frontmatter at the top of content
+  parseFrontmatter(content) {
+    try {
+      const m = content.match(/^---\r?\n[\s\S]*?\r?\n---\r?\n/)
+      if (!m) return { raw: '', fields: new Map(), body: content }
+      const raw = m[0]
+      const inner = raw.replace(/^---\r?\n/, '').replace(/\r?\n---\r?\n$/, '')
+      const fields = new Map()
+      inner.split(/\r?\n/).forEach(line => {
+        const idx = line.indexOf(':')
+        if (idx > -1) {
+          const key = line.slice(0, idx).trim()
+          let value = line.slice(idx + 1).trim()
+          if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
+            value = value.slice(1, -1)
+          }
+          if (key) fields.set(key, value)
+        }
+      })
+      const body = content.slice(raw.length)
+      return { raw, fields, body }
+    } catch (_) {
+      return { raw: '', fields: new Map(), body: content }
+    }
+  }
+
+  // Widget-only plugin that reads stored frontmatter
+  createFrontmatterWidget() {
+    const editor = this
+    return ViewPlugin.fromClass(class {
+      constructor() {
+        this.decorations = this.build()
+      }
+      build() {
+        if (!editor.frontmatterRaw || editor.frontmatterRaw.length === 0) return Decoration.none
+        class PropsWidget extends WidgetType {
+          constructor(fields, collapsed = true) { super(); this.fields = fields; this.collapsed = collapsed }
+          toDOM() {
+            const container = document.createElement('div')
+            container.className = 'frontmatter-properties-container'
+            const header = document.createElement('div')
+            header.className = 'frontmatter-properties-header'
+            const arrow = document.createElement('span')
+            arrow.textContent = this.collapsed ? '▶' : '▼'
+            arrow.style.marginRight = '6px'
+            arrow.style.fontSize = '10px'
+            const label = document.createElement('span')
+            label.textContent = 'Properties'
+            header.appendChild(arrow); header.appendChild(label)
+            const content = document.createElement('div')
+            content.className = 'frontmatter-properties-content'
+            content.style.display = this.collapsed ? 'none' : 'block'
+            const ordered = ['id', 'created_at', 'updated_at']
+            const fields = this.fields || new Map()
+            const other = Array.from(fields.keys()).filter(k => !ordered.includes(k)).sort()
+            const keys = [...ordered.filter(k => fields.has(k)), ...other]
+            keys.forEach(k => {
+              const row = document.createElement('div')
+              const kspan = document.createElement('span'); kspan.textContent = k
+              const vspan = document.createElement('span'); vspan.textContent = fields.get(k)
+              row.appendChild(kspan); row.appendChild(vspan)
+              content.appendChild(row)
+            })
+            // Toggle collapse on header click/keypress
+            const toggle = (e) => {
+              e.preventDefault(); e.stopPropagation();
+              this.collapsed = !this.collapsed
+              arrow.textContent = this.collapsed ? '▶' : '▼'
+              content.style.display = this.collapsed ? 'none' : 'block'
+            }
+            header.addEventListener('click', toggle)
+            header.tabIndex = 0
+            header.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') toggle(e) })
+            container.appendChild(header)
+            container.appendChild(content)
+            return container
+          }
+          eq(other) { return other.collapsed === this.collapsed }
+          ignoreEvent() { return false }
+        }
+        return Decoration.set([Decoration.widget({ widget: new PropsWidget(editor.frontmatterFields, true), side: -1 }).range(0)])
+          }
+      update(u) { if (u.docChanged) this.decorations = this.build() }
+    }, { decorations: v => v.decorations })
   }
 
   createFrontmatterPlugin() {
@@ -310,67 +440,14 @@ export class MarkdownEditor {
           }
         }
         
-        const decorations = []
-        
-        // Add Properties widget and hide ALL frontmatter including newlines
-        try {
-          // Add Properties widget at the start
-          decorations.push(
-            Decoration.widget({
-              widget: new PropertiesHeader(),
-              side: -1
-            }).range(0)
-          )
-          
-          // Find end of frontmatter INCLUDING the newline after closing ---
-          const closingPattern = text.includes('\r\n') ? '\r\n---\r\n' : '\n---\n'
-          const searchStart = 4 // After opening "---\n"
-          const closingPos = text.indexOf(closingPattern, searchStart)
-          
-          if (closingPos !== -1) {
-            const endPos = closingPos + closingPattern.length
-            
-            // Hide the ENTIRE frontmatter block INCLUDING all newlines
-            decorations.push(
-              Decoration.mark({
-                attributes: {
-                  class: 'cm-frontmatter-hidden'
-                }
-              }).range(0, endPos)
-            )
-          }
-        } catch (error) {
-          console.warn('Error creating frontmatter decorations:', error)
-        }
-        
-        // Filter and sort decorations for CodeMirror
-        const validDecorations = decorations.filter(dec => {
-          if (!dec) return false
-          
-          // Widget decorations
-          if (dec.value?.widget) return true
-          
-          // Mark decorations with valid range
-          if (dec.value?.spec?.attributes && typeof dec.from === 'number' && typeof dec.to === 'number') {
-            return dec.to > dec.from
-          }
-          
-          return false
-        }).sort((a, b) => (a.from || 0) - (b.from || 0))
-        
-        try {
-          return validDecorations.length > 0 ? Decoration.set(validDecorations) : Decoration.none
-        } catch (error) {
-          console.error('Error creating decoration set:', error)
-          return Decoration.none
-        }
+        // Only insert the Properties widget; editor doc may be body-only
+        return Decoration.set([
+          Decoration.widget({ widget: new PropertiesHeader(), side: -1 }).range(0)
+        ])
       }
       
       update(update) {
-        if (update.docChanged || update.viewportChanged) {
-          console.log('Frontmatter plugin update triggered:', { docChanged: update.docChanged, viewportChanged: update.viewportChanged })
-          this.decorations = this.buildDecorations(update.view)
-        }
+        if (update.docChanged) this.decorations = this.buildDecorations(update.view)
       }
     }, {
       decorations: v => v.decorations
@@ -378,6 +455,11 @@ export class MarkdownEditor {
   }
 
   setupEditor(content) {
+    // Body-only editing: parse frontmatter and keep it stored
+    const parsed = this.parseFrontmatter(content || '')
+    this.frontmatterRaw = parsed.raw
+    this.frontmatterFields = parsed.fields
+    const bodyOnly = parsed.body
     // Create a shared state object for highlight tracking
     const highlightState = { 
       waitingForSecondEqual: false,
@@ -411,6 +493,9 @@ export class MarkdownEditor {
     }
     
     const extensions = [
+      // State field for current file path
+      currentFilePathField,
+      
       // Manual basicSetup configuration with all essential functionality including double-click word selection
       this.lineNumbersCompartment.of(this.showLineNumbers ? [lineNumbers(), highlightActiveLineGutter(), foldGutter()] : []),
       history(),
@@ -427,8 +512,33 @@ export class MarkdownEditor {
         before: ")]}\"'`"
       }),
       
-      // WikiLink completion with autocompletion
-      createWikiLinkCompletion(),
+      // Combined autocompletion for WikiLinks and TIDs
+      autocompletion({
+        override: [
+          // Combine both completion sources
+          async (context) => {
+            // Check for TID pattern IMMEDIATELY before cursor (more specific check)
+            const beforeCursor = context.state.doc.sliceString(Math.max(0, context.pos - 20), context.pos)
+            const hasTidPattern = /\[\[(TID|tid):\s*[^\]]*$/i.test(beforeCursor)
+            
+            if (hasTidPattern) {
+              console.log('TID pattern detected, calling TID completion')
+              // TID pattern detected, use TID completion
+              const tidResult = await tidCompletionSource(context)
+              console.log('TID result:', tidResult)
+              return tidResult
+            } else {
+              // Try WikiLink completion for other patterns
+              const wikiResult = await wikiLinkCompletionSource(context)
+              return wikiResult
+            }
+          }
+        ],
+        activateOnTyping: true,
+        maxRenderedOptions: 50,
+        closeOnBlur: false,
+        icons: false
+      }),
       rectangularSelection(),
       crosshairCursor(),
       highlightActiveLine(),
@@ -495,6 +605,9 @@ export class MarkdownEditor {
       // WikiLinks with [[Page Name]] syntax
       wikiLinkPlugin,
       wikiLinkStyles,
+      
+      // Task management with checkboxes and properties
+      ...taskExtensionConfig(),
       
       // Add a view plugin to detect WikiLink completions
       ViewPlugin.fromClass(class {
@@ -682,7 +795,7 @@ export class MarkdownEditor {
       this.themeCompartment.of(this.createTheme('default')),
       this.lineWrappingCompartment.of(EditorView.lineWrapping),
       this.fontSizeCompartment.of(this.createFontSizeTheme(window.pendingEditorSettings?.fontSize || 16)),
-      this.frontmatterCompartment.of(this.createFrontmatterPlugin()),
+      this.frontmatterCompartment.of(this.createFrontmatterWidget()),
       
       // Input handler for == and ** wrapping
       EditorView.inputHandler.of((view, from, to, text) => {
@@ -867,7 +980,7 @@ export class MarkdownEditor {
     ]
 
     this.state = EditorState.create({
-      doc: content,
+      doc: bodyOnly,
       extensions
     })
 
@@ -909,6 +1022,7 @@ export class MarkdownEditor {
         lineHeight: "var(--editor-line-height, 1.7)"
       },
       ".cm-content": {
+        color: "var(--editor-text-color, #2c3e50)",
         caretColor: "var(--editor-caret-color, #5b47e0)",
         padding: "var(--editor-padding, 24px 32px)"
       },
@@ -916,16 +1030,14 @@ export class MarkdownEditor {
         borderLeftColor: "var(--editor-caret-color, #007acc)"
       },
       "&.cm-focused .cm-selectionBackground, ::selection": {
-        backgroundColor: "#00ff00 !important"
+        backgroundColor: "var(--editor-selection-bg, #b3d4fc)"
       },
       ".cm-selectionBackground": {
-        backgroundColor: "#00ff00 !important",
-        borderRadius: "2px",
-        border: "2px solid #00cc00 !important"
+        backgroundColor: "var(--editor-selection-bg, #b3d4fc)",
+        borderRadius: "2px"
       },
       "&:not(.cm-focused) .cm-selectionBackground": {
-        backgroundColor: "#00ff00 !important",
-        border: "2px solid #00cc00 !important"
+        backgroundColor: "var(--editor-selection-bg, #b3d4fc)"
       },
       ".cm-gutters": {
         backgroundColor: "var(--editor-gutter-bg, #f8f9fa)",
@@ -940,18 +1052,11 @@ export class MarkdownEditor {
         backgroundColor: "var(--editor-active-line-bg, #f8f9fa)"
       },
       ".cm-line": {
+        color: "var(--editor-text-color, #2c3e50)",
         paddingLeft: "var(--editor-line-padding, 4px)",
         paddingRight: "var(--editor-line-padding, 4px)"
       },
-      // Force selection to be visible everywhere
-      ".cm-selectionBackground, .cm-content .cm-selectionBackground, .cm-line .cm-selectionBackground": {
-        backgroundColor: "#00ff00 !important",
-        color: "#000000 !important",
-        border: "2px solid #00cc00 !important",
-        borderRadius: "2px !important",
-        opacity: "1 !important",
-        zIndex: "1000 !important"
-      }
+      // Selection styling now controlled by --editor-selection-bg
     }, (type === 'light' || type === 'default') ? { dark: false } : { dark: true })
   }
 
@@ -983,12 +1088,12 @@ export class MarkdownEditor {
                             !textBeforeCursor.includes(']]') &&
                             textBeforeCursor.lastIndexOf('[[') > textBeforeCursor.lastIndexOf(']]');
     
-    // Debounce auto-save (extend delay if WikiLink is active)
+    // Debounce auto-save (extend delay; default 10s for normal editing)
     clearTimeout(this.autoSaveTimeout)
-    const saveDelay = hasOpenWikiLink ? 10000 : 2000; // 10 seconds if WikiLink active, 2 seconds otherwise
+    const saveDelay = 10000; // 10 seconds for all editing scenarios
     
     if (hasOpenWikiLink) {
-      console.log('WikiLink detected - extending auto-save delay to 10 seconds');
+      console.log('WikiLink detected - keeping auto-save at 10 seconds');
     }
     
     this.autoSaveTimeout = setTimeout(() => {
@@ -1006,25 +1111,38 @@ export class MarkdownEditor {
       if (!this.view || !this.view.state) return;
       
       const doc = this.view.state.doc
-      if (doc.lines >= 2) {
+      // If file starts with front matter (--- ... ---), skip it and place cursor after
+      const firstLine = doc.line(1)
+      if (firstLine.text.trim() === '---') {
+        // Find the closing ---
+        let fmEndLine = 1
+        for (let i = 2; i <= Math.min(doc.lines, 200); i++) { // scan first 200 lines max
+          const ln = doc.line(i)
+          if (ln.text.trim() === '---') { fmEndLine = i; break }
+        }
+        const targetLineNum = Math.min(fmEndLine + 1, doc.lines)
+        const targetLine = doc.line(targetLineNum)
+        this.view.dispatch({ selection: { anchor: targetLine.from, head: targetLine.from } })
+      } else if (doc.lines >= 2) {
         // Move cursor to start of second line so first line shows formatted
         const secondLine = doc.line(2)
-        this.view.dispatch({
-          selection: { anchor: secondLine.from, head: secondLine.from }
-        })
+        this.view.dispatch({ selection: { anchor: secondLine.from, head: secondLine.from } })
       } else if (doc.length > 0) {
         // If only one line, move to end of first line
-        this.view.dispatch({
-          selection: { anchor: doc.length, head: doc.length }
-        })
+        this.view.dispatch({ selection: { anchor: doc.length, head: doc.length } })
       }
       console.log('🔍 Editor initialized, double-click word selection should work now')
     }, 100)
   }
 
   // Content manipulation methods
-  setContent(content, preserveScroll = false) {
+  setContent(content, preserveScroll = false, filePath = null, preserveSelection = false) {
     const startTime = Date.now();
+    // Parse frontmatter and keep only body in the editor buffer
+    const parsed = this.parseFrontmatter(content || '')
+    this.frontmatterRaw = parsed.raw
+    this.frontmatterFields = parsed.fields
+    const bodyOnly = parsed.body
     
     // Track performance for large content
     if (window.perfMonitor) {
@@ -1044,12 +1162,20 @@ export class MarkdownEditor {
       scrollLeft = this.view.scrollDOM.scrollLeft;
     }
     
+    // Set the current file path if provided
+    const effects = [];
+    if (filePath) {
+      this.currentFile = filePath;
+      effects.push(setCurrentFilePath.of(filePath));
+    }
+    
     this.view.dispatch({
       changes: {
         from: 0,
         to: this.view.state.doc.length,
-        insert: content
-      }
+        insert: bodyOnly
+      },
+      effects: effects.length > 0 ? effects : undefined
     });
     
     // Restore scroll position if it was preserved
@@ -1065,24 +1191,19 @@ export class MarkdownEditor {
       window.perfMonitor.trackEditorMetrics(this.editorId, 'set_content_complete', startTime);
     }
     
-    // Position cursor after first line to show live preview instead of raw markdown
-    setTimeout(() => {
-      if (!this.view || !this.view.state) return;
-      
-      const doc = this.view.state.doc
-      if (doc.lines >= 2) {
-        // Move cursor to start of second line
-        const secondLine = doc.line(2)
-        this.view.dispatch({
-          selection: { anchor: secondLine.from, head: secondLine.from }
-        })
-      } else if (doc.length > 0) {
-        // If only one line, move to end of first line
-        this.view.dispatch({
-          selection: { anchor: doc.length, head: doc.length }
-        })
-      }
-    }, 50)
+    // Only set an initial cursor position on first loads; skip when preserving selection
+    if (!preserveSelection) {
+      setTimeout(() => {
+        if (!this.view || !this.view.state) return;
+        const doc = this.view.state.doc
+        if (doc.lines >= 2) {
+          const secondLine = doc.line(2)
+          this.view.dispatch({ selection: { anchor: secondLine.from, head: secondLine.from } })
+        } else if (doc.length > 0) {
+          this.view.dispatch({ selection: { anchor: doc.length, head: doc.length } })
+        }
+      }, 50)
+    }
     
     this.hasUnsavedChanges = false
   }
@@ -1174,7 +1295,7 @@ export class MarkdownEditor {
       
       .link-dialog h3 {
         margin: 0 0 20px 0;
-        color: var(--text-primary, #1a1a1a);
+        color: var(--editor-text-color, #2c3e50);
         font-size: 18px;
         font-weight: 600;
       }
@@ -1197,7 +1318,7 @@ export class MarkdownEditor {
         border: 1px solid var(--border-color, #e9e9e7);
         border-radius: 6px;
         font-size: 14px;
-        color: var(--text-primary, #1a1a1a);
+        color: var(--editor-text-color, #2c3e50);
         background: var(--bg-primary, #ffffff);
         box-sizing: border-box;
       }
@@ -1222,7 +1343,7 @@ export class MarkdownEditor {
         font-size: 14px;
         cursor: pointer;
         background: var(--bg-primary, #ffffff);
-        color: var(--text-primary, #1a1a1a);
+        color: var(--editor-text-color, #2c3e50);
       }
       
       .link-dialog-buttons button.primary {
@@ -1401,6 +1522,37 @@ export class MarkdownEditor {
     }
   }
 
+  // Force theme refresh (for font color changes)
+  refreshTheme() {
+    console.log('MarkdownEditor.refreshTheme called');
+    if (this.view && this.themeCompartment) {
+      try {
+        // Determine current theme type
+        const isDark = this.currentTheme === 'dark' || 
+                      this.currentTheme === 'solarized-dark' || 
+                      this.currentTheme === 'dracula';
+        const themeType = isDark ? 'dark' : 'default';
+        
+        console.log('Refreshing theme with type:', themeType);
+        
+        // Force CodeMirror to recreate and apply the theme
+        // This will re-read the CSS variables
+        this.view.dispatch({
+          effects: this.themeCompartment.reconfigure(
+            this.createTheme(themeType)
+          )
+        });
+        
+        console.log('Theme refresh dispatched successfully');
+        // Theme refreshed
+      } catch (error) {
+        console.error('Error refreshing theme:', error);
+      }
+    } else {
+      console.warn('Editor view or theme compartment not available for theme refresh');
+    }
+  }
+
   // Save methods
   async save() {
     if (this.currentFile) {
@@ -1409,75 +1561,112 @@ export class MarkdownEditor {
         const initialScrollTop = this.view?.scrollDOM?.scrollTop || 0
         const initialScrollLeft = this.view?.scrollDOM?.scrollLeft || 0
         console.log(`💾 Saving file: ${this.currentFile} (scroll: top=${initialScrollTop}, left=${initialScrollLeft})`)
-        const content = this.getContent()
-        const newTimestamp = await invoke('write_file_content', {
-          filePath: this.currentFile,
-          content: content
-        })
+        const body = this.getContent()
+        // Compose frontmatter + body for persistence
+        const content = (this.frontmatterRaw || '') + body
+        console.log('📝 Content length:', content.length)
         
-        // If a new timestamp was returned, update just that line in the editor
-        if (newTimestamp) {
-          const lines = content.split('\n')
+        // Use absolute path for saving
+        const absolutePath = this.currentFile.startsWith('/') || this.currentFile.includes(':') 
+          ? this.currentFile 
+          : `${window.currentVaultPath}/${this.currentFile}`;
+        
+        console.log('📝 Invoking write_file_content with absolute path:', absolutePath)
+        
+        let newTimestamp;
+        try {
+          newTimestamp = await invoke('write_file_content', {
+            filePath: absolutePath,
+            content: content
+          })
+          console.log('✅ write_file_content returned:', newTimestamp)
+        } catch (writeError) {
+          console.error('❌ write_file_content failed:', writeError)
+          throw writeError
+        }
+        
+        // IMPORTANT: Clear unsaved changes immediately after successful write
+        // This must happen before any other async operations
+        this.hasUnsavedChanges = false
+        console.log('✅ File saved successfully, hasUnsavedChanges:', this.hasUnsavedChanges)
+        
+        // Notify tab system that file is saved (clear dirty state)
+        // Use the original file path (relative) to match what the tab system stores
+        if (window.onFileSaved) {
+          console.log('📢 Notifying tab system, file saved:', this.currentFile)
+          window.onFileSaved(this.currentFile)
+        }
+        
+        // After saving, ensure all tasks have UUIDs persisted
+        // Add a delay to ensure file write is fully flushed to disk
+        await new Promise(resolve => setTimeout(resolve, 200))
+        
+        try {
+          console.log('🔧 Calling batch_ensure_task_uuids with:', absolutePath)
+          // Reuse the absolutePath we already computed above
+          const taskUUIDs = await invoke('batch_ensure_task_uuids', {
+            filePath: absolutePath
+          })
+          console.log('🔧 batch_ensure_task_uuids returned:', taskUUIDs)
           
-          // Find and update the updated_at line in frontmatter
-          let inFrontmatter = false
-          let frontmatterCount = 0
-          for (let i = 0; i < lines.length; i++) {
-            if (lines[i] === '---') {
-              frontmatterCount++
-              if (frontmatterCount === 1) {
-                inFrontmatter = true
-              } else if (frontmatterCount === 2) {
-                break // End of frontmatter
+          if (taskUUIDs && taskUUIDs.length > 0) {
+            console.log(`✅ Ensured UUIDs for ${taskUUIDs.length} tasks in ${this.currentFile}`)
+            
+            // Dispatch event to update the task widget
+            window.dispatchEvent(new CustomEvent('tasks-updated'))
+            
+            // Reload content to show the UUIDs that were added
+            // Use absolute path to ensure we're reading the right file
+            setTimeout(async () => {
+              const updatedContent = await invoke('read_file_content', { 
+                filePath: absolutePath
+              })
+              const currentCursor = this.view.state.selection.main.head
+              this.setContent(updatedContent, false, this.currentFile, true)
+              // Restore cursor
+              this.view.dispatch({
+                selection: { anchor: currentCursor, head: currentCursor }
+              })
+            }, 100)
+          }
+        } catch (error) {
+          console.error('❌ Could not ensure task UUIDs after save:', error)
+          // Don't let this error prevent the save from completing
+        }
+        
+        // If a new timestamp was returned, update it in stored frontmatter (not the editor doc)
+        if (newTimestamp) {
+          // Update cached fields and raw YAML
+          if (this.frontmatterFields.has('updated_at')) {
+            this.frontmatterFields.set('updated_at', newTimestamp)
+          }
+          if (this.frontmatterRaw && this.frontmatterRaw.length) {
+            this.frontmatterRaw = this.frontmatterRaw.replace(/\nupdated_at:\s*.*?\n/, `\nupdated_at: ${newTimestamp}\n`)
+          }
+        }
+
+        // If the current buffer appears to contain a duplicated YAML header
+        // (e.g., frontmatter block followed by another '---' + YAML in the body),
+        // reload the canonical file content we just saved to disk to reflect backend sanitization.
+        try {
+          const hasLeading = content.startsWith('---\n') || content.startsWith('---\r\n')
+          if (hasLeading) {
+            const firstClose = content.indexOf('\n---\n', 4)
+            const firstCloseCRLF = content.indexOf('\r\n---\r\n', 5)
+            const closePos = firstCloseCRLF !== -1 ? firstCloseCRLF : firstClose
+            if (closePos !== -1) {
+              const extra = content.indexOf('\n---\n', closePos + 5)
+              const extraCRLF = content.indexOf('\r\n---\r\n', (firstCloseCRLF !== -1 ? firstCloseCRLF : closePos) + 7)
+              if (extra !== -1 || extraCRLF !== -1) {
+                const updatedCanonical = await invoke('read_file_content', { filePath: absolutePath })
+                const curPos = this.view?.state?.selection?.main?.head || 0
+                this.setContent(updatedCanonical, true, this.currentFile, true)
+                if (this.view) this.view.dispatch({ selection: { anchor: curPos, head: curPos } })
               }
-            } else if (inFrontmatter && lines[i].startsWith('updated_at:')) {
-              // Update just this line
-              lines[i] = `updated_at: ${newTimestamp}`
-              
-              // Update the editor content efficiently
-              const newContent = lines.join('\n')
-              const view = this.view
-              if (view) {
-                // Get current cursor and scroll positions BEFORE making changes
-                const cursorPos = view.state.selection.main.head
-                const scrollTop = view.scrollDOM.scrollTop
-                const scrollLeft = view.scrollDOM.scrollLeft
-                
-                // Create a transaction to update the content
-                const transaction = view.state.update({
-                  changes: {
-                    from: 0,
-                    to: view.state.doc.length,
-                    insert: newContent
-                  }
-                })
-                
-                // Dispatch the content change first
-                view.dispatch(transaction)
-                
-                // Then set the cursor position if it's valid
-                const newDocLength = view.state.doc.length
-                const validCursorPos = Math.min(cursorPos, newDocLength)
-                
-                if (validCursorPos >= 0) {
-                  view.dispatch({
-                    selection: { anchor: validCursorPos, head: validCursorPos }
-                  })
-                }
-                
-                // IMPORTANT: Restore scroll position after content update
-                // Use requestAnimationFrame to ensure DOM has been updated
-                requestAnimationFrame(() => {
-                  view.scrollDOM.scrollTop = scrollTop
-                  view.scrollDOM.scrollLeft = scrollLeft
-                  console.log(`📍 Restored scroll position: top=${scrollTop}, left=${scrollLeft}`)
-                })
-                
-                console.log('📝 Updated timestamp in editor to:', newTimestamp)
-              }
-              break
             }
           }
+        } catch (canonErr) {
+          console.warn('Could not reload canonical content after save:', canonErr)
         }
         
         // Fallback: If no timestamp update was done, still ensure scroll position is preserved
@@ -1492,12 +1681,16 @@ export class MarkdownEditor {
           }
         }
         
-        this.hasUnsavedChanges = false
-        console.log('✅ File saved successfully')
+        // Dispatch file-saved event for other components (like TaskWidget)
+        // Use absolute path for widget updates
+        window.dispatchEvent(new CustomEvent('file-saved', { 
+          detail: { filePath: absolutePath }
+        }))
         
-        // Notify tab system that file is saved (clear dirty state)
-        if (window.onFileSaved) {
-          window.onFileSaved(this.currentFile)
+        // Manually sync tasks to index if this file contains tasks
+        if (content.includes('- [ ]') || content.includes('- [x]')) {
+          console.log('[Editor] Full path for sync:', absolutePath);
+          await this.syncTasksToIndex(absolutePath)
         }
       } catch (error) {
         console.error('❌ Failed to save file:', error)
@@ -1517,11 +1710,11 @@ export class MarkdownEditor {
     
     if (hasOpenWikiLink) {
       console.log('Skipping auto-save - WikiLink still open');
-      // Reschedule for later
+      // Reschedule for later (10 seconds)
       clearTimeout(this.autoSaveTimeout)
       this.autoSaveTimeout = setTimeout(() => {
         this.autoSave()
-      }, 5000)
+      }, 10000)
       return;
     }
     
@@ -1659,6 +1852,29 @@ export class MarkdownEditor {
       notification.style.transition = 'opacity 0.3s ease-out';
       setTimeout(() => notification.remove(), 300);
     }, 3000);
+  }
+
+  async syncTasksToIndex(filePath) {
+    // Define pathToSync outside try block so it's accessible in catch
+    const pathToSync = filePath || this.currentFile;
+    
+    try {
+      console.log('[Editor] Syncing tasks to index for:', filePath)
+      console.log('[Editor] Current file:', this.currentFile)
+      console.log('[Editor] Window vault path:', window.currentVaultPath)
+      console.log('[Editor] Path to sync:', pathToSync)
+      
+      const result = await invoke('sync_file_tasks_to_index', { 
+        filePath: pathToSync
+      })
+      console.log('[Editor] Task sync completed, result:', result)
+      
+      // Dispatch event to notify TaskWidget
+      window.dispatchEvent(new Event('tasks-updated'))
+    } catch (error) {
+      console.error('[Editor] Failed to sync tasks to index:', error)
+      console.error('[Editor] Attempted path was:', pathToSync)
+    }
   }
 
   destroy() {

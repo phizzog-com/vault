@@ -127,4 +127,17 @@ After successful setup:
 1. Open the app and create/select a vault folder
 2. Try creating notes and using features
 3. Check the [User Guide](USER_GUIDE.md) for feature documentation
-4. Submit issues or PRs on [GitHub](https://github.com/phizzog-com/vault)
+4. Try the new [Task Management System](TASK_QUICKSTART.md) - create tasks with `- [ ]` and press `Cmd+Shift+T` for the dashboard
+5. Submit issues or PRs on [GitHub](https://github.com/phizzog-com/vault)
+
+## Featured: Task Management System
+
+Vault now includes a powerful task management system with:
+- **Unique task IDs** for tracking across notes
+- **Visual dashboards** (List, Kanban, Calendar views)
+- **Task properties** like due dates, projects, and priorities
+- **Vault-wide migration** to add UUIDs to existing tasks
+
+Quick start: Create a task with `- [ ] My task @due(tomorrow) !high` and press `Cmd+Shift+T` to see your dashboard!
+
+See [Task Quick Start Guide](TASK_QUICKSTART.md) for details.

@@ -48,8 +48,8 @@ fn test_get_note_id() {
     assert_eq!(manager.get_note_id(&test_file).unwrap(), Some(id));
 }
 
-#[test]
-fn test_update_note_path() {
+#[tokio::test]
+async fn test_update_note_path() {
     let temp_dir = TempDir::new().unwrap();
     let mut manager = IdentityManager::new(temp_dir.path().to_path_buf());
     
@@ -65,7 +65,7 @@ fn test_update_note_path() {
     fs::rename(&old_path, &new_path).unwrap();
     
     // Update path in manager
-    manager.update_note_path(&old_path, &new_path).unwrap();
+    manager.update_note_path(&old_path, &new_path).await.unwrap();
     
     // Old path should no longer have ID
     assert!(manager.get_note_id(&old_path).unwrap().is_none());

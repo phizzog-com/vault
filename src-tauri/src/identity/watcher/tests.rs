@@ -3,6 +3,7 @@ use std::path::PathBuf;
 use tokio::sync::mpsc;
 use tempfile::TempDir;
 use std::fs;
+use notify::Event;
 
 #[tokio::test]
 async fn test_watcher_config_defaults() {
@@ -117,14 +118,17 @@ async fn test_deletion_cache_integration() {
     // Ensure it has an ID
     {
         let mut manager = identity_manager.write();
-        manager.ensure_note_id(&file_path).await.unwrap();
+        manager.ensure_note_id(&file_path).unwrap();
     }
     
     // Simulate deletion event
     let deletion_event = DebouncedEvent {
-        paths: vec![file_path.clone()],
-        kind: EventKind::Remove(notify::event::RemoveKind::File),
-        attrs: Default::default(),
+        event: Event {
+            paths: vec![file_path.clone()],
+            kind: EventKind::Remove(notify::event::RemoveKind::File),
+            attrs: Default::default(),
+        },
+        time: std::time::Instant::now(),
     };
     
     watcher.handle_deletion(&deletion_event).await.unwrap();
@@ -157,14 +161,17 @@ async fn test_rename_detection_flow() {
     // Ensure it has an ID
     let original_id = {
         let mut manager = identity_manager.write();
-        manager.ensure_note_id(&old_path).await.unwrap()
+        manager.ensure_note_id(&old_path).unwrap()
     };
     
     // Simulate direct rename event
     let rename_event = DebouncedEvent {
-        paths: vec![old_path.clone(), new_path.clone()],
-        kind: EventKind::Modify(ModifyKind::Name(RenameMode::Both)),
-        attrs: Default::default(),
+        event: Event {
+            paths: vec![old_path.clone(), new_path.clone()],
+            kind: EventKind::Modify(ModifyKind::Name(RenameMode::Both)),
+            attrs: Default::default(),
+        },
+        time: std::time::Instant::now(),
     };
     
     watcher.handle_rename(&rename_event).await.unwrap();
@@ -172,7 +179,7 @@ async fn test_rename_detection_flow() {
     // Verify the ID is preserved at new path
     {
         let mut manager = identity_manager.write();
-        let new_id = manager.get_note_id(&new_path).await.unwrap();
+        let new_id = manager.get_note_id(&new_path).unwrap();
         assert!(new_id.is_some());
         assert_eq!(new_id.unwrap(), original_id);
     }
@@ -198,44 +205,45 @@ async fn test_delete_create_rename_pattern() {
     
     // Create original file
     let old_path = vault_root.join("document.md");
-    let new_path = vault_root.join("document_v2.md");
-    fs::write(&old_path, "content here").unwrap();
+    let new_path = vault_root.join("renamed.md");
+    fs::write(&old_path, "content").unwrap();
     
     // Ensure it has an ID
     let original_id = {
         let mut manager = identity_manager.write();
-        manager.ensure_note_id(&old_path).await.unwrap()
+        manager.ensure_note_id(&old_path).unwrap()
     };
     
     // Simulate deletion
-    let deletion_event = DebouncedEvent {
-        paths: vec![old_path.clone()],
-        kind: EventKind::Remove(notify::event::RemoveKind::File),
-        attrs: Default::default(),
+    let delete_event = DebouncedEvent {
+        event: Event {
+            paths: vec![old_path.clone()],
+            kind: EventKind::Remove(notify::event::RemoveKind::File),
+            attrs: Default::default(),
+        },
+        time: std::time::Instant::now(),
     };
     
-    watcher.handle_deletion(&deletion_event).await.unwrap();
+    watcher.handle_deletion(&delete_event).await.unwrap();
     
-    // Write the new file (simulating creation)
-    fs::write(&new_path, "content here").unwrap();
-    
-    // Simulate creation event
-    let creation_event = DebouncedEvent {
-        paths: vec![new_path.clone()],
-        kind: EventKind::Create(notify::event::CreateKind::File),
-        attrs: Default::default(),
+    // Simulate creation
+    let create_event = DebouncedEvent {
+        event: Event {
+            paths: vec![new_path.clone()],
+            kind: EventKind::Create(notify::event::CreateKind::File),
+            attrs: Default::default(),
+        },
+        time: std::time::Instant::now(),
     };
     
-    watcher.handle_creation(&creation_event).await.unwrap();
+    fs::write(&new_path, "content").unwrap();
+    watcher.handle_creation(&create_event).await.unwrap();
     
-    // The rename should be detected based on timing and similarity
-    // Since we're in the same directory with similar name pattern
+    // Verify the ID is preserved at new path
     {
         let mut manager = identity_manager.write();
-        let new_id = manager.get_note_id(&new_path).await.unwrap();
-        // This might be a new ID if heuristics didn't match
-        // The test shows the flow works, actual heuristic matching
-        // depends on the rename_detector implementation
+        let new_id = manager.get_note_id(&new_path).unwrap();
         assert!(new_id.is_some());
+        assert_eq!(new_id.unwrap(), original_id);
     }
 }

@@ -236,12 +236,31 @@ export class ThemeManager {
           this.editor.createTheme(theme.type)
         )
       })
+      // Keep editor aware of the effective theme type for refresh logic
+      this.editor.currentTheme = theme.type
     }
 
     this.activeTheme = themeName
     
     // Save preference
     this.saveThemePreference(themeName)
+
+    // Synchronize theme type with other open editors (if any)
+    try {
+      if (window.paneManager && window.paneManager.panes) {
+        for (const pane of window.paneManager.panes.values()) {
+          const tabManager = pane.tabManager
+          if (!tabManager || !tabManager.tabs) continue
+          for (const tab of tabManager.tabs.values()) {
+            if (tab.editor && tab.type === 'markdown') {
+              tab.editor.currentTheme = theme.type
+            }
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('Failed to sync theme state across editors:', e)
+    }
   }
 
   async saveThemePreference(themeName) {
@@ -304,6 +323,30 @@ export class ThemeManager {
     root.style.setProperty('--editor-font-family', fontFamily)
     
     this.saveEditorPreference('font_family', fontFamily)
+  }
+
+  setFontColor(fontColor) {
+    const root = document.documentElement
+    root.style.setProperty('--editor-text-color', fontColor)
+    
+    // Also update markdown colors to maintain readability
+    root.style.setProperty('--md-heading-color', fontColor)
+    
+    // Scope complementary variables inside the active editor for immediate effect
+    if (this.editor && this.editor.view && this.editor.view.dom) {
+      try {
+        this.editor.view.dom.style.setProperty('--editor-text-color', fontColor)
+        // Some editor-scoped styles still rely on --text-primary; mirror to keep consistent
+        this.editor.view.dom.style.setProperty('--text-primary', fontColor)
+      } catch (e) {
+        console.warn('Failed to scope font color vars to editor:', e)
+      }
+    }
+    
+    // Note: The actual theme refresh in editors is handled by the calling code
+    // which has access to all editor instances
+    
+    this.saveEditorPreference('font_color', fontColor)
   }
 
   setLineHeight(lineHeight) {

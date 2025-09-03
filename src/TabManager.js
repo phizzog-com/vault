@@ -97,7 +97,8 @@ export class TabManager {
         // Only set content for markdown tabs
         if (!isPDF) {
             if (content) {
-                editor.setContent(content);
+                // Initial open: allow default cursor init
+                editor.setContent(content, false, filePath, false);
                 editor.currentFile = filePath;
             } else if (!filePath) {
                 // Show new tab screen for untitled tabs

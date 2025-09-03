@@ -196,12 +196,28 @@ impl WindowRegistry {
         }
 
         // Register with the shared file watcher registry
-        let is_new_watcher = self.file_watcher_registry
-            .register_vault_watcher(vault_path.clone(), window_id).await?;
+        let is_new_watcher = match self.file_watcher_registry
+            .register_vault_watcher(vault_path.clone(), window_id).await {
+            Ok(val) => val,
+            Err(e) => {
+                eprintln!(
+                    "⚠️ Failed to register file watcher for vault {}: {} — continuing without watcher",
+                    vault_path.display(),
+                    e
+                );
+                false
+            }
+        };
 
         if is_new_watcher {
-            // Start watching the vault
-            self.file_watcher_registry.start_watching(&vault_path).await?;
+            // Start watching the vault; do not block vault opening if watching fails
+            if let Err(e) = self.file_watcher_registry.start_watching(&vault_path).await {
+                eprintln!(
+                    "⚠️ Failed to start file watcher for vault {}: {} — continuing without watcher",
+                    vault_path.display(),
+                    e
+                );
+            }
         }
 
         println!("Registered window {} with vault {}", window_id, vault_path.display());

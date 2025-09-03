@@ -1,6 +1,7 @@
 import { invoke } from '@tauri-apps/api/core';
 import { TOCWidget } from './TOCWidget.js';
 import { CalendarWidget } from './CalendarWidget.js';
+import { TaskWidget } from './TaskWidget.js';
 
 export class WidgetSidebar {
     constructor() {
@@ -14,9 +15,9 @@ export class WidgetSidebar {
         // State
         this.visible = false;
         this.activeTab = 'toc';
-        this.width = 300; // Default width same as chat
-        this.minWidth = 250;
-        this.maxWidth = 600;
+        this.width = 400; // Phase 1 default min width for Task widget
+        this.minWidth = 400;
+        this.maxWidth = 500;
         
         // Widget instances
         this.widgets = new Map();
@@ -41,9 +42,11 @@ export class WidgetSidebar {
         // Create tabs
         const tocTab = this.createTab('toc', 'Table of Contents', true);
         const calendarTab = this.createTab('calendar', 'Calendar', false);
+        const taskTab = this.createTab('tasks', 'Tasks', false);
         
         this.tabBar.appendChild(tocTab);
         this.tabBar.appendChild(calendarTab);
+        this.tabBar.appendChild(taskTab);
         
         // Create content area
         this.contentArea = document.createElement('div');
@@ -144,6 +147,10 @@ export class WidgetSidebar {
             case 'calendar':
                 console.log('[WidgetSidebar] Creating Calendar widget');
                 widget = new CalendarWidget();
+                break;
+            case 'tasks':
+                console.log('[WidgetSidebar] Creating Task widget');
+                widget = new TaskWidget();
                 break;
         }
         
@@ -281,7 +288,9 @@ export class WidgetSidebar {
                 
                 this.visible = settings.visible || false;
                 this.activeTab = settings.active_tab || 'toc';
-                this.width = settings.width || 300;
+                const persistedWidth = typeof settings.width === 'number' ? settings.width : this.minWidth;
+                // Clamp loaded width to spec range 400–500
+                this.width = Math.max(this.minWidth, Math.min(this.maxWidth, persistedWidth));
                 
                 // Update UI based on loaded state
                 if (this.container) {
@@ -318,7 +327,7 @@ export class WidgetSidebar {
             const settings = {
                 visible: this.visible,
                 active_tab: this.activeTab,
-                width: this.width,
+                width: Math.max(this.minWidth, Math.min(this.maxWidth, this.width)),
                 tab_settings: {}
             };
             

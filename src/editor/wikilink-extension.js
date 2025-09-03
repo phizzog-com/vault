@@ -1,4 +1,4 @@
-import { Decoration, ViewPlugin, EditorView, MatchDecorator } from '@codemirror/view'
+import { Decoration, ViewPlugin, EditorView, MatchDecorator, WidgetType } from '@codemirror/view'
 import { wikiLinkCache } from './wikilink-cache.js'
 
 // WikiLink pattern: [[Page Name]] - but NOT ![[...]] (which are images)
@@ -48,14 +48,63 @@ async function checkNoteExists(noteName) {
 }
 
 // Create decoration for WikiLink with async existence checking
+class InlineWikiLinkWidget extends WidgetType {
+  constructor({ label, noteName, cssClass, exists, cacheKey }) {
+    super()
+    this.label = label
+    this.noteName = noteName
+    this.cssClass = cssClass
+    this.exists = exists
+    this.cacheKey = cacheKey
+  }
+
+  toDOM() {
+    const span = document.createElement('span')
+    span.className = this.cssClass
+    span.textContent = this.label
+    span.setAttribute('data-wikilink', this.noteName)
+    span.setAttribute('data-exists', this.exists.toString())
+    span.setAttribute('data-cache-key', this.cacheKey)
+    span.title = this.exists 
+      ? `Navigate to "${this.noteName}"\nClick to open` 
+      : this.cssClass === 'cm-wikilink-checking'
+        ? `Checking "${this.noteName}"...`
+        : `"${this.noteName}" doesn't exist\nClick to create`
+    return span
+  }
+
+  eq(other) {
+    return other.label === this.label &&
+           other.noteName === this.noteName &&
+           other.cssClass === this.cssClass &&
+           other.exists === this.exists
+  }
+}
+
+function computeDisplayLabelFromNoteName(noteName) {
+  // Handle pipe syntax [[link|display]]. For TID links, show "TID:display".
+  const pipeIndex = noteName.indexOf('|')
+  if (pipeIndex !== -1) {
+    const left = noteName.slice(0, pipeIndex).trim()
+    const right = noteName.slice(pipeIndex + 1).trim()
+    if (/^tid\s*:/i.test(left)) {
+      return `TID:${right}`
+    }
+    return right
+  }
+  return noteName
+}
+
 function createWikiLinkDecoration(match, view, pos) {
   const noteName = match[1]
+  // Base name used for resolution/existence checks (left side of pipe)
+  const baseName = noteName.split('|', 2)[0].trim()
   
   // Check if we have cached existence info
   let exists = false;
   let cssClass = 'cm-wikilink-checking'; // Default state while checking
   
-  const cacheKey = wikiLinkCache.normalizeWikiLinkName(noteName);
+  const cacheKey = wikiLinkCache.normalizeWikiLinkName(baseName);
   
   // Try to get cached result synchronously
   const cachedEntry = noteExistenceCache.get(cacheKey);
@@ -64,7 +113,7 @@ function createWikiLinkDecoration(match, view, pos) {
     cssClass = exists ? 'cm-wikilink-exists' : 'cm-wikilink-missing';
   } else {
     // Asynchronously check and update decoration
-    checkNoteExistsAsync(noteName, view);
+    checkNoteExistsAsync(baseName, view);
     
     // Use the cached value if available, otherwise assume missing
     if (cachedEntry) {
@@ -75,21 +124,43 @@ function createWikiLinkDecoration(match, view, pos) {
     }
   }
   
-  const decoration = Decoration.mark({
-    class: cssClass,
-    attributes: {
-      'data-wikilink': noteName,
-      'data-exists': exists.toString(),
-      'data-cache-key': cacheKey,
-      title: exists 
-        ? `Navigate to "${noteName}"\nClick to open` 
-        : cssClass === 'cm-wikilink-checking'
-          ? `Checking "${noteName}"...`
-          : `"${noteName}" doesn't exist\nClick to create`
-    }
+  // Determine whether this is a TID link (left side starts with TID:)
+  const isTid = /^tid\s*:/i.test(baseName)
+
+  // Determine whether the cursor is within this match range (edit mode)
+  const cursor = view.state.selection.main.head
+  const from = pos
+  const to = pos + match[0].length
+  const isActive = cursor >= from && cursor <= to
+
+  if (isActive) {
+    // Edit mode: show raw markdown but keep clickable styling
+    const decoration = Decoration.mark({
+      class: isTid ? `${cssClass} cm-tid-link` : cssClass,
+      attributes: {
+        'data-wikilink': baseName,
+        'data-exists': exists.toString(),
+        'data-cache-key': cacheKey,
+        title: exists 
+          ? `Navigate to "${baseName}"\nClick to open` 
+          : cssClass === 'cm-wikilink-checking'
+            ? `Checking "${baseName}"...`
+            : `"${baseName}" doesn't exist\nClick to create`
+      }
+    })
+    return decoration.range(from, to)
+  }
+
+  // Preview mode: replace with a compact label
+  const label = computeDisplayLabelFromNoteName(noteName)
+  const widget = new InlineWikiLinkWidget({
+    label,
+    noteName: baseName,
+    cssClass: isTid ? `${cssClass} cm-tid-link` : cssClass,
+    exists,
+    cacheKey
   })
-  
-  return decoration.range(pos, pos + match[0].length)
+  return Decoration.replace({ widget }).range(from, to)
 }
 
 // Async function to check note existence and update view
@@ -223,15 +294,37 @@ export const wikiLinkPlugin = ViewPlugin.fromClass(
     
     async handleWikiLinkClick(noteName, exists) {
       try {
-        // Get the latest information from cache
-        const result = await wikiLinkCache.checkNoteExists(noteName);
-        
+        // TID links navigate to the source note where the task resides
+        const isTid = /^tid\s*:/i.test(noteName)
+        if (isTid) {
+          const uuid = noteName.split(':', 2)[1].trim()
+          if (!uuid) {
+            throw new Error('Missing task ID in TID link')
+          }
+          const { invoke } = await import('@tauri-apps/api/core')
+          try {
+            const source = await invoke('get_task_source_by_id', { taskId: uuid })
+            if (source && source.filePath) {
+              console.log(`Opening task source note for ${uuid}: ${source.filePath} (line ${source.lineNumber})`)
+              await this.openExistingNote(source.filePath, `TID:${uuid}`)
+              // Optionally, emit event to jump to line if frontend listens
+              try { await invoke('open_file_at_line', { filePath: source.filePath, lineNumber: source.lineNumber }) } catch {}
+              return
+            }
+          } catch (err) {
+            console.warn('Failed to resolve TID to source note, falling back:', err)
+          }
+          // Fall through to normal WikiLink handling if resolution failed
+        }
+
+        // Normal WikiLink: resolve by note title via cache
+        const result = await wikiLinkCache.checkNoteExists(noteName)
         if (result.exists && result.path) {
-          console.log(`Opening existing note: ${noteName} at path: ${result.path}`);
-          await this.openExistingNote(result.path, noteName);
+          console.log(`Opening existing note: ${noteName} at path: ${result.path}`)
+          await this.openExistingNote(result.path, noteName)
         } else {
-          console.log(`Note "${noteName}" doesn't exist - showing creation dialog`);
-          await this.handleNoteCreation(noteName);
+          console.log(`Note "${noteName}" doesn't exist - showing creation dialog`)
+          await this.handleNoteCreation(noteName)
         }
       } catch (error) {
         console.error('Error handling WikiLink click:', error);
@@ -593,5 +686,38 @@ export const wikiLinkStyles = EditorView.theme({
     borderBottomColor: '#495057',
     backgroundColor: 'rgba(108, 117, 125, 0.2)',
     opacity: 1
+  },
+
+  // TID link variants (light blue theme), regardless of existence state
+  '.cm-wikilink-exists.cm-tid-link': {
+    color: '#3aa8f7',
+    borderBottomColor: '#3aa8f7',
+    backgroundColor: 'rgba(58, 168, 247, 0.12)'
+  },
+  '.cm-wikilink-exists.cm-tid-link:hover': {
+    color: '#1f8ee6',
+    borderBottomColor: '#1f8ee6',
+    backgroundColor: 'rgba(58, 168, 247, 0.2)'
+  },
+  '.cm-wikilink-missing.cm-tid-link': {
+    color: '#3aa8f7',
+    borderBottomColor: '#3aa8f7',
+    backgroundColor: 'rgba(58, 168, 247, 0.12)'
+  },
+  '.cm-wikilink-missing.cm-tid-link:hover': {
+    color: '#1f8ee6',
+    borderBottomColor: '#1f8ee6',
+    backgroundColor: 'rgba(58, 168, 247, 0.2)'
+  },
+  '.cm-wikilink-checking.cm-tid-link': {
+    color: '#3aa8f7',
+    borderBottomColor: '#3aa8f7',
+    backgroundColor: 'rgba(58, 168, 247, 0.08)',
+    opacity: 1
+  },
+  '.cm-wikilink-checking.cm-tid-link:hover': {
+    color: '#1f8ee6',
+    borderBottomColor: '#1f8ee6',
+    backgroundColor: 'rgba(58, 168, 247, 0.16)'
   }
 })

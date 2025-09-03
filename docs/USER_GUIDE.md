@@ -327,6 +327,108 @@ updated_at: "2025-08-12T20:23:31.360839+00:00"
 - **Sync Safety**: Better synchronization across devices
 - **Plugin Compatibility**: Enhanced compatibility with graph and linking plugins
 
+## ✅ Task Management System
+
+Vault now includes a powerful task management system with unique UUIDv7 identifiers for every checkbox task. This enables advanced task tracking, organization, and visualization across your entire vault.
+
+### Creating Tasks
+
+Tasks are standard Markdown checkboxes with automatic UUID assignment and optional properties:
+
+```markdown
+- [ ] Simple task
+- [x] Completed task  
+- [ ] Task with due date @due(2025-01-20)
+- [ ] Project task @project(Q1-Planning) #urgent !high
+```
+
+### Task Properties & Visual Styling
+
+Add rich metadata to your tasks using simple syntax with distinct visual representations:
+
+- **Due Dates**: `@due(2025-01-20)` or `@due(tomorrow)` - Shows as blue chip with 📅 icon
+- **Projects**: `@project(ProjectName)` - Shows as amber chip with 📁 icon  
+- **Tags**: `#urgent #work #important` - Light green pills with 🗂️ icon
+- **Priority**: `!high` (red), `!medium` (yellow), `!low` (light blue) - Color-coded pills
+
+### Task Widget (Sidebar)
+
+The compact Task Widget in your sidebar provides at-a-glance task overview:
+- **Consolidated View**: 400-500px width with inline metadata display
+- **Visual Polish**: No borders, clean typography, ~300 lines of optimized CSS
+- **Quick Stats**: Total open/completed tasks with progress indicators
+- **Smart Grouping**: Tasks organized by project, priority, or date
+- **One-Click Actions**: Complete, edit, or navigate to tasks instantly
+- **Dark Mode Support**: Full theme support with appropriate color variants
+
+### Task Views
+
+Access different task perspectives through the widget:
+
+**Dashboard View**: Overview with task statistics and recent activity
+**List View**: Traditional task list with sortable columns and filters  
+**Kanban View**: Visual board with Todo, In Progress, and Done columns
+**Calendar View**: Timeline showing tasks by due date with drag-and-drop
+
+### TID Autocomplete System
+
+Quickly reference tasks anywhere using the TID (Task ID) autocomplete:
+- Type `[[tid:` to trigger fuzzy search autocomplete
+- Search by task content, project, or properties
+- Sub-50ms performance even with thousands of tasks
+- Automatically creates bidirectional links between tasks
+
+### Task UUID System
+
+Every task automatically receives a UUIDv7 identifier for persistent tracking:
+
+**Automatic Assignment**: New tasks get UUIDs instantly when created
+**Time-Sortable**: UUIDv7 format includes timestamp for chronological ordering
+**Invisible Storage**: UUIDs stored in HTML comments, never visible during editing
+**Cross-Reference**: Tasks maintain identity across renames and moves
+
+**Example Task with UUID (internal representation):**
+```markdown
+- [ ] Complete project proposal @due(2025-01-20) <!-- tid: 0198e692-9c32-76f0-9884-e8942fe4b49c -->
+```
+
+### Task Migration for Existing Vaults
+
+If you have tasks created before the UUID system:
+
+1. **Open Developer Console**: Press `Cmd+Option+I`
+2. **Run Migration**: Execute `window.migrateTasksWithUUIDs()`
+3. **Automatic Processing**: 
+   - Scans all markdown files for tasks
+   - Adds UUIDs to tasks missing them
+   - Extracts properties from task text
+   - Creates automatic backup
+   - Shows progress and statistics
+
+**Migration Features:**
+- Parallel processing for speed (handles thousands of tasks)
+- Property extraction and normalization
+- Safe rollback if needed
+- Preserves all existing task content
+
+### Task Keyboard Shortcuts
+
+- `Cmd+Shift+T` - Open Task Dashboard/Views
+- `Cmd+Alt+T` - Create new task with properties dialog
+- `[[tid:` - Trigger TID autocomplete for task references
+- `Space` - Toggle task completion (when focused in widget)
+- `E` - Quick edit task properties inline
+- `Delete` - Remove task (with confirmation)
+
+### Advanced Task Features
+
+**Frontmatter Integration**: Tasks sync with note frontmatter for enhanced metadata
+**Live Updates**: Task changes reflect instantly across all views
+**Performance**: <50ms for all operations, optimized for large vaults
+**Export Support**: Tasks included in PDF/HTML/Word exports with formatting
+
+For complete Task UUID System documentation, see [TASK_UUID_SYSTEM.md](TASK_UUID_SYSTEM.md).
+
 ## 📤 Export Your Work
 
 ### Export Formats

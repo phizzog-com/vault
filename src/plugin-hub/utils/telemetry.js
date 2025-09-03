@@ -376,8 +376,12 @@ export class PluginTelemetry extends TelemetryManager {
 }
 
 // Create and export singleton instance
+// Default to disabled to honor zero‑telemetry principle and avoid 404s in dev.
+// Enable only in production with an explicit opt‑in flag on window.
+const isProd = typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.PROD;
+const allowFlag = typeof window !== 'undefined' && window.__VAULT_ALLOW_TELEMETRY__ === true;
 const telemetry = new PluginTelemetry({
-  enabled: true, // Can be controlled via settings
+  enabled: Boolean(isProd && allowFlag),
   endpoint: '/api/telemetry',
   batchSize: 50,
   flushInterval: 30000

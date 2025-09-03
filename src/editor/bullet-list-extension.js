@@ -1,4 +1,5 @@
 import { keymap } from '@codemirror/view'
+import { toggleEditModeEffect } from './task-extension.js'
 import { EditorSelection } from '@codemirror/state'
 
 // Debug logging helper
@@ -132,13 +133,12 @@ function handleBulletListEnter(view) {
   
   log('Inserting new bullet line:', newLine)
   
-  // Insert the new bullet line
+  // Insert the new bullet line and enter edit mode for that line
+  const newLineNumber = line.number + 1
   view.dispatch({
-    changes: {
-      from: selection.from,
-      insert: newLine
-    },
-    selection: EditorSelection.cursor(selection.from + newLine.length)
+    changes: { from: selection.from, insert: newLine },
+    selection: EditorSelection.cursor(selection.from + newLine.length),
+    effects: toggleEditModeEffect.of(newLineNumber)
   })
   
   return true

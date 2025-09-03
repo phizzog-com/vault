@@ -131,9 +131,9 @@ impl IdentityWatcher {
     /// Handle a rename event
     async fn handle_rename(&mut self, event: &DebouncedEvent) -> Result<()> {
         // Notify provides both old and new paths for rename events
-        if event.paths.len() == 2 {
-            let old_path = &event.paths[0];
-            let new_path = &event.paths[1];
+        if event.event.paths.len() == 2 {
+            let old_path = &event.event.paths[0];
+            let new_path = &event.event.paths[1];
             
             if self.config.debug {
                 println!("Rename detected: {:?} -> {:?}", old_path, new_path);
@@ -149,7 +149,7 @@ impl IdentityWatcher {
 
     /// Handle a deletion event
     async fn handle_deletion(&mut self, event: &DebouncedEvent) -> Result<()> {
-        if let Some(path) = event.paths.first() {
+        if let Some(path) = event.event.paths.first() {
             // Get the file's identity before it's deleted
             let identity = {
                 let mut manager = self.identity_manager.write();
@@ -179,7 +179,7 @@ impl IdentityWatcher {
 
     /// Handle a creation event
     async fn handle_creation(&mut self, event: &DebouncedEvent) -> Result<()> {
-        if let Some(path) = event.paths.first() {
+        if let Some(path) = event.event.paths.first() {
             // Check if this might be a rename from a recently deleted file
             let possible_rename = self.deletion_cache.write()
                 .find_possible_rename(path, self.get_file_size(path));

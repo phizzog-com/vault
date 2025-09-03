@@ -21,6 +21,8 @@ import { VaultPicker } from './components/VaultPicker.js';
 import pluginHub from './plugin-hub/PluginHub.js';
 import './utils/uuid-utils.js';
 import './utils/readwise-uuid-fix.js';
+import { TaskDashboard } from './tasks/TaskDashboard.js';
+import './plugin-hub/components/Toast.css';
 
 console.log('✅ Tauri v2 APIs and editor components imported successfully!');
 console.log('🔍 EnhancedChatPanel class:', EnhancedChatPanel);
@@ -73,6 +75,32 @@ function setupGraphSyncListeners() {
         }
     }, 5000);
 }
+
+// Listen for navigation to a file and line from backend commands
+listen('open-file-at-line', async (event) => {
+  try {
+    const { filePath, lineNumber } = event.payload || {}
+    if (!filePath) return
+    // Open file (or activate if open)
+    await window.openFile(filePath)
+    // Move cursor to line if editor is available
+    if (window.paneManager) {
+      const tabManager = window.paneManager.getActiveTabManager()
+      const activeTab = tabManager?.getActiveTab()
+      const editor = activeTab?.editor
+      if (editor?.view && Number.isInteger(lineNumber) && lineNumber > 0) {
+        const line = editor.view.state.doc.line(Math.min(lineNumber, editor.view.state.doc.lines))
+        editor.view.dispatch({
+          selection: { anchor: line.from },
+          scrollIntoView: true
+        })
+        editor.view.focus()
+      }
+    }
+  } catch (e) {
+    console.warn('Failed to handle open-file-at-line event:', e)
+  }
+})
 
 // Test function for graph sync
 window.testGraphSync = async function() {
@@ -682,7 +710,7 @@ async function initializeEditor() {
               const content = await invoke('read_file_content', { filePath: updatedFilePath });
               
               // Update the editor
-              tab.editor.setContent(content);
+              tab.editor.setContent(content, false, updatedFilePath, false);
               tab.editor.currentFile = updatedFilePath;
               
               // Mark as not dirty since we just loaded from disk
@@ -722,7 +750,7 @@ function setupTabNavigationListeners(tabManager) {
       
       // Update editor with new content
       if (tab.editor) {
-        tab.editor.setContent(content);
+        tab.editor.setContent(content, false, filePath, false);
         tab.editor.currentFile = filePath;
       }
       
@@ -763,8 +791,9 @@ function setupEditorChangeTracking(tabId, tab) {
   if (tab.editor && tab.editor.view) {
     // Use the editor's built-in change tracking
     const originalSetContent = tab.editor.setContent.bind(tab.editor);
-    tab.editor.setContent = function(content) {
-      originalSetContent(content);
+    tab.editor.setContent = function(...args) {
+      // Forward all args so selection/scroll preservation flags continue to work
+      originalSetContent(...args);
       // Reset dirty state when content is set
       const tabManager = paneManager ? paneManager.getActiveTabManager() : null;
       if (tabManager) {
@@ -798,18 +827,38 @@ function setupEditorChangeTracking(tabId, tab) {
 
 // Global callback for when files are saved - clears dirty state
 window.onFileSaved = function(filePath) {
-  if (!paneManager) return
+  console.log('🔍 onFileSaved called with:', filePath)
+  if (!paneManager) {
+    console.log('❌ No paneManager available')
+    return
+  }
+  
+  console.log('🔍 Searching for tab with path:', filePath)
+  console.log('🔍 Number of panes:', paneManager.panes.size)
   
   // Find the tab with this file path in all panes
   for (const [paneId, pane] of paneManager.panes) {
+    console.log('🔍 Checking pane:', paneId)
+    console.log('🔍 Pane has tabManager:', !!pane.tabManager)
+    
+    // Log all tabs in this pane
+    if (pane.tabManager && pane.tabManager.tabs) {
+      for (const [tabId, tab] of pane.tabManager.tabs) {
+        console.log(`🔍 Tab ${tabId} has filePath:`, tab.filePath)
+      }
+    }
+    
     const tab = pane.tabManager.findTabByPath(filePath)
     if (tab) {
+      console.log('✅ Found tab:', tab.id, 'with path:', tab.filePath)
       console.log('🧹 Clearing dirty state for saved file:', filePath)
       pane.tabManager.setTabDirty(tab.id, false)
       if (pane.tabBar) {
         pane.tabBar.updateTabDirtyState(tab.id, false)
       }
       break
+    } else {
+      console.log('❌ No tab found in pane', paneId, 'for path:', filePath)
     }
   }
 }
@@ -920,6 +969,14 @@ function setupTabKeyboardShortcuts() {
       e.preventDefault();
       console.log('Cmd+Shift+M pressed');
       window.showMCPSettings();
+      return;
+    }
+    
+    // Cmd+Alt+T: Open Task Dashboard (before tabManager check)
+    if (e.metaKey && e.altKey && (e.key === 't' || e.key === 'T')) {
+      e.preventDefault();
+      console.log('Opening Task Dashboard with Cmd+Alt+T');
+      window.openTaskDashboard();
       return;
     }
     
@@ -1136,6 +1193,19 @@ async function loadEditorPreferences(editor) {
     // Apply theme (default to 'default' if not set)
     const themeToUse = prefs.theme || 'default';
     currentThemeManager.applyTheme(themeToUse);
+
+    // Apply font color if provided and refresh editors to pick up CSS vars
+    if (prefs.font_color) {
+      try {
+        currentThemeManager.setFontColor(prefs.font_color);
+        // Allow CSS variables to propagate before reconfiguring themes
+        setTimeout(() => {
+          refreshAllEditors();
+        }, 100);
+      } catch (e) {
+        console.error('Failed to apply saved font color:', e);
+      }
+    }
     
     // Apply font size (default to 16 if not set)
     const fontSize = prefs.font_size || 16;
@@ -1161,6 +1231,24 @@ async function loadEditorPreferences(editor) {
       currentThemeManager = new ThemeManager(editor);
       window.themeManager = currentThemeManager; // Expose to window for settings panel
       currentThemeManager.applyTheme('default');
+    }
+  }
+}
+
+// Helper to refresh all open editors' themes (used after CSS variable changes)
+function refreshAllEditors() {
+  if (!window.paneManager || !window.paneManager.panes) return;
+  for (const pane of window.paneManager.panes.values()) {
+    const tabManager = pane.tabManager;
+    if (!tabManager || !tabManager.tabs) continue;
+    for (const tab of tabManager.tabs.values()) {
+      if (tab.editor && tab.type === 'markdown' && typeof tab.editor.refreshTheme === 'function') {
+        try {
+          tab.editor.refreshTheme();
+        } catch (e) {
+          console.warn('Theme refresh failed for an editor:', e);
+        }
+      }
     }
   }
 }
@@ -1986,6 +2074,7 @@ async function updateUIWithVault(vaultInfo) {
       applySettingsToAllEditors({
         fontSize: vaultSettings.editor.font_size,
         fontFamily: vaultSettings.editor.font_family,
+        fontColor: vaultSettings.editor.font_color,
         theme: vaultSettings.editor.theme,
         lineNumbers: vaultSettings.editor.line_numbers,
         lineWrapping: vaultSettings.editor.line_wrapping,
@@ -2061,7 +2150,7 @@ Your vault is now open and ready to use.
 - Use **Ctrl/Cmd + B** for bold, **Ctrl/Cmd + I** for italic
 `;
     
-    currentEditor.setContent(successContent);
+    currentEditor.setContent(successContent, false, null, false);
     currentFile = null;
   }
 }
@@ -2591,7 +2680,7 @@ function showError(message) {
 ${message}
 
 *Please check the console for more details.*`;
-    currentEditor.setContent(errorContent);
+    currentEditor.setContent(errorContent, false, null, false);
   }
 }
 
@@ -3335,6 +3424,21 @@ window.confirmRename = function() {
   
   window.closeRenameModal();
 }
+
+// Open Task Dashboard
+let taskDashboard = null;
+window.openTaskDashboard = async function() {
+  console.log('📋 Opening Task Dashboard...');
+  
+  try {
+    if (!taskDashboard) {
+      taskDashboard = new TaskDashboard();
+    }
+    await taskDashboard.open();
+  } catch (error) {
+    console.error('Failed to open Task Dashboard:', error);
+  }
+};
 
 // Toggle AI Chat Panel
 // Prevent multiple concurrent toggle attempts
@@ -4275,6 +4379,11 @@ function applySettingsToAllEditors(editorSettings) {
   if (editorSettings.fontFamily) {
     root.style.setProperty('--editor-font-family', editorSettings.fontFamily);
   }
+  if (editorSettings.fontColor) {
+    root.style.setProperty('--editor-text-color', editorSettings.fontColor);
+    // Also update markdown heading color for consistency
+    root.style.setProperty('--md-heading-color', editorSettings.fontColor);
+  }
   
   // Apply theme globally
   if (editorSettings.theme && currentThemeManager) {
@@ -4290,7 +4399,7 @@ function applySettingsToAllEditors(editorSettings) {
         // tabs is also a Map
         for (const tab of tabManager.tabs.values()) {
           if (tab.editor && tab.type === 'markdown') {
-            console.log('Applying font size to editor:', editorSettings.fontSize);
+            console.log('Applying settings to editor');
             
             // Apply font size
             if (editorSettings.fontSize && tab.editor.setFontSize) {
@@ -4298,6 +4407,15 @@ function applySettingsToAllEditors(editorSettings) {
                 tab.editor.setFontSize(editorSettings.fontSize);
               } catch (error) {
                 console.error('Error applying font size:', error);
+              }
+            }
+            // Scope font color variables on editor root for immediate application
+            if (editorSettings.fontColor && tab.editor.view && tab.editor.view.dom) {
+              try {
+                tab.editor.view.dom.style.setProperty('--editor-text-color', editorSettings.fontColor);
+                tab.editor.view.dom.style.setProperty('--text-primary', editorSettings.fontColor);
+              } catch (e) {
+                console.warn('Failed to scope color vars on editor root:', e);
               }
             }
             
@@ -4309,6 +4427,16 @@ function applySettingsToAllEditors(editorSettings) {
             // Apply line wrapping
             if (editorSettings.lineWrapping !== undefined && tab.editor.setLineWrapping) {
               tab.editor.setLineWrapping(editorSettings.lineWrapping);
+            }
+            
+            // Always refresh theme to ensure font color is applied
+            // This ensures the editor picks up the CSS variables that were just set
+            // Use a small delay to ensure CSS variables have propagated
+            if (tab.editor.refreshTheme) {
+              setTimeout(() => {
+                console.log('Refreshing theme to apply font color');
+                tab.editor.refreshTheme();
+              }, 50);
             }
             
           }

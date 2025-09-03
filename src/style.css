@@ -1,5 +1,6 @@
 /* Import editor styles */
 @import './editor/editor.css';
+@import './editor/task-extension.css';
 
 /* Import AI chat styles */
 @import './settings/ai-settings.css';
@@ -7,6 +8,7 @@
 
 /* Import widget sidebar styles */
 @import './widgets/widget-sidebar.css';
+@import './widgets/task-widget.css';
 
 /* Transparent title bar - add proper spacing and drag regions */
 body {
@@ -1897,4 +1899,3 @@ body {
   background: rgba(var(--accent-rgb), 0.15);
   color: var(--text-primary);
 }
-
