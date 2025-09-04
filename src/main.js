@@ -3818,6 +3818,20 @@ window.exportToPDF = async function() {
   }
   
   try {
+    // Ensure editor is initialized before getting content
+    if (!currentEditor.view || !currentEditor.view.state) {
+      console.warn('Editor view not ready, waiting...');
+      // Wait a bit for editor to initialize
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
+      // Check again
+      if (!currentEditor.view || !currentEditor.view.state) {
+        console.error('❌ Editor still not initialized');
+        showNotification('Editor not ready yet, please try again', 'error');
+        return;
+      }
+    }
+    
     // Get the markdown content
     const markdownContent = currentEditor.getContent();
     
@@ -3874,6 +3888,20 @@ window.exportToHTML = async function() {
   }
   
   try {
+    // Ensure editor is initialized before getting content
+    if (!currentEditor.view || !currentEditor.view.state) {
+      console.warn('Editor view not ready, waiting...');
+      // Wait a bit for editor to initialize
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
+      // Check again
+      if (!currentEditor.view || !currentEditor.view.state) {
+        console.error('❌ Editor still not initialized');
+        showNotification('Editor not ready yet, please try again', 'error');
+        return;
+      }
+    }
+    
     // Get the markdown content
     const markdownContent = currentEditor.getContent();
     
@@ -3961,6 +3989,20 @@ window.exportToWord = async function() {
   }
   
   try {
+    // Ensure editor is initialized before getting content
+    if (!currentEditor.view || !currentEditor.view.state) {
+      console.warn('Editor view not ready, waiting...');
+      // Wait a bit for editor to initialize
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
+      // Check again
+      if (!currentEditor.view || !currentEditor.view.state) {
+        console.error('❌ Editor still not initialized');
+        showNotification('Editor not ready yet, please try again', 'error');
+        return;
+      }
+    }
+    
     // Get the markdown content
     const markdownContent = currentEditor.getContent();
     

@@ -54,6 +54,7 @@ Your context vault is yours. Forever. No lock-in, no proprietary formats.
 ### Essential Shortcuts
 - **Cmd+F** - Global search across all notes
 - **Cmd+Shift+F** - Local text search within current note
+  - Replace actions: **Alt+Enter** to replace all (hold Cmd/Ctrl: Mod-Alt-Enter), **Alt+J** to replace next (Mod-Alt-J)
 - **Cmd+P** - Quick file switcher
 - **Cmd+Shift+P** - Open Plugin Hub for plugin management
 - **Cmd+Shift+T** - Open Task Dashboard with multiple views

@@ -12,7 +12,11 @@ import { markdown, markdownLanguage } from '@codemirror/lang-markdown'
 import { languages } from '@codemirror/language-data'
 import { oneDark } from '@codemirror/theme-one-dark'
 import { invoke } from '@tauri-apps/api/core'
-import { search, searchKeymap, highlightSelectionMatches, openSearchPanel, closeSearchPanel } from '@codemirror/search'
+import { 
+  search, searchKeymap, highlightSelectionMatches, 
+  openSearchPanel, closeSearchPanel,
+  replaceNext, replaceAll, SearchQuery, getSearchQuery, setSearchQuery
+} from '@codemirror/search'
 import { livePreviewPlugin, livePreviewStyles } from './live-preview.js'
 import { inlineFormattingExtension, inlineFormattingStyles, blockWidgetExtension } from './formatting-extension.js'
 import { imageEmbedPlugin } from './image-extension.js'
@@ -555,6 +559,16 @@ export class MarkdownEditor {
             // GlobalSearch will be handled by the global keyboard handler
             return true; // Return true to indicate we handled it
           }
+        },
+        // Replace All convenience shortcut
+        {
+          key: "Mod-Alt-Enter",
+          run: (view) => replaceAll(view)
+        },
+        // Replace Next convenience shortcut
+        {
+          key: "Mod-Alt-j",
+          run: (view) => replaceNext(view)
         }
       ]),
       
@@ -1731,7 +1745,22 @@ export class MarkdownEditor {
   // Open search panel
   openSearch() {
     if (this.view) {
-      openSearchPanel(this.view);
+      // Open panel and ensure replace UI is available
+      openSearchPanel(this.view)
+      const state = this.view.state
+      const sel = state.selection.main
+      const selectedText = sel.empty ? '' : state.sliceDoc(sel.from, sel.to)
+
+      // Preserve existing query (if any) and ensure replace is present
+      const existing = getSearchQuery(state)
+      const query = new SearchQuery({
+        search: selectedText || existing.search || '',
+        caseSensitive: existing.caseSensitive,
+        regexp: existing.regexp,
+        wholeWord: existing.wholeWord,
+        replace: typeof existing.replace === 'string' ? existing.replace : ''
+      })
+      this.view.dispatch({ effects: setSearchQuery.of(query) })
     }
   }
   

@@ -10,7 +10,7 @@ export class UserSettingsPanel {
             editor: {
                 fontSize: 16,
                 fontFamily: "'SF Mono', Monaco, 'Cascadia Code', monospace",
-                fontColor: '#2c3e50',
+                fontColor: '#32302c',
                 theme: 'default',
                 lineNumbers: true,
                 lineWrapping: true,

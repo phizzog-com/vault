@@ -104,7 +104,18 @@ export class PaneManager {
         this.paneContainer.appendChild(paneElement);
         
         // Add click handler to activate pane
-        paneElement.addEventListener('click', () => {
+        // Do not steal focus when interacting with CodeMirror search panel or other inputs
+        paneElement.addEventListener('click', (e) => {
+            const target = e.target;
+            // Skip activation if clicking inside CodeMirror's search panel or tooltips
+            if (target && (target.closest && (target.closest('.cm-search') || target.closest('.cm-tooltip')))) {
+                return;
+            }
+            // Skip activation when clicking on interactive form controls
+            const tag = target && target.tagName ? target.tagName.toLowerCase() : '';
+            if (tag === 'input' || tag === 'textarea' || tag === 'select' || tag === 'button') {
+                return;
+            }
             this.activatePane(paneId);
         });
         

@@ -158,14 +158,36 @@
   background: var(--bg-secondary, #f8f9fa);
   border-bottom: 1px solid var(--border-color, #e1e4e8);
   padding: 8px 12px;
-  display: flex;
+  /* Shrink to content and align left instead of stretching full width */
+  display: inline-flex;
+  justify-content: flex-start;
   align-items: center;
   gap: 8px;
+  width: auto;
+  max-width: 100%;
   font-family: var(--system-font-stack);
   font-size: 13px;
+  /* Allow the panel to wrap so the replace row is visible */
+  flex-wrap: wrap;
 }
 
-.cm-search input {
+/* Force the library-inserted <br> in the search panel to break to a new row in flex layout */
+.cm-search br {
+  flex-basis: 100%;
+  height: 0;
+}
+
+/* Keep the close (×) button parked at the far right of the panel row when space allows */
+/* Override CodeMirror base theme that absolutely positions the close button */
+.cm-panel.cm-search button[name="close"] {
+  position: static !important;
+  top: auto !important;
+  right: auto !important;
+  margin-left: 12px; /* space from replace all */
+  align-self: center;
+}
+
+.cm-search input.cm-textfield {
   background: var(--bg-primary, #ffffff);
   border: 1px solid var(--border-color, #e1e4e8);
   border-radius: 4px;
@@ -175,10 +197,18 @@
   min-width: 200px;
 }
 
-.cm-search input:focus {
+.cm-search input.cm-textfield:focus {
   outline: none;
   border-color: var(--accent-color, #5b47e0);
   box-shadow: 0 0 0 2px rgba(91, 71, 224, 0.1);
+}
+
+/* Ensure checkboxes don't inherit textfield sizing */
+.cm-search input[type="checkbox"] {
+  min-width: 0;
+  width: auto;
+  height: auto;
+  margin-right: 6px;
 }
 
 .cm-search button {
