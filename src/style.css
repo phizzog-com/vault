@@ -954,6 +954,23 @@ body {
   background-color: var(--bg-tertiary);
 }
 
+/* Drag & Drop visual states */
+.tree-item.file.dragging {
+  opacity: 0.6;
+}
+
+.tree-item.folder.drag-over {
+  background-color: var(--bg-tertiary);
+  outline: 2px dashed var(--accent-color);
+}
+
+/* Synthetic drag root drop uses container detection; no extra UI rows */
+
+@keyframes pulse {
+  0%, 100% { opacity: 0.8; }
+  50% { opacity: 1; }
+}
+
 .tree-item.file.active {
   background-color: var(--accent-color);
   color: white;

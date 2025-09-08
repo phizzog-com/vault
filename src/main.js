@@ -29,6 +29,290 @@ console.log('🔍 EnhancedChatPanel class:', EnhancedChatPanel);
 
 // Global state
 window.expandedFolders = new Set();
+// Drag-and-drop debug flag (toggle via enableDnDDebug/disableDnDDebug)
+window.__dndDebug = true;
+window.enableDnDDebug = () => { window.__dndDebug = true; console.log('[DnD] debug enabled'); };
+window.disableDnDDebug = () => { window.__dndDebug = false; console.log('[DnD] debug disabled'); };
+function dndLog(...args) { if (window.__dndDebug) console.log('[DnD]', ...args); }
+
+// Enable synthetic drag mode for WKWebView
+window.enableSyntheticDrag = function() {
+  window.__useSyntheticDrag = true;
+  console.log('[DnD] Synthetic drag mode ENABLED - using press-hold-drop fallback');
+  initSyntheticDragHandlers();
+};
+
+window.disableSyntheticDrag = function() {
+  window.__useSyntheticDrag = false;
+  console.log('[DnD] Synthetic drag mode DISABLED');
+};
+
+// Synthetic drag implementation for WKWebView
+function initSyntheticDragHandlers() {
+  if (window.__syntheticDragInitialized) return;
+  window.__syntheticDragInitialized = true;
+  
+  let draggedElement = null;
+  let dragGhost = null;
+  let dropTarget = null;
+  
+  const createDragGhost = (element) => {
+    const ghost = element.cloneNode(true);
+    ghost.style.position = 'fixed';
+    ghost.style.pointerEvents = 'none';
+    ghost.style.opacity = '0.5';
+    ghost.style.zIndex = '99999';
+    ghost.style.transition = 'none';
+    ghost.classList.add('synthetic-dragging');
+    document.body.appendChild(ghost);
+    return ghost;
+  };
+  
+  const updateGhostPosition = (x, y) => {
+    if (dragGhost) {
+      dragGhost.style.left = `${x + 10}px`;
+      dragGhost.style.top = `${y - 10}px`;
+    }
+  };
+  
+  const findDropTarget = (x, y) => {
+    if (dragGhost) dragGhost.style.display = 'none';
+    const elements = document.elementsFromPoint(x, y);
+    if (dragGhost) dragGhost.style.display = '';
+    
+    // 1) Prefer folders under the pointer
+    for (const el of elements) {
+      const folder = el.closest?.('.tree-item.folder');
+      if (folder && folder !== draggedElement) {
+        return folder;
+      }
+    }
+    // 2) If hovering a root-level file row, treat as root drop
+    for (const el of elements) {
+      const fileRow = el.closest?.('.tree-item.file');
+      if (fileRow) {
+        const p = fileRow.getAttribute('data-path') || '';
+        const isRootLevel = !p.includes('/');
+        if (isRootLevel) {
+          const tree = fileRow.closest('.file-tree-content');
+          if (tree) return tree; // root
+        } else {
+          // Hovering a nested file; do not treat as root
+          return null;
+        }
+      }
+    }
+    // 3) Otherwise, if pointer is within whitespace of the tree content, treat as root
+    for (const el of elements) {
+      const inTree = el.classList?.contains('file-tree-content') ? el : el.closest?.('.file-tree-content');
+      if (inTree) return inTree;
+    }
+    return null;
+  };
+  
+  // Handle mousedown on draggable files
+  document.addEventListener('mousedown', (e) => {
+    if (!window.__useSyntheticDrag) return;
+    
+    const file = e.target.closest('.tree-item.file[draggable="true"]');
+    if (!file) return;
+    
+    e.preventDefault();
+    draggedElement = file;
+    const path = file.getAttribute('data-path');
+    window.__dragSourcePath = path;
+    
+    // Create visual ghost
+    dragGhost = createDragGhost(file);
+    updateGhostPosition(e.clientX, e.clientY);
+    
+    file.classList.add('dragging');
+    dndLog('synthetic drag start', { path });
+  }, true);
+
+  // Suppress native HTML5 drag when using synthetic mode
+  document.addEventListener('dragstart', (e) => {
+    if (window.__useSyntheticDrag) {
+      e.preventDefault();
+      dndLog('suppressed native dragstart (synthetic mode)');
+    }
+  }, true);
+  
+  // Handle mousemove during synthetic drag
+  document.addEventListener('mousemove', (e) => {
+    if (!draggedElement || !window.__useSyntheticDrag) return;
+    
+    updateGhostPosition(e.clientX, e.clientY);
+    
+    // Find and highlight drop target
+    const newTarget = findDropTarget(e.clientX, e.clientY);
+    if (newTarget !== dropTarget) {
+      if (dropTarget && dropTarget.classList?.contains('tree-item') && dropTarget.classList.contains('folder')) {
+        dropTarget.classList.remove('drag-over');
+      }
+      if (newTarget && newTarget.classList?.contains('tree-item') && newTarget.classList.contains('folder')) {
+        newTarget.classList.add('drag-over');
+      }
+      dropTarget = newTarget;
+      dndLog('synthetic drag over', { target: dropTarget?.getAttribute('data-path') });
+    }
+  }, true);
+  
+  // Handle mouseup to complete synthetic drag
+  document.addEventListener('mouseup', async (e) => {
+    if (!draggedElement || !window.__useSyntheticDrag) return;
+    
+    const sourcePath = window.__dragSourcePath;
+    // Determine destination; root target uses data-path="" (vault root)
+    const destinationPath = dropTarget?.getAttribute('data-path') ?? '';
+    
+    // Clean up UI
+    if (dragGhost) {
+      dragGhost.remove();
+      dragGhost = null;
+    }
+    if (draggedElement) {
+      draggedElement.classList.remove('dragging');
+    }
+    if (dropTarget && dropTarget.classList?.contains('tree-item') && dropTarget.classList.contains('folder')) {
+      dropTarget.classList.remove('drag-over');
+    }
+    
+    // Perform move if we had a recognized drop target (folder or root target)
+    if (sourcePath && dropTarget) {
+      dndLog('synthetic drop', { sourcePath, destinationPath });
+      await performMoveToFolder(sourcePath, destinationPath);
+    } else {
+      dndLog('synthetic drag cancelled');
+    }
+    
+    // Reset state
+    draggedElement = null;
+    dropTarget = null;
+    window.__dragSourcePath = null;
+  }, true);
+  
+  console.log('[DnD] Synthetic drag handlers initialized');
+}
+
+// Auto-enable synthetic drag on WebKit (WKWebView)
+try {
+  const isWebKit = !!window.webkit || /AppleWebKit/i.test(navigator.userAgent || '');
+  if (isWebKit) {
+    console.log('[DnD] WebKit detected — enabling synthetic drag mode');
+    window.enableSyntheticDrag();
+  }
+} catch (_) {}
+
+// Add root drop zone support (OPTIONAL - call this after enableSyntheticDrag)
+// (Root drop zone feature removed to restore documented working solution)
+
+// DnD Test Harness - Call window.testDnD() to create test zones
+window.testDnD = function() {
+  const testHtml = `
+    <div id="dnd-test-harness" style="position: fixed; top: 100px; left: 50%; transform: translateX(-50%); 
+         background: white; border: 2px solid red; padding: 20px; z-index: 99999; box-shadow: 0 4px 8px rgba(0,0,0,0.3);">
+      <h3 style="margin: 0 0 10px 0;">DnD Test Harness</h3>
+      <div style="display: flex; gap: 20px;">
+        <div id="test-drag-source" draggable="true" style="width: 100px; height: 100px; background: #4CAF50; 
+             display: flex; align-items: center; justify-content: center; cursor: move; color: white; font-weight: bold;">
+          DRAG ME
+        </div>
+        <div id="test-drop-target" style="width: 100px; height: 100px; background: #2196F3; border: 2px dashed white;
+             display: flex; align-items: center; justify-content: center; color: white; font-weight: bold;">
+          DROP HERE
+        </div>
+      </div>
+      <div id="test-log" style="margin-top: 10px; max-height: 200px; overflow-y: auto; background: #f0f0f0; 
+           padding: 5px; font-family: monospace; font-size: 12px;"></div>
+      <button onclick="document.getElementById('dnd-test-harness').remove();" 
+              style="margin-top: 10px; padding: 5px 10px;">Close Test</button>
+    </div>
+  `;
+  
+  // Remove existing test harness if any
+  const existing = document.getElementById('dnd-test-harness');
+  if (existing) existing.remove();
+  
+  // Add test harness to page
+  document.body.insertAdjacentHTML('beforeend', testHtml);
+  
+  const source = document.getElementById('test-drag-source');
+  const target = document.getElementById('test-drop-target');
+  const log = document.getElementById('test-log');
+  
+  const testLog = (msg) => {
+    const time = new Date().toLocaleTimeString();
+    log.innerHTML = `<div>${time}: ${msg}</div>` + log.innerHTML;
+    console.log('[DnD Test]', msg);
+  };
+  
+  // Source events
+  source.addEventListener('dragstart', (e) => {
+    e.dataTransfer.setData('text/plain', 'test-data');
+    e.dataTransfer.setData('text/uri-list', 'file://test');
+    e.dataTransfer.setData('application/x-test', 'test');
+    e.dataTransfer.effectAllowed = 'move';
+    source.style.opacity = '0.5';
+    testLog(`dragstart - types: ${Array.from(e.dataTransfer.types).join(', ')}`);
+  });
+  
+  source.addEventListener('dragend', (e) => {
+    source.style.opacity = '1';
+    testLog(`dragend - dropEffect: ${e.dataTransfer.dropEffect}`);
+  });
+  
+  // Target events
+  target.addEventListener('dragenter', (e) => {
+    e.preventDefault();
+    target.style.background = '#FF9800';
+    testLog('dragenter on target');
+  });
+  
+  target.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    testLog('dragover on target');
+  });
+  
+  target.addEventListener('dragleave', (e) => {
+    target.style.background = '#2196F3';
+    testLog('dragleave on target');
+  });
+  
+  target.addEventListener('drop', (e) => {
+    e.preventDefault();
+    target.style.background = '#4CAF50';
+    const data = e.dataTransfer.getData('text/plain');
+    testLog(`DROP SUCCESS! Data: ${data}`);
+    setTimeout(() => {
+      target.style.background = '#2196F3';
+    }, 1000);
+  });
+  
+  testLog('Test harness ready. Try dragging green box to blue box.');
+};
+
+// Enhanced debugging for hit-testing
+window.testHitTest = function() {
+  const handler = (e) => {
+    const els = document.elementsFromPoint(e.clientX, e.clientY);
+    const info = els.slice(0, 5).map(el => {
+      const id = el.id ? `#${el.id}` : '';
+      const classes = el.className ? `.${el.className.split(' ').join('.')}` : '';
+      return `${el.tagName.toLowerCase()}${id}${classes}`;
+    }).join(' > ');
+    console.log('[HitTest]', info);
+  };
+  
+  document.addEventListener('mousemove', handler);
+  console.log('[HitTest] Started. Move mouse to see element stack. Run window.stopHitTest() to stop.');
+  
+  window.stopHitTest = () => {
+    document.removeEventListener('mousemove', handler);
+    console.log('[HitTest] Stopped.');
+  };
+};
 let currentEditor = null;
 let currentThemeManager = null;
 let currentFile = null;
@@ -1530,6 +1814,17 @@ async function promptForFolderName() {
     const input = document.getElementById('folder-name-input');
     const cancelBtn = document.getElementById('folder-cancel-btn');
     const createBtn = document.getElementById('folder-create-btn');
+
+    // Ensure modal is visible above any plugin modal styles
+    // Some global CSS sets `.modal-overlay { opacity: 0 }` by default
+    // Mirror the file modal behavior to force visibility
+    if (modal) {
+      modal.classList.add('modal-show');
+      modal.style.display = 'flex';
+      modal.style.visibility = 'visible';
+      modal.style.opacity = '1';
+      modal.style.zIndex = '10000001';
+    }
     
     setTimeout(() => {
       input.focus();
@@ -2251,9 +2546,9 @@ function displayFileTree(fileTree) {
   const sortedFiles = buildTree(fileTree.files);
   
   let html = `
-    <div class="file-tree-content">
+    <div class="file-tree-content" data-path="">
   `;
-  
+
   sortedFiles.forEach(file => {
     // Skip .obsidian folders and their contents
     if (file.name === '.obsidian' || file.path.includes('/.obsidian/')) {
@@ -2286,7 +2581,8 @@ function displayFileTree(fileTree) {
       const escapedPath = file.path.replace(/'/g, "\\'").replace(/"/g, "&quot;");
       
       html += `
-        <div class="tree-item folder" data-path="${file.path}" style="padding-left: ${indent + 8}px;">
+        <div class="tree-item folder" data-path="${file.path}" style="padding-left: ${indent + 8}px;"
+             ondragenter="handleFolderDragEnter(event)" ondragover="handleFolderDragOver(event)" ondragleave="handleFolderDragLeave(event)" ondrop="handleFolderDrop(event)">
           <span class="expand-icon" onclick="toggleFolder('${escapedPath}', event)">${expandIcon}</span>
           <span class="tree-label" onclick="handleFolderClick('${escapedPath}', event)">${file.name}</span>
           <span class="folder-actions">
@@ -2302,7 +2598,7 @@ function displayFileTree(fileTree) {
       const displayName = file.name.replace(/\.(md|markdown|txt|doc|docx|pdf)$/i, '');
       
       html += `
-        <div class="tree-item file" data-path="${file.path}" style="padding-left: ${fileIndent}px;" data-file-path="${escapedPath}">
+        <div class="tree-item file" data-path="${file.path}" style="padding-left: ${fileIndent}px;" data-file-path="${escapedPath}" draggable="true" ondragstart="handleFileDragStart(event)" ondrag="handleFileDrag(event)" ondragend="handleFileDragEnd(event)">
           <span class="tree-label" onclick="handleFileClick('${escapedPath}', false)">${displayName}</span>
         </div>
       `;
@@ -2345,6 +2641,171 @@ window.handleFolderClick = function(folderPath, event) {
   console.log('📁 Folder clicked:', folderPath);
   window.toggleFolder(folderPath, event);
 };
+
+// Drag & Drop: Move file into folder
+window.handleFileDragStart = function(event) {
+  const item = event.currentTarget.closest('.tree-item.file');
+  const path = item?.getAttribute('data-path');
+  if (path) {
+    // Set multiple data types to keep drag in "internal" mode
+    event.dataTransfer.setData('text/plain', path);
+    event.dataTransfer.setData('text/uri-list', `file://${path}`);
+    event.dataTransfer.setData('application/x-vault-file', path);
+    // Fallback for environments that strip dataTransfer (WebKit quirks)
+    window.__dragSourcePath = path;
+  }
+  window.__dndDropProcessed = false;
+  try { 
+    event.dataTransfer.effectAllowed = 'move';
+    event.dataTransfer.dropEffect = 'move';
+  } catch (_) {}
+  dndLog('dragstart', { path, types: Array.from(event.dataTransfer?.types || []), effectAllowed: event.dataTransfer?.effectAllowed });
+  if (item) item.classList.add('dragging');
+};
+
+window.handleFileDrag = function(event) {
+  // Track last mouse position during drag for end-of-drag fallback
+  // Note: Some browsers report 0,0 during drag events
+  if (typeof event.clientX === 'number' && typeof event.clientY === 'number' && 
+      (event.clientX !== 0 || event.clientY !== 0)) {
+    window.__dragLastPt = { x: event.clientX, y: event.clientY };
+    dndLog('drag', window.__dragLastPt);
+  }
+};
+
+
+window.handleFileDragEnd = function(event) {
+  const item = event.currentTarget.closest('.tree-item.file');
+  if (item) item.classList.remove('dragging');
+  document.querySelectorAll('.tree-item.folder.drag-over').forEach(el => el.classList.remove('drag-over'));
+  
+  // Enhanced dragend fallback for WKWebView
+  if (window.__dragSourcePath && !window.__dndDropProcessed) {
+    // Try multiple sources for coordinates
+    let pt = null;
+    
+    // 1. Try last tracked position during drag
+    if (window.__dragLastPt && window.__dragLastPt.x && window.__dragLastPt.y) {
+      pt = window.__dragLastPt;
+      dndLog('dragend using last tracked pt', pt);
+    }
+    // 2. Try event coordinates if valid
+    else if (typeof event.clientX === 'number' && typeof event.clientY === 'number' && 
+             (event.clientX !== 0 || event.clientY !== 0)) {
+      pt = { x: event.clientX, y: event.clientY };
+      dndLog('dragend using event coordinates', pt);
+    }
+    // 3. Try to get cursor position from mouse event (fallback)
+    else if (event.pageX && event.pageY) {
+      pt = { x: event.pageX, y: event.pageY };
+      dndLog('dragend using page coordinates', pt);
+    }
+    
+    if (pt && pt.x && pt.y) {
+      const els = document.elementsFromPoint(pt.x, pt.y) || [];
+      dndLog('dragend elements at point', els.length, els.slice(0, 3).map(e => e.className));
+      
+      // Look for folder in the element stack
+      let folderEl = null;
+      for (const el of els) {
+        if (el.classList && el.classList.contains('folder')) {
+          folderEl = el;
+          break;
+        }
+        const parent = el.closest?.('.tree-item.folder');
+        if (parent) {
+          folderEl = parent;
+          break;
+        }
+      }
+      
+      const destinationPath = folderEl?.getAttribute('data-path') || '';
+      dndLog('dragend fallback result', { 
+        pt, 
+        destinationPath, 
+        sourcePath: window.__dragSourcePath,
+        folderFound: !!folderEl 
+      });
+      
+      if (destinationPath && destinationPath !== window.__dragSourcePath) {
+        performMoveToFolder(window.__dragSourcePath, destinationPath);
+      } else if (!destinationPath) {
+        dndLog('dragend - no valid drop target found');
+      }
+    } else {
+      dndLog('dragend - no valid coordinates available for fallback');
+    }
+  }
+  
+  // Clean up global state
+  window.__dragSourcePath = null;
+  window.__dragLastPt = null;
+  window.__dndDropProcessed = false;
+  dndLog('dragend complete');
+};
+
+window.handleFolderDragEnter = function(event) {
+  event.preventDefault();
+  event.stopPropagation();
+  const folderEl = event.currentTarget.closest('.tree-item.folder');
+  if (folderEl) folderEl.classList.add('drag-over');
+  const dest = folderEl?.getAttribute('data-path');
+  dndLog('dragenter', { dest, types: event.dataTransfer?.types, effectAllowed: event.dataTransfer?.effectAllowed });
+};
+
+window.handleFolderDragOver = function(event) {
+  event.preventDefault(); // Allow drop
+  event.stopPropagation();
+  try { event.dataTransfer.dropEffect = 'move'; } catch (_) {}
+  const folderEl = event.currentTarget.closest('.tree-item.folder');
+  if (folderEl) folderEl.classList.add('drag-over');
+  const dest = folderEl?.getAttribute('data-path');
+  dndLog('dragover', { dest, dropEffect: event.dataTransfer?.dropEffect });
+};
+
+window.handleFolderDragLeave = function(event) {
+  event.stopPropagation();
+  const folderEl = event.currentTarget.closest('.tree-item.folder');
+  if (folderEl) folderEl.classList.remove('drag-over');
+  const dest = folderEl?.getAttribute('data-path');
+  dndLog('dragleave', { dest });
+};
+
+window.handleFolderDrop = async function(event) {
+  event.preventDefault();
+  event.stopPropagation();
+  const folderEl = event.currentTarget.closest('.tree-item.folder');
+  if (folderEl) folderEl.classList.remove('drag-over');
+  const destinationPath = folderEl?.getAttribute('data-path') || '';
+  const sourcePath = event.dataTransfer.getData('text/plain') || window.__dragSourcePath || '';
+  dndLog('drop', { destinationPath, sourcePath, types: event.dataTransfer?.types, dropEffect: event.dataTransfer?.dropEffect });
+  if (!sourcePath) return;
+
+  await performMoveToFolder(sourcePath, destinationPath);
+};
+
+async function performMoveToFolder(sourcePath, destinationPath) {
+  // Ignore drops where file would stay in same parent
+  const srcParent = sourcePath.includes('/') ? sourcePath.slice(0, sourcePath.lastIndexOf('/')) : '';
+  if (srcParent === destinationPath) { dndLog('noop: same parent'); return; }
+
+  const fileName = sourcePath.split('/').pop();
+  const newPath = destinationPath ? `${destinationPath}/${fileName}` : fileName;
+  dndLog('move_file invoke', { oldPath: sourcePath, newPath });
+
+  try {
+    await invoke('move_file', { oldPath: sourcePath, newPath });
+    dndLog('move_file success', { oldPath: sourcePath, newPath });
+    const fileTree = await invoke('get_file_tree');
+    displayFileTree(fileTree);
+  } catch (error) {
+    console.error('Error moving file via drag-and-drop:', error);
+    dndLog('move_file error', { error });
+    alert('Error moving file: ' + error);
+  } finally {
+    window.__dragSourcePath = null;
+  }
+}
 
 // Refresh file tree
 async function refreshFileTree() {
@@ -2725,7 +3186,7 @@ async function initializeApp() {
                 <line x1="9" y1="15" x2="15" y2="15"/>
               </svg>
             </button>
-            <button class="ribbon-button" onclick="showCreateFolderModal('')" title="New Folder">
+            <button class="ribbon-button" onclick="showCreateFolderModal()" title="New Folder">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
                 <line x1="12" y1="11" x2="12" y2="17"/>
@@ -2838,7 +3299,7 @@ async function initializeApp() {
           <div id="chat-panel-container"></div>
         </div>
         
-        <!-- Context Menu -->
+        <!-- Context Menu: File -->
         <div id="file-context-menu" class="context-menu hidden">
           <div class="context-menu-item" data-action="delete">
             Delete
@@ -2858,12 +3319,33 @@ async function initializeApp() {
             Inspect
           </div>
         </div>
+
+        <!-- Context Menu: Folder -->
+        <div id="folder-context-menu" class="context-menu hidden">
+          <div class="context-menu-item" data-action="delete">
+            Delete
+          </div>
+          <div class="context-menu-item" data-action="move">
+            Move folder to...
+          </div>
+          <div class="context-menu-item" data-action="rename">
+            Rename
+          </div>
+          <div class="context-menu-separator"></div>
+          <div class="context-menu-item" data-action="reveal">
+            View in Finder
+          </div>
+          <div class="context-menu-separator"></div>
+          <div class="context-menu-item" data-action="inspect">
+            Inspect
+          </div>
+        </div>
         
         <!-- Rename Modal -->
         <div id="rename-modal" class="modal hidden">
           <div class="modal-backdrop" onclick="closeRenameModal()"></div>
           <div class="modal-content">
-            <h3>Rename File</h3>
+            <h3>Rename</h3>
             <input type="text" id="rename-input" class="modal-input" />
             <div class="modal-buttons">
               <button onclick="confirmRename()">Rename</button>
@@ -2980,20 +3462,29 @@ async function initializeApp() {
       });
     }
     
-    // Set up context menu handling for file items
+    // Set up context menu handling for file and folder items
     document.addEventListener('contextmenu', function(e) {
-      // Check if the right-clicked element is a file item or inside one
+      // Files
       const fileItem = e.target.closest('.tree-item.file');
       if (fileItem) {
         e.preventDefault();
-        // Use data-path instead of data-file-path to get the unescaped path
         const filePath = fileItem.getAttribute('data-path');
         if (filePath) {
           window.showFileContextMenu(e, filePath);
         }
         return false;
       }
-      // Allow browser context menu for everything else
+      // Folders
+      const folderItem = e.target.closest('.tree-item.folder');
+      if (folderItem) {
+        e.preventDefault();
+        const folderPath = folderItem.getAttribute('data-path');
+        if (folderPath) {
+          window.showFolderContextMenu(e, folderPath);
+        }
+        return false;
+      }
+      // Otherwise, allow default
     }, true);
     
     // Set up click handling for context menu items
@@ -3023,12 +3514,219 @@ async function initializeApp() {
             case 'reveal':
               window.revealInFinder();
               break;
+            case 'inspect':
+              (async () => { try { await invoke('toggle_devtools'); } catch (e) { console.error(e); } })();
+              break;
           }
           
           // Reset the handled flag after a short delay
           setTimeout(() => {
             delete menuItem.dataset.handled;
           }, 100);
+        }
+      });
+    }
+
+    // Set up delegated drag-and-drop listeners on the file tree container
+    (function setupFileTreeDnDDelegates() {
+      const tree = document.getElementById('file-tree');
+      if (!tree || tree.__dndDelegatesSetup) return;
+      tree.__dndDelegatesSetup = true;
+      dndLog('delegates: attaching on #file-tree');
+
+      tree.addEventListener('dragenter', (e) => {
+        const folder = e.target.closest?.('.tree-item.folder');
+        if (!folder) return;
+        e.preventDefault();
+        e.stopPropagation();
+        folder.classList.add('drag-over');
+        dndLog('tree dragenter', { dest: folder.getAttribute('data-path') });
+      }, true);
+
+      tree.addEventListener('dragover', (e) => {
+        const folder = e.target.closest?.('.tree-item.folder');
+        if (!folder) return;
+        e.preventDefault();
+        e.stopPropagation();
+        try { e.dataTransfer.dropEffect = 'move'; } catch (_) {}
+        if (!folder.classList.contains('drag-over')) folder.classList.add('drag-over');
+        dndLog('tree dragover', { dest: folder.getAttribute('data-path') });
+      }, true);
+
+      tree.addEventListener('dragleave', (e) => {
+        const folder = e.target.closest?.('.tree-item.folder');
+        if (!folder) return;
+        e.stopPropagation();
+        folder.classList.remove('drag-over');
+        dndLog('tree dragleave', { dest: folder.getAttribute('data-path') });
+      }, true);
+
+      tree.addEventListener('drop', async (e) => {
+        const folder = e.target.closest?.('.tree-item.folder');
+        if (!folder) return;
+        e.preventDefault();
+        e.stopPropagation();
+        folder.classList.remove('drag-over');
+        const destinationPath = folder.getAttribute('data-path') || '';
+        const sourcePath = e.dataTransfer?.getData('text/plain') || window.__dragSourcePath || '';
+        dndLog('tree drop', { destinationPath, sourcePath });
+        if (!sourcePath) return;
+        window.__dndDropProcessed = true;
+        await performMoveToFolder(sourcePath, destinationPath);
+      }, true);
+    })();
+
+    // Global capture fallback for WebKit: use hit-testing to detect folder under pointer
+    (function setupGlobalDnDFallback() {
+      if (document.__globalDnDSetup) return;
+      document.__globalDnDSetup = true;
+      let lastHoverEl = null;
+
+      const findFolderAtPoint = (x, y) => {
+        const els = document.elementsFromPoint(x, y) || [];
+        for (const el of els) {
+          const folder = el.closest?.('.tree-item.folder');
+          if (folder) return folder;
+        }
+        return null;
+      };
+
+      document.addEventListener('dragover', (e) => {
+        // CRITICAL: Always preventDefault to enable drop events in WKWebView
+        e.preventDefault();
+        e.stopPropagation();
+        
+        try { 
+          e.dataTransfer.dropEffect = 'move';
+        } catch (_) {}
+        
+        if (window.__dragSourcePath) {
+          const folder = findFolderAtPoint(e.clientX, e.clientY);
+          if (folder !== lastHoverEl) {
+            if (lastHoverEl) lastHoverEl.classList.remove('drag-over');
+            if (folder) folder.classList.add('drag-over');
+            lastHoverEl = folder;
+          }
+          dndLog('doc dragover (fallback)', { dest: folder?.getAttribute('data-path'), clientX: e.clientX, clientY: e.clientY });
+        }
+      }, true);
+
+      document.addEventListener('drop', async (e) => {
+        // Always preventDefault to handle the drop
+        e.preventDefault();
+        e.stopPropagation();
+        
+        const sourcePath = window.__dragSourcePath || e.dataTransfer?.getData('text/plain') || e.dataTransfer?.getData('application/x-vault-file') || '';
+        if (!sourcePath) {
+          dndLog('doc drop - no source path');
+          return;
+        }
+        
+        const folder = findFolderAtPoint(e.clientX, e.clientY);
+        const destinationPath = folder?.getAttribute('data-path') || '';
+        
+        if (lastHoverEl) { 
+          lastHoverEl.classList.remove('drag-over'); 
+          lastHoverEl = null; 
+        }
+        
+        dndLog('doc drop (fallback)', { destinationPath, sourcePath, clientX: e.clientX, clientY: e.clientY });
+        
+        if (!destinationPath) {
+          dndLog('doc drop - no destination folder');
+          return;
+        }
+        
+        window.__dndDropProcessed = true;
+        await performMoveToFolder(sourcePath, destinationPath);
+      }, true);
+
+      document.addEventListener('dragend', () => {
+        if (lastHoverEl) lastHoverEl.classList.remove('drag-over');
+        lastHoverEl = null;
+      }, true);
+    })();
+    
+    // CRITICAL: Unconditional window-level capture for WKWebView
+    (function setupUnconditionalWindowCapture() {
+      if (window.__unconditionalCaptureSetup) return;
+      window.__unconditionalCaptureSetup = true;
+      
+      // Force accept ALL dragover events at window level
+      window.addEventListener('dragover', (e) => {
+        e.preventDefault(); // MUST prevent default to enable drop
+        try {
+          e.dataTransfer.dropEffect = 'move';
+        } catch (_) {}
+        dndLog('window dragover (unconditional)', { 
+          x: e.clientX, 
+          y: e.clientY,
+          types: e.dataTransfer ? Array.from(e.dataTransfer.types) : []
+        });
+      }, true);
+      
+      // Capture window-level drop as last resort
+      window.addEventListener('drop', (e) => {
+        e.preventDefault();
+        dndLog('window drop (unconditional)', {
+          x: e.clientX,
+          y: e.clientY,
+          types: e.dataTransfer ? Array.from(e.dataTransfer.types) : [],
+          hasSource: !!window.__dragSourcePath
+        });
+      }, true);
+    })();
+    
+    // Additional mousemove tracking during drag for WKWebView
+    (function setupDragMouseTracking() {
+      let isDragging = false;
+      
+      document.addEventListener('dragstart', () => {
+        isDragging = true;
+        dndLog('drag mouse tracking started');
+      }, true);
+      
+      document.addEventListener('dragend', () => {
+        isDragging = false;
+        dndLog('drag mouse tracking stopped');
+      }, true);
+      
+      document.addEventListener('mousemove', (e) => {
+        if (isDragging && e.clientX && e.clientY) {
+          window.__dragLastPt = { x: e.clientX, y: e.clientY };
+          // Don't log every mousemove to avoid spam
+        }
+      }, true);
+    })();
+
+    // Folder context menu actions
+    const folderMenu = document.getElementById('folder-context-menu');
+    if (folderMenu) {
+      folderMenu.addEventListener('click', function(e) {
+        e.stopPropagation();
+        const menuItem = e.target.closest('.context-menu-item');
+        if (menuItem && !menuItem.dataset.handled) {
+          menuItem.dataset.handled = 'true';
+          const action = menuItem.getAttribute('data-action');
+          console.log('Folder context menu action:', action);
+          switch (action) {
+            case 'delete':
+              window.deleteFolder();
+              break;
+            case 'move':
+              window.moveFolder();
+              break;
+            case 'rename':
+              window.renameFile(); // Reuse rename flow
+              break;
+            case 'reveal':
+              window.revealInFinder();
+              break;
+            case 'inspect':
+              (async () => { try { await invoke('toggle_devtools'); } catch (e) { console.error(e); } })();
+              break;
+          }
+          setTimeout(() => { delete menuItem.dataset.handled; }, 100);
         }
       });
     }
@@ -3108,11 +3806,40 @@ window.showFileContextMenu = function(event, filePath) {
 }
 
 window.hideContextMenu = function() {
-  const contextMenu = document.getElementById('file-context-menu');
-  if (contextMenu) {
-    contextMenu.classList.add('hidden');
-    // Don't clear contextMenuTarget here - let the action handlers do it
-  }
+  const fileMenu = document.getElementById('file-context-menu');
+  if (fileMenu) fileMenu.classList.add('hidden');
+  const folderMenu = document.getElementById('folder-context-menu');
+  if (folderMenu) folderMenu.classList.add('hidden');
+  // Don't clear contextMenuTarget here - let the action handlers do it
+}
+
+// Folder Context Menu
+window.showFolderContextMenu = function(event, folderPath) {
+  const menu = document.getElementById('folder-context-menu');
+  if (!menu) return;
+  
+  // Hide any existing menus first
+  window.hideContextMenu();
+  
+  contextMenuTarget = folderPath;
+  menu.style.left = event.clientX + 'px';
+  menu.style.top = event.clientY + 'px';
+  menu.classList.remove('hidden');
+  
+  const stopProp = function(e) { e.stopPropagation(); };
+  menu.addEventListener('mousedown', stopProp);
+  menu.addEventListener('mouseup', stopProp);
+  menu.addEventListener('click', stopProp);
+  
+  requestAnimationFrame(() => {
+    const hideOnClick = function(e) {
+      if (!menu.contains(e.target)) {
+        window.hideContextMenu();
+        document.removeEventListener('mousedown', hideOnClick, true);
+      }
+    };
+    document.addEventListener('mousedown', hideOnClick, true);
+  });
 }
 
 window.deleteFile = async function() {
@@ -3162,6 +3889,58 @@ window.deleteFile = async function() {
   
   window.hideContextMenu();
   contextMenuTarget = null; // Clear after action completes
+}
+
+// Folder actions
+window.deleteFolder = async function() {
+  if (!contextMenuTarget) return;
+  
+  const targetPath = contextMenuTarget;
+  const folderName = targetPath.split('/').pop() || targetPath;
+  
+  const confirmed = await ask(`Delete folder "${folderName}" and all contents?`, {
+    title: 'Delete Folder',
+    type: 'warning'
+  });
+  
+  if (confirmed) {
+    invoke('delete_folder', { folderPath: targetPath })
+      .then(async () => {
+        console.log('Folder deleted successfully');
+        try {
+          const fileTree = await invoke('get_file_tree');
+          displayFileTree(fileTree);
+        } catch (error) {
+          console.error('Error refreshing file tree:', error);
+        }
+      })
+      .catch(error => {
+        console.error('Error deleting folder:', error);
+        alert('Error deleting folder: ' + error);
+      });
+  }
+  
+  window.hideContextMenu();
+  contextMenuTarget = null;
+}
+
+window.moveFolder = function() {
+  if (!contextMenuTarget) return;
+  const folderName = contextMenuTarget.split('/').pop() || contextMenuTarget;
+  moveContext = {
+    targetPath: contextMenuTarget,
+    fileName: folderName,
+    isFolder: true
+  };
+  window.hideContextMenu();
+  contextMenuTarget = null;
+  const modal = document.getElementById('move-modal');
+  const filter = document.getElementById('move-filter');
+  if (modal && filter) {
+    loadFoldersForMove();
+    modal.classList.remove('hidden');
+    setTimeout(() => { filter.focus(); }, 50);
+  }
 }
 
 // Store move context globally
@@ -3246,10 +4025,21 @@ function displayFolders(filterText) {
   if (!listEl) return;
   
   // Filter folders based on search text
-  const filtered = filterText ? 
+  let filtered = filterText ? 
     availableFolders.filter(f => 
       f.display.toLowerCase().includes(filterText.toLowerCase())
     ) : availableFolders;
+
+  // If moving a folder, prevent selecting the folder itself or its descendants
+  if (moveContext && moveContext.isFolder && moveContext.targetPath) {
+    const base = moveContext.targetPath.replace(/\/$/, '');
+    filtered = filtered.filter(f => {
+      const p = f.path.replace(/\/$/, '');
+      if (p === base) return false; // same folder
+      if (p.startsWith(base + '/')) return false; // descendant of folder being moved
+      return true;
+    });
+  }
   
   // Reset selection if needed
   if (selectedFolderIndex >= filtered.length) {

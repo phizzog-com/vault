@@ -884,6 +884,37 @@ async fn delete_file(file_path: String, window: tauri::Window, refactored_state:
 }
 
 #[tauri::command]
+async fn delete_folder(folder_path: String, window: tauri::Window, refactored_state: State<'_, RefactoredAppState>) -> Result<(), String> {
+    println!("🗑️ delete_folder called with path: {}", folder_path);
+
+    let window_id = extract_window_id(&window);
+
+    match refactored_state.get_window_state(&window_id).await {
+        Some(window_state) => {
+            let vault_lock = window_state.vault.lock().await;
+            match &*vault_lock {
+                Some(vault) => {
+                    let path = vault.path().join(&folder_path);
+                    println!("📁 Deleting folder at: {:?}", path);
+
+                    if path.is_dir() {
+                        std::fs::remove_dir_all(&path)
+                            .map_err(|e| {
+                                println!("❌ Failed to delete folder: {}", e);
+                                format!("Failed to delete folder: {}", e)
+                            })
+                    } else {
+                        Err("Path is not a folder".to_string())
+                    }
+                }
+                None => Err("No vault opened".to_string()),
+            }
+        }
+        None => Err("Window not found".to_string()),
+    }
+}
+
+#[tauri::command]
 async fn move_file(old_path: String, new_path: String, window: tauri::Window, refactored_state: State<'_, RefactoredAppState>) -> Result<(), String> {
     println!("📦 move_file called: {} -> {}", old_path, new_path);
 
@@ -1549,6 +1580,7 @@ fn main() {
             create_new_file,
             create_new_folder,
             delete_file,
+            delete_folder,
             move_file,
             rename_file,
             reveal_in_finder,

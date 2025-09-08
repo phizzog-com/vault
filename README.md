@@ -145,10 +145,12 @@ Join us in building the future of human-AI collaboration:
 *   **🎨 Editor UX:** Scroll preservation, smart auto-save, highlight placement
 *   **🖥️ Claude Code CLI Integration:** Embedded Claude Code CLI in terminal with MCP support
 *   **📄 Frontmatter/Properties Stabilization:** Body-only editing with Properties widget; no raw YAML or spacing issues
+*   **🗂️ File Tree UX:** Folder context menu (Delete/Move/Rename/View in Finder); macOS WKWebView DnD restored via synthetic drag-and-drop; drop to vault root by dropping into the file tree area (folders remain listed first, files follow alphabetically)
 
 ### 🚧 Building Now
 *   **🧪 Plugin System:** Production deployment of complete plugin architecture
 *   **📱 Additional Plugins:** Expanding ecosystem with validated plugin API
+*   **🗂️ File Tree DnD:** Drag‑and‑drop move (active diagnostics for macOS WKWebView)
 
 ### 🚀 The Horizon
 *   **📱 Mobile App:** iOS/Android apps for capturing context on the go
