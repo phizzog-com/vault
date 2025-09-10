@@ -11,6 +11,8 @@ export class AISettingsPanel {
             maxTokens: 2000,
             streamingEnabled: true,
             systemPrompt: null,
+            headerName: '',
+            headerValue: '',
             showApiKey: false,
             testing: false,
             testStatus: null,
@@ -63,7 +65,9 @@ export class AISettingsPanel {
                     temperature: settings.temperature,
                     maxTokens: settings.max_tokens,
                     streamingEnabled: settings.streaming_enabled !== undefined ? settings.streaming_enabled : true,
-                    systemPrompt: settings.system_prompt || null
+                    systemPrompt: settings.system_prompt || null,
+                    headerName: (settings.headers && settings.headers[0] && settings.headers[0].name) || '',
+                    headerValue: (settings.headers && settings.headers[0] && settings.headers[0].value) || ''
                 };
             }
         } catch (error) {
@@ -81,7 +85,10 @@ export class AISettingsPanel {
                 temperature: this.state.temperature,
                 max_tokens: this.state.maxTokens,
                 streaming_enabled: true,  // Add missing field
-                system_prompt: this.state.systemPrompt || null  // Save custom system prompt
+                system_prompt: this.state.systemPrompt || null,  // Save custom system prompt
+                headers: (this.state.headerName || this.state.headerValue) ? [
+                    { name: this.state.headerName || '', value: this.state.headerValue || '' }
+                ] : []
             };
             
             console.log('Saving AI settings...');
@@ -113,7 +120,10 @@ export class AISettingsPanel {
                 api_key: this.state.apiKey || null,
                 model: this.state.model,
                 temperature: this.state.temperature,
-                max_tokens: this.state.maxTokens
+                max_tokens: this.state.maxTokens,
+                headers: (this.state.headerName || this.state.headerValue) ? [
+                    { name: this.state.headerName || '', value: this.state.headerValue || '' }
+                ] : []
             };
             
             console.log('Testing AI connection...');
@@ -156,7 +166,9 @@ export class AISettingsPanel {
                 temperature: settings.temperature,
                 maxTokens: settings.max_tokens,
                 streamingEnabled: settings.streaming_enabled !== undefined ? settings.streaming_enabled : true,
-                systemPrompt: settings.system_prompt || null
+                systemPrompt: settings.system_prompt || null,
+                headerName: (settings.headers && settings.headers[0] && settings.headers[0].name) || '',
+                headerValue: (settings.headers && settings.headers[0] && settings.headers[0].value) || ''
             };
         } catch (error) {
             console.error(`Failed to load settings for ${provider}:`, error);
@@ -197,6 +209,13 @@ export class AISettingsPanel {
                 this.state.temperature = 0.7;
                 this.state.maxTokens = 4096;
                 break;
+            case 'bedrock':
+                this.state.endpoint = '';
+                this.state.model = 'anthropic.claude-sonnet-4-20250514-v1:0';
+                this.state.apiKey = '';
+                this.state.temperature = 0.7;
+                this.state.maxTokens = 4096;
+                break;
         }
     }
     
@@ -222,6 +241,14 @@ export class AISettingsPanel {
     
     updateSystemPrompt(value) {
         this.state.systemPrompt = value;
+    }
+
+    updateHeaderName(value) {
+        this.state.headerName = value;
+    }
+
+    updateHeaderValue(value) {
+        this.state.headerValue = value;
     }
     
     toggleApiKeyVisibility() {
@@ -258,6 +285,8 @@ export class AISettingsPanel {
             return 'Examples: gpt-4, gpt-3.5-turbo, gpt-4-turbo-preview';
         } else if (endpoint.includes('generativelanguage.googleapis.com')) {
             return 'Examples: gemini-2.0-flash, gemini-2.5-flash, gemini-1.5-pro';
+        } else if (endpoint.includes('/bedrock/')) {
+            return 'Examples: anthropic.claude-3-7-sonnet-20250219-v1:0, anthropic.claude-3-5-sonnet-20241022-v2:0';
         } else if (endpoint.includes('11434')) {
             return 'Examples: llama2, mistral, codellama';
         } else if (endpoint.includes('1234')) {
@@ -303,6 +332,12 @@ export class AISettingsPanel {
                             LM Studio
                             ${this.activeProvider === 'lmstudio' ? '<span class="active-badge">✓</span>' : ''}
                         </button>
+                        <button onclick="aiSettingsPanel.quickSetup('bedrock')" 
+                                class="quick-setup-btn ${this.state.provider === 'bedrock' ? 'selected' : ''} ${this.activeProvider === 'bedrock' ? 'active' : ''}">
+                            <span class="provider-icon">🌩️</span>
+                            Bedrock (Claude)
+                            ${this.activeProvider === 'bedrock' ? '<span class=\"active-badge\">✓</span>' : ''}
+                        </button>
                     </div>
                     <p class="quick-setup-info">
                         ${this.state.provider !== this.activeProvider ? 
@@ -341,6 +376,29 @@ export class AISettingsPanel {
                         <small>Leave empty for local AI servers</small>
                     </div>
                     
+                    <div class="form-group">
+                        <label>Custom Header:</label>
+                        <div style="display:flex; gap:8px;">
+                            <input 
+                                type="text" 
+                                value="${this.state.headerName}"
+                                onchange="aiSettingsPanel.updateHeaderName(this.value)"
+                                placeholder="Header name"
+                                class="form-input"
+                                style="flex:1;"
+                            />
+                            <input 
+                                type="text" 
+                                value="${this.state.headerValue}"
+                                onchange="aiSettingsPanel.updateHeaderValue(this.value)"
+                                placeholder="Header value"
+                                class="form-input"
+                                style="flex:1;"
+                            />
+                        </div>
+                    <small>Optional. Leave blanks to disable. Useful for proxies.</small>
+                </div>
+
                     <div class="form-group">
                         <label>Model Name:</label>
                         <input 

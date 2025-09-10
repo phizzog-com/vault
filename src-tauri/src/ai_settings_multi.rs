@@ -17,6 +17,7 @@ pub enum AIProvider {
     Gemini,
     Ollama,
     LMStudio,
+    Bedrock,
 }
 
 impl AIProvider {
@@ -26,6 +27,7 @@ impl AIProvider {
             AIProvider::Gemini => "gemini",
             AIProvider::Ollama => "ollama",
             AIProvider::LMStudio => "lmstudio",
+            AIProvider::Bedrock => "bedrock",
         }
     }
     
@@ -35,6 +37,7 @@ impl AIProvider {
             "gemini" => Some(AIProvider::Gemini),
             "ollama" => Some(AIProvider::Ollama),
             "lmstudio" => Some(AIProvider::LMStudio),
+            "bedrock" => Some(AIProvider::Bedrock),
             _ => None,
         }
     }
@@ -52,6 +55,7 @@ impl AIProvider {
                 system_prompt: None,
                 streaming_enabled: true,
                 last_modified: chrono::Utc::now(),
+                headers: None,
             },
             AIProvider::Gemini => AISettings {
                 provider: self.clone(),
@@ -63,6 +67,7 @@ impl AIProvider {
                 system_prompt: None,
                 streaming_enabled: true,
                 last_modified: chrono::Utc::now(),
+                headers: None,
             },
             AIProvider::Ollama => AISettings {
                 provider: self.clone(),
@@ -74,6 +79,7 @@ impl AIProvider {
                 system_prompt: None,
                 streaming_enabled: true,
                 last_modified: chrono::Utc::now(),
+                headers: None,
             },
             AIProvider::LMStudio => AISettings {
                 provider: self.clone(),
@@ -85,9 +91,30 @@ impl AIProvider {
                 system_prompt: None,
                 streaming_enabled: true,
                 last_modified: chrono::Utc::now(),
+                headers: None,
+            },
+            AIProvider::Bedrock => AISettings {
+                provider: self.clone(),
+                // Default to blank; user must provide Bedrock endpoint/proxy
+                endpoint: "".to_string(),
+                api_key: None,
+                // Model identifier used in Bedrock path
+                model: "anthropic.claude-sonnet-4-20250514-v1:0".to_string(),
+                temperature: 0.7,
+                max_tokens: 4096,
+                system_prompt: None,
+                streaming_enabled: true,
+                last_modified: chrono::Utc::now(),
+                headers: None,
             },
         }
     }
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct HeaderKV {
+    pub name: String,
+    pub value: String,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -101,6 +128,8 @@ pub struct AISettings {
     pub system_prompt: Option<String>,
     pub streaming_enabled: bool,
     pub last_modified: chrono::DateTime<chrono::Utc>,
+    #[serde(default)]
+    pub headers: Option<Vec<HeaderKV>>, // Optional custom headers
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -114,6 +143,8 @@ struct StoredSettings {
     system_prompt: Option<String>,
     streaming_enabled: bool,
     last_modified: chrono::DateTime<chrono::Utc>,
+    #[serde(default)]
+    headers: Option<Vec<HeaderKV>>, // Persist custom headers
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -233,6 +264,7 @@ pub async fn save_ai_settings_for_provider(
         system_prompt: settings.system_prompt,
         streaming_enabled: settings.streaming_enabled,
         last_modified: settings.last_modified,
+        headers: settings.headers,
     };
     
     // Save to provider-specific store
@@ -293,6 +325,7 @@ pub async fn get_ai_settings_for_provider(
             system_prompt: stored.system_prompt,
             streaming_enabled: stored.streaming_enabled,
             last_modified: stored.last_modified,
+            headers: stored.headers,
         })
     } else {
         println!("No settings found for provider {}, returning defaults", provider);
@@ -393,6 +426,7 @@ pub async fn migrate_ai_settings(app: AppHandle) -> Result<bool, String> {
         system_prompt: None,
         streaming_enabled: true,
         last_modified: chrono::Utc::now(),
+        headers: None,
     };
     
     // Save to new provider-specific store

@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter};
 use crate::ai_settings_multi::get_ai_settings;
 use futures_util::StreamExt;
-use reqwest::header::{HeaderMap, HeaderValue, CONTENT_TYPE, AUTHORIZATION};
+use reqwest::header::{HeaderMap, HeaderValue, HeaderName, CONTENT_TYPE, AUTHORIZATION};
 use serde_json::json;
 
 #[tauri::command]
@@ -198,6 +198,18 @@ pub async fn send_ai_chat(
     request = request
         .header("Content-Type", "application/json")
         .json(&request_body);
+
+    // Add any custom headers from settings
+    if let Some(headers) = &settings.headers {
+        for kv in headers {
+            if kv.name.is_empty() { continue; }
+            // Skip overwriting critical headers
+            if kv.name.eq_ignore_ascii_case("authorization") || kv.name.eq_ignore_ascii_case("content-type") { continue; }
+            if let Ok(name) = HeaderName::from_bytes(kv.name.as_bytes()) {
+                request = request.header(name, kv.value.clone());
+            }
+        }
+    }
     
     println!("Final request body being sent: {}", serde_json::to_string(&request_body).unwrap());
     
@@ -382,6 +394,17 @@ pub async fn send_ai_chat_with_functions(
     request = request
         .header("Content-Type", "application/json")
         .json(&request_body);
+
+    // Add any custom headers from settings
+    if let Some(headers) = &settings.headers {
+        for kv in headers {
+            if kv.name.is_empty() { continue; }
+            if kv.name.eq_ignore_ascii_case("authorization") || kv.name.eq_ignore_ascii_case("content-type") { continue; }
+            if let Ok(name) = HeaderName::from_bytes(kv.name.as_bytes()) {
+                request = request.header(name, kv.value.clone());
+            }
+        }
+    }
     
     println!("Sending request to {} with timeout: {:?}", url, timeout_duration);
     if is_ollama {
@@ -554,6 +577,17 @@ async fn stream_chat_response(
                 HeaderValue::from_str(&format!("Bearer {}", api_key))
                     .map_err(|_| "Invalid API key format".to_string())?
             );
+        }
+    }
+
+    // Add any custom headers from settings
+    if let Some(custom) = &settings.headers {
+        for kv in custom {
+            if kv.name.is_empty() { continue; }
+            if kv.name.eq_ignore_ascii_case("authorization") || kv.name.eq_ignore_ascii_case("content-type") { continue; }
+            if let Ok(name) = HeaderName::from_bytes(kv.name.as_bytes()) {
+                headers.insert(name, HeaderValue::from_str(&kv.value).unwrap_or(HeaderValue::from_static("")));
+            }
         }
     }
     
@@ -787,6 +821,17 @@ async fn stream_chat_with_functions_response(
                 HeaderValue::from_str(&format!("Bearer {}", api_key))
                     .map_err(|_| "Invalid API key format".to_string())?
             );
+        }
+    }
+
+    // Add any custom headers from settings
+    if let Some(custom) = &settings.headers {
+        for kv in custom {
+            if kv.name.is_empty() { continue; }
+            if kv.name.eq_ignore_ascii_case("authorization") || kv.name.eq_ignore_ascii_case("content-type") { continue; }
+            if let Ok(name) = HeaderName::from_bytes(kv.name.as_bytes()) {
+                headers.insert(name, HeaderValue::from_str(&kv.value).unwrap_or(HeaderValue::from_static("")));
+            }
         }
     }
     

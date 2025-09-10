@@ -10,12 +10,20 @@ use rand::RngCore;
 use base64::{Engine as _, engine::general_purpose};
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct HeaderKV {
+    pub name: String,
+    pub value: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct AISettings {
     pub endpoint: String,
     pub api_key: Option<String>,
     pub model: String,
     pub temperature: f32,
     pub max_tokens: u32,
+    #[serde(default)]
+    pub headers: Option<Vec<HeaderKV>>, // Optional custom headers for testing
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -171,6 +179,7 @@ pub async fn get_ai_settings_old(app: AppHandle) -> Result<Option<AISettings>, S
         model: stored.model,
         temperature: stored.temperature,
         max_tokens: stored.max_tokens,
+        headers: None,
     }))
 }
 
@@ -234,37 +243,97 @@ pub async fn test_ai_connection(settings: AISettings) -> Result<ConnectionTestRe
     // Test 2: Check authentication (if API key provided)
     if let Some(api_key) = &settings.api_key {
         if !api_key.is_empty() {
-            // Make a minimal request to test auth
-            let test_url = format!("{}/chat/completions", settings.endpoint.trim_end_matches('/'));
-            let test_body = serde_json::json!({
-                "model": settings.model,
-                "messages": [{"role": "user", "content": "Hi"}],
-                "max_tokens": 1,
-                "stream": false
-            });
-            
-            match client
-                .post(&test_url)
-                .header("Authorization", format!("Bearer {}", api_key))
-                .header("Content-Type", "application/json")
-                .json(&test_body)
-                .send()
-                .await
-            {
-                Ok(response) => {
-                    if response.status() == 401 {
-                        result.auth_status.message = "Invalid API key".to_string();
-                        result.overall_status.message = "Authentication failed".to_string();
-                        return Ok(result);
-                    } else if response.status().is_success() || response.status() == 400 {
-                        result.auth_status.success = true;
-                        result.auth_status.message = "API key is valid".to_string();
-                        result.model_status.success = true;
-                        result.model_status.message = "Model is available".to_string();
+            // Detect Bedrock-style endpoint
+            let is_bedrock = settings.endpoint.contains("/bedrock/")
+                || settings.endpoint.contains("amazonaws.com/bedrock");
+
+            if is_bedrock {
+                let test_url = format!(
+                    "{}/model/{}/converse",
+                    settings.endpoint.trim_end_matches('/'),
+                    settings.model
+                );
+                let test_body = serde_json::json!({
+                    "messages": [
+                        {"role": "user", "content": [{"text": "Hi"}]}
+                    ]
+                });
+
+                let mut req = client.post(&test_url)
+                    .header("Authorization", format!("Bearer {}", api_key))
+                    .header("Content-Type", "application/json")
+                    .json(&test_body);
+
+                // Add any custom headers from settings
+                if let Some(headers) = &settings.headers {
+                    for kv in headers {
+                        if kv.name.is_empty() { continue; }
+                        // Skip overwriting critical headers
+                        if kv.name.eq_ignore_ascii_case("authorization") || kv.name.eq_ignore_ascii_case("content-type") { continue; }
+                        req = req.header(&kv.name, &kv.value);
                     }
                 }
-                Err(e) => {
-                    result.auth_status.message = format!("Failed to test authentication: {}", e);
+
+                match req.send().await {
+                    Ok(response) => {
+                        if response.status() == 401 {
+                            result.auth_status.message = "Invalid API key".to_string();
+                            result.overall_status.message = "Authentication failed".to_string();
+                            return Ok(result);
+                        } else if response.status().is_success() || response.status() == 400 {
+                            result.auth_status.success = true;
+                            result.auth_status.message = "API key is valid".to_string();
+                            result.model_status.success = true;
+                            result.model_status.message = "Model is available".to_string();
+                        } else {
+                            result.auth_status.message = format!("Unexpected status: {}", response.status());
+                        }
+                    }
+                    Err(e) => {
+                        result.auth_status.message = format!("Failed to test authentication: {}", e);
+                    }
+                }
+            } else {
+                // Default: OpenAI-compatible test
+                let test_url = format!("{}/chat/completions", settings.endpoint.trim_end_matches('/'));
+                let test_body = serde_json::json!({
+                    "model": settings.model,
+                    "messages": [{"role": "user", "content": "Hi"}],
+                    "max_tokens": 1,
+                    "stream": false
+                });
+
+                let mut req = client
+                    .post(&test_url)
+                    .header("Authorization", format!("Bearer {}", api_key))
+                    .header("Content-Type", "application/json")
+                    .json(&test_body);
+
+                // Add any custom headers from settings
+                if let Some(headers) = &settings.headers {
+                    for kv in headers {
+                        if kv.name.is_empty() { continue; }
+                        if kv.name.eq_ignore_ascii_case("authorization") || kv.name.eq_ignore_ascii_case("content-type") { continue; }
+                        req = req.header(&kv.name, &kv.value);
+                    }
+                }
+
+                match req.send().await {
+                    Ok(response) => {
+                        if response.status() == 401 {
+                            result.auth_status.message = "Invalid API key".to_string();
+                            result.overall_status.message = "Authentication failed".to_string();
+                            return Ok(result);
+                        } else if response.status().is_success() || response.status() == 400 {
+                            result.auth_status.success = true;
+                            result.auth_status.message = "API key is valid".to_string();
+                            result.model_status.success = true;
+                            result.model_status.message = "Model is available".to_string();
+                        }
+                    }
+                    Err(e) => {
+                        result.auth_status.message = format!("Failed to test authentication: {}", e);
+                    }
                 }
             }
         } else {

@@ -7,6 +7,7 @@ import { ContextManager } from './ContextManager.js';
 import { ChatPersistence } from './ChatPersistence.js';
 import { OpenAISDK } from './OpenAISDK.js';
 import { GeminiSDK } from './GeminiSDK.js';
+import { BedrockClaudeSDK } from './BedrockClaudeSDK.js';
 import { AISettingsPanel } from '../settings/AISettingsPanel.js';
 import { ModeToggle } from '../components/ModeToggle.js';
 import { CLIContainer } from '../cli/CLIContainer.js';
@@ -42,6 +43,12 @@ export class EnhancedChatPanel {
             },
             gemini: {
                 name: 'Google Gemini',
+                sdk: null,
+                configured: false,
+                status: 'unknown'
+            },
+            bedrock: {
+                name: 'Amazon Bedrock (Claude)',
                 sdk: null,
                 configured: false,
                 status: 'unknown'
@@ -95,6 +102,7 @@ export class EnhancedChatPanel {
         // Initialize SDKs
         this.providers.openai.sdk = new OpenAISDK();
         this.providers.gemini.sdk = new GeminiSDK();
+        this.providers.bedrock.sdk = new BedrockClaudeSDK();
         
         await this.initializeProviders();
         
@@ -154,6 +162,10 @@ export class EnhancedChatPanel {
             this.providers.gemini.configured = geminiInit;
             this.providers.gemini.status = geminiInit ? 'ready' : 'not-configured';
             
+            const bedrockInit = await this.providers.bedrock.sdk.initialize();
+            this.providers.bedrock.configured = bedrockInit;
+            this.providers.bedrock.status = bedrockInit ? 'ready' : 'not-configured';
+            
             // Determine which provider to use based on the endpoint
             const settings = await invoke('get_ai_settings');
             if (settings?.endpoint?.includes('generativelanguage.googleapis.com')) {
@@ -167,6 +179,12 @@ export class EnhancedChatPanel {
                     this.currentProvider = 'gemini';
                     console.log('🎯 Detected Gemini API endpoint, using Gemini SDK');
                 }
+            } else if (settings?.endpoint?.includes('/bedrock/')) {
+                this.currentProvider = 'bedrock';
+                console.log('🎯 Detected Bedrock endpoint, using Bedrock Claude SDK');
+            } else if (settings?.endpoint?.includes('amazonaws.com/bedrock')) {
+                this.currentProvider = 'bedrock';
+                console.log('🎯 Detected Bedrock host, using Bedrock Claude SDK');
             } else {
                 this.currentProvider = 'openai';
                 console.log('🎯 Using OpenAI SDK for endpoint:', settings?.endpoint);
@@ -178,6 +196,8 @@ export class EnhancedChatPanel {
             this.providers.openai.status = 'error';
             this.providers.gemini.configured = false;
             this.providers.gemini.status = 'error';
+            this.providers.bedrock.configured = false;
+            this.providers.bedrock.status = 'error';
             this.currentProvider = 'openai'; // Fallback to OpenAI
         }
         
@@ -366,9 +386,12 @@ export class EnhancedChatPanel {
             onSave: async (settings) => {
                 console.log('Settings saved, refreshing providers...');
                 await this.refreshProviders();
-                // Auto-switch to OpenAI if it becomes configured
-                if (this.providers.openai.configured) {
-                    this.currentProvider = 'openai';
+                try {
+                    const active = await invoke('get_active_ai_provider');
+                    this.currentProvider = active;
+                } catch (e) {
+                    // Fallback to provider from saved settings
+                    this.currentProvider = settings.provider || this.currentProvider;
                 }
                 this.hideSettings();
             }
@@ -638,6 +661,15 @@ export class EnhancedChatPanel {
             if (this.currentProvider === 'claude') {
                 // Use Claude SDK
                 response = await provider.sdk.sendMessage(message, allContext);
+                this.interface.hideTyping();
+                this.interface.addMessage({
+                    type: 'assistant',
+                    content: response,
+                    timestamp: new Date()
+                });
+            } else if (this.currentProvider === 'bedrock') {
+                // Use Bedrock Claude SDK (non-streaming)
+                response = await provider.sdk.sendMessage(message, allContext, tagEnhancement);
                 this.interface.hideTyping();
                 this.interface.addMessage({
                     type: 'assistant',
