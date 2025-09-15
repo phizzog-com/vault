@@ -4333,6 +4333,15 @@ window.toggleWidgetSidebar = function() {
     // Create and initialize widget sidebar
     window.widgetSidebar = new WidgetSidebar();
     window.widgetSidebar.mount(appContainer);
+
+    // Ensure the active editor (if any) is wired to the sidebar immediately
+    try {
+      if (typeof currentEditor !== 'undefined' && currentEditor) {
+        window.widgetSidebar.updateActiveEditor(currentEditor);
+      }
+    } catch (e) {
+      console.warn('⚠️ Failed to set active editor on widget sidebar init:', e);
+    }
   }
   
   try {

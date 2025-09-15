@@ -118,6 +118,14 @@ export class WidgetSidebar {
         const widget = this.getWidget(tabId);
         if (widget && widget.mount) {
             widget.mount(this.contentArea);
+            // If we already know the current editor, pass it to the newly mounted widget
+            if (this.currentEditor && widget.updateEditor) {
+                try {
+                    widget.updateEditor(this.currentEditor);
+                } catch (e) {
+                    console.error('[WidgetSidebar] Failed to update editor on tab switch:', e);
+                }
+            }
         } else {
             // Placeholder content
             const placeholder = document.createElement('div');
@@ -358,6 +366,9 @@ export class WidgetSidebar {
     }
     
     updateActiveEditor(editor) {
+        // Remember the last active editor so we can apply it
+        this.currentEditor = editor;
+
         // Pass editor updates to active widget
         const widget = this.getWidget(this.activeTab);
         if (widget && widget.updateEditor) {
