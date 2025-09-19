@@ -76,6 +76,44 @@ export class EnhancedChatPanel {
         
         // Vault listener
         this.vaultOpenedListener = null;
+
+        // Context sizing
+        this.contextCharLimit = 8000; // default until settings load
+    }
+
+    updateContextCharLimit(settings) {
+        const DEFAULT_LIMIT = 8000;
+        const MAX_LIMIT = 500000; // guardrail to avoid excessive payloads
+        const CHARS_PER_TOKEN_ESTIMATE = 4;
+
+        if (!settings) {
+            this.contextCharLimit = DEFAULT_LIMIT;
+            return;
+        }
+
+        const maxTokensRaw = settings.max_tokens ?? settings.maxTokens;
+        const maxTokens = Number(maxTokensRaw);
+
+        if (!Number.isFinite(maxTokens) || maxTokens <= 0) {
+            this.contextCharLimit = DEFAULT_LIMIT;
+            return;
+        }
+
+        const computed = Math.floor(maxTokens * CHARS_PER_TOKEN_ESTIMATE);
+        const clamped = Math.min(Math.max(computed, DEFAULT_LIMIT), MAX_LIMIT);
+
+        this.contextCharLimit = clamped;
+        console.log(`🧠 Context character limit set to ${this.contextCharLimit} (tokens: ${maxTokens})`);
+    }
+
+    getContextCharLimit() {
+        if (!this.contextCharLimit) {
+            const provider = this.providers?.[this.currentProvider];
+            const providerSettings = provider?.sdk?.getSettings?.();
+            this.updateContextCharLimit(providerSettings);
+        }
+
+        return this.contextCharLimit || 8000;
     }
     
     async mount(parentElement) {
@@ -168,6 +206,7 @@ export class EnhancedChatPanel {
             
             // Determine which provider to use based on the endpoint
             const settings = await invoke('get_ai_settings');
+            this.updateContextCharLimit(settings);
             if (settings?.endpoint?.includes('generativelanguage.googleapis.com')) {
                 // Check if the endpoint has the incorrect /openai/ path
                 if (settings.endpoint.includes('/openai/')) {
@@ -385,6 +424,7 @@ export class EnhancedChatPanel {
         this.settingsPanel.mount(scrollableContent, {
             onSave: async (settings) => {
                 console.log('Settings saved, refreshing providers...');
+                this.updateContextCharLimit(settings);
                 await this.refreshProviders();
                 try {
                     const active = await invoke('get_active_ai_provider');
@@ -544,9 +584,14 @@ export class EnhancedChatPanel {
     
     async switchProvider(providerKey) {
         console.log('🔄 Switching to provider:', providerKey);
-        
+
         this.currentProvider = providerKey;
-        
+
+        const provider = this.providers[providerKey];
+        if (provider?.sdk?.getSettings) {
+            this.updateContextCharLimit(provider.sdk.getSettings());
+        }
+
         // Update UI
         this.updateUI();
         
@@ -575,8 +620,13 @@ export class EnhancedChatPanel {
     async handleSendMessage(message) {
         try {
             const provider = this.providers[this.currentProvider];
-            
+
             console.log('Current provider:', this.currentProvider, provider);
+
+            // Sync context size with latest provider settings (after potential edits)
+            if (provider?.sdk?.getSettings) {
+                this.updateContextCharLimit(provider.sdk.getSettings());
+            }
             
             if (!provider.configured) {
                 this.interface.addMessage({
@@ -928,7 +978,7 @@ export class EnhancedChatPanel {
         console.log('Got content from:', title, 'Length:', content.length);
         
         // Truncate if too long
-        const maxLength = 8000;
+        const maxLength = this.getContextCharLimit();
         const truncatedContent = content.length > maxLength 
             ? content.substring(0, maxLength) + '...[truncated]'
             : content;
@@ -948,7 +998,7 @@ export class EnhancedChatPanel {
             });
             
             // Truncate if too long
-            const maxLength = 8000;
+            const maxLength = this.getContextCharLimit();
             return content.length > maxLength 
                 ? content.substring(0, maxLength) + '...[truncated]'
                 : content;
