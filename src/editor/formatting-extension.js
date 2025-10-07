@@ -1123,9 +1123,11 @@ export const inlineFormattingStyles = EditorView.theme({
     borderRight: '1px solid var(--border-color, #e9e9e7) !important',
     color: 'var(--editor-text-color, #2c3e50) !important',
     minWidth: '40px !important',
-    whiteSpace: 'nowrap !important',
-    overflow: 'hidden !important',
-    textOverflow: 'ellipsis !important'
+    whiteSpace: 'normal !important',
+    wordBreak: 'break-word !important',
+    overflowWrap: 'anywhere !important',
+    overflow: 'visible !important',
+    textOverflow: 'unset !important'
   },
   
   '.cm-table-formatted td:last-child': {

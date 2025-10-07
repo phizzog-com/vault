@@ -5155,11 +5155,14 @@ window.toggleZenMode = function() {
     
     // Restore right sidebar if it was visible before zen mode
     if (rightSidebar) {
+      // Always clear inline display style to allow CSS classes to work
+      rightSidebar.style.display = '';
+
+      // Add or remove visible class based on saved state
       if (zenModeState.wasRightSidebarVisible || (chatPanel && chatPanel.isVisible)) {
-        rightSidebar.style.display = '';  // Use default display
         rightSidebar.classList.add('visible');
       } else {
-        rightSidebar.style.display = 'none';
+        rightSidebar.classList.remove('visible');
       }
     }
     

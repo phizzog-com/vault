@@ -146,6 +146,7 @@ Join us in building the future of human-AI collaboration:
 *   **🖥️ Claude Code CLI Integration:** Embedded Claude Code CLI in terminal with MCP support
 *   **📄 Frontmatter/Properties Stabilization:** Body-only editing with Properties widget; no raw YAML or spacing issues
 *   **🗂️ File Tree UX:** Folder context menu (Delete/Move/Rename/View in Finder); macOS WKWebView DnD restored via synthetic drag-and-drop; drop to vault root by dropping into the file tree area (folders remain listed first, files follow alphabetically)
+*   **🧭 TOC Sidebar Fix:** Table of Contents now correctly shows headings from the active editor when the sidebar is opened and when switching widget tabs
 
 ### 🚧 Building Now
 *   **🧪 Plugin System:** Production deployment of complete plugin architecture
