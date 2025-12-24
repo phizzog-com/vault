@@ -1,0 +1,117 @@
+/* ModeToggle.css - Styles for mode toggle component */
+.mode-toggle-container {
+  display: inline-flex;
+  align-items: center;
+  margin: 0 8px;
+}
+
+.mode-toggle-button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 8px;
+  background: transparent;
+  border: 1px solid var(--border-color, #e1e4e8);
+  border-radius: 20px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  position: relative;
+}
+
+.mode-toggle-button:hover:not(:disabled) {
+  background: var(--hover-bg, rgba(0, 0, 0, 0.05));
+  border-color: var(--hover-border, #d1d5da);
+}
+
+.mode-toggle-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.mode-toggle-button.cli-mode {
+  background: var(--cli-mode-bg, rgba(59, 130, 246, 0.1));
+  border-color: var(--cli-mode-border, #3b82f6);
+}
+
+/* Toggle track */
+.mode-toggle-track {
+  width: 36px;
+  height: 20px;
+  background: var(--track-bg, #e1e4e8);
+  border-radius: 10px;
+  position: relative;
+  transition: background 0.2s ease;
+}
+
+.mode-toggle-button.cli-mode .mode-toggle-track {
+  background: var(--cli-track-bg, #3b82f6);
+}
+
+/* Toggle thumb */
+.mode-toggle-thumb {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  background: white;
+  border-radius: 50%;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  transition: transform 0.2s ease;
+}
+
+.mode-toggle-thumb.cli-mode {
+  transform: translateX(16px);
+}
+
+/* Mode icons */
+.mode-icon {
+  opacity: 0.4;
+  transition: opacity 0.2s ease;
+}
+
+.mode-icon.active {
+  opacity: 1;
+  color: var(--primary-color, #3b82f6);
+}
+
+/* Dark theme support */
+@media (prefers-color-scheme: dark) {
+  .mode-toggle-button {
+    border-color: var(--dark-border-color, #30363d);
+  }
+  
+  .mode-toggle-button:hover:not(:disabled) {
+    background: var(--dark-hover-bg, rgba(255, 255, 255, 0.05));
+    border-color: var(--dark-hover-border, #6e7681);
+  }
+  
+  .mode-toggle-track {
+    background: var(--dark-track-bg, #30363d);
+  }
+  
+  .mode-toggle-button.cli-mode {
+    background: var(--dark-cli-mode-bg, rgba(59, 130, 246, 0.2));
+    border-color: var(--dark-cli-mode-border, #58a6ff);
+  }
+  
+  .mode-toggle-button.cli-mode .mode-toggle-track {
+    background: var(--dark-cli-track-bg, #58a6ff);
+  }
+}
+
+/* Animation for mode transition */
+@keyframes modeSlide {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.mode-transition {
+  animation: modeSlide 0.3s ease-out;
+}
