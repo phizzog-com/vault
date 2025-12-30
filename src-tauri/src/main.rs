@@ -24,6 +24,7 @@ mod mcp_settings;
 mod vault_settings;
 mod widget_settings;
 mod commands;
+mod license;
 mod window_state;
 mod refactored_app_state;
 mod window_factory;
@@ -1616,6 +1617,11 @@ fn main() {
             ghostty_status,
             ghostty_installation_status,
             generate_mcp_config,
+            // License commands
+            commands::license::get_license_status,
+            commands::license::start_trial_command,
+            commands::license::activate_license_command,
+            commands::license::deactivate_license_command,
             write_mcp_config,
             validate_mcp_server,
             check_mcp_servers_status,

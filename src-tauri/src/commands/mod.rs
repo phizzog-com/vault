@@ -12,3 +12,4 @@ pub mod pty;
 pub mod uuid_commands;
 pub mod task_commands;
 pub mod task_index_commands;
+pub mod license;
