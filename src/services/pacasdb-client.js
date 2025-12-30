@@ -75,6 +75,93 @@ class PACASDBClient {
   isConnected() {
     return this.connected;
   }
+
+  /**
+   * Index a single document in PACASDB
+   * @param {Object} document - Document to index
+   * @param {string} vaultId - Vault identifier
+   * @returns {Promise<Object>} Indexing result with doc_id
+   * @throws {Error} If not connected
+   */
+  async indexDocument(document, vaultId) {
+    if (!this.connected) {
+      throw new Error('Not connected to PACASDB server');
+    }
+
+    try {
+      const response = await fetch(`${this.baseUrl}/index`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          vault_id: vaultId,
+          document: document
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error(`Indexing failed: ${response.statusText}`);
+      }
+
+      const result = await response.json();
+
+      // Clear cache after successful indexing
+      this.clearCache();
+
+      return result;
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  /**
+   * Batch index multiple documents
+   * @param {Array<Object>} documents - Documents to index
+   * @param {string} vaultId - Vault identifier
+   * @returns {Promise<Object>} Batch result with indexed/failed counts
+   * @throws {Error} If not connected
+   */
+  async batchIndex(documents, vaultId) {
+    if (!this.connected) {
+      throw new Error('Not connected to PACASDB server');
+    }
+
+    try {
+      const response = await fetch(`${this.baseUrl}/batch-index`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          vault_id: vaultId,
+          documents: documents
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error(`Batch indexing failed: ${response.statusText}`);
+      }
+
+      const result = await response.json();
+
+      // Clear cache after batch indexing
+      this.clearCache();
+
+      return result;
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  /**
+   * Clear search cache
+   * Called after indexing operations to invalidate stale results
+   */
+  clearCache() {
+    // Cache clearing implementation - placeholder for now
+    // Will be implemented when search caching is added
+  }
 }
 
 // Export class (not singleton - tests need to create instances)
