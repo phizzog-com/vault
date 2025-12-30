@@ -7,7 +7,9 @@
 
 pub mod fingerprint;
 pub mod types;
+pub mod storage;
 
 // Re-export main functions and types for convenience
 pub use fingerprint::get_machine_fingerprint;
 pub use types::{LicenseStatus, LicenseInfo};
+pub use storage::{store_license, load_license, delete_license};

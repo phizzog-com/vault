@@ -70,6 +70,8 @@ sysinfo = "0.31"
 tracing = "0.1.41"
 # For machine fingerprinting in license system
 machine-uid = "0.3"
+# For secure credential storage in OS keychain
+keyring = "2.0"
 
 [dev-dependencies]
 tempfile = "3.8"
