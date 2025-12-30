@@ -8,7 +8,7 @@ use tokio::sync::RwLock;
 use serde::{Deserialize, Serialize};
 use serde_json::Value as JsonValue;
 
-use crate::plugin_runtime::permissions::{PermissionManager, Capability};
+use crate::plugin_runtime::permissions::{PermissionManager, Capability, Permission};
 
 #[cfg(test)]
 mod tests;

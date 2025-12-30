@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 use notify::{Watcher, RecursiveMode, Event as NotifyEvent};
 use std::collections::HashMap;
 
-use crate::plugin_runtime::permissions::{PermissionManager, Capability};
+use crate::plugin_runtime::permissions::{PermissionManager, Capability, Permission};
 use crate::identity::frontmatter::{FrontMatter, FrontMatterParser, FrontMatterWriter};
 use crate::identity::uuid::UuidGenerator;
 

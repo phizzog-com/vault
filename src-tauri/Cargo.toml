@@ -68,6 +68,8 @@ warp = "0.3"
 webbrowser = "0.8"
 sysinfo = "0.31"
 tracing = "0.1.41"
+# For machine fingerprinting in license system
+machine-uid = "0.3"
 
 [dev-dependencies]
 tempfile = "3.8"

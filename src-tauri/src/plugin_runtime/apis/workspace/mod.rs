@@ -7,7 +7,7 @@ use tokio::sync::RwLock;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::plugin_runtime::permissions::{PermissionManager, Capability};
+use crate::plugin_runtime::permissions::{PermissionManager, Capability, Permission};
 
 #[cfg(test)]
 mod tests;

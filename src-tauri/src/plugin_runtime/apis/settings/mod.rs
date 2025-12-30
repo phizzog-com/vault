@@ -15,7 +15,7 @@ use aes_gcm::{
 };
 use rand::RngCore;
 
-use crate::plugin_runtime::permissions::{PermissionManager, Capability};
+use crate::plugin_runtime::permissions::{PermissionManager, Capability, Permission};
 
 #[cfg(test)]
 mod tests;

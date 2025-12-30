@@ -58,6 +58,7 @@ mod tests {
     use std::collections::HashSet;
     use std::thread;
     use std::sync::Arc;
+    use std::time::{SystemTime, UNIX_EPOCH};
     
     #[test]
     fn test_uuid_generation() {

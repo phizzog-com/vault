@@ -8,7 +8,7 @@ use tokio::sync::RwLock;
 use serde::{Deserialize, Serialize};
 use url::Url;
 
-use crate::plugin_runtime::permissions::{PermissionManager, Capability};
+use crate::plugin_runtime::permissions::{PermissionManager, Capability, Permission};
 use crate::plugin_runtime::resources::ResourceMonitor;
 
 #[cfg(test)]
