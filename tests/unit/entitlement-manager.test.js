@@ -248,4 +248,88 @@ describe('EntitlementManager', () => {
       expect(invoke).toHaveBeenCalledTimes(1);
     });
   });
+
+  describe('isPremiumEnabled()', () => {
+    test('should return true for Licensed status', () => {
+      manager.status = {
+        type: 'Licensed',
+        key: 'VAULT-PACAS-TEST',
+        expires_at: '2026-12-29T00:00:00Z'
+      };
+
+      expect(manager.isPremiumEnabled()).toBe(true);
+    });
+
+    test('should return true for Trial status', () => {
+      manager.status = {
+        type: 'Trial',
+        expires_at: '2025-12-29T00:00:00Z',
+        days_remaining: 15
+      };
+
+      expect(manager.isPremiumEnabled()).toBe(true);
+    });
+
+    test('should return true for GracePeriod status', () => {
+      manager.status = {
+        type: 'GracePeriod',
+        last_validated: '2025-12-01T00:00:00Z',
+        grace_expires_at: '2025-12-31T00:00:00Z'
+      };
+
+      expect(manager.isPremiumEnabled()).toBe(true);
+    });
+
+    test('should return false for Unlicensed status', () => {
+      manager.status = {
+        type: 'Unlicensed'
+      };
+
+      expect(manager.isPremiumEnabled()).toBe(false);
+    });
+
+    test('should return false for Expired status', () => {
+      manager.status = {
+        type: 'Expired',
+        expired_at: '2025-06-01T00:00:00Z'
+      };
+
+      expect(manager.isPremiumEnabled()).toBe(false);
+    });
+
+    test('should return false for Invalid status', () => {
+      manager.status = {
+        type: 'Invalid',
+        reason: 'License key is invalid'
+      };
+
+      expect(manager.isPremiumEnabled()).toBe(false);
+    });
+
+    test('should handle edge case: null status', () => {
+      manager.status = null;
+
+      expect(manager.isPremiumEnabled()).toBe(false);
+    });
+
+    test('should handle edge case: undefined status', () => {
+      manager.status = undefined;
+
+      expect(manager.isPremiumEnabled()).toBe(false);
+    });
+
+    test('should handle edge case: empty status object', () => {
+      manager.status = {};
+
+      expect(manager.isPremiumEnabled()).toBe(false);
+    });
+
+    test('should handle edge case: unknown status type', () => {
+      manager.status = {
+        type: 'Unknown'
+      };
+
+      expect(manager.isPremiumEnabled()).toBe(false);
+    });
+  });
 });

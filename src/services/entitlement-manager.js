@@ -67,6 +67,9 @@ class EntitlementManager {
    * @returns {boolean} True if user has valid premium license
    */
   isPremiumEnabled() {
+    if (!this.status || typeof this.status !== 'object') {
+      return false;
+    }
     return ['Trial', 'Licensed', 'GracePeriod'].includes(this.status.type);
   }
 
