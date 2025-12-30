@@ -567,4 +567,222 @@ describe('EntitlementManager', () => {
       consoleErrorSpy.mockRestore();
     });
   });
+
+  describe('activateLicense()', () => {
+    test('should activate license and trigger status refresh', async () => {
+      const licenseKey = 'VAULT-PACAS-1234-5678';
+      const mockActivationResult = {
+        success: true,
+        license_type: 'lifetime',
+        features: ['pacasdb']
+      };
+      const mockStatus = {
+        type: 'Licensed',
+        key: licenseKey,
+        expires_at: null,
+        features: ['pacasdb']
+      };
+
+      // Mock activation and refresh
+      invoke
+        .mockResolvedValueOnce(mockActivationResult) // activate_license
+        .mockResolvedValueOnce(mockStatus);          // get_license_status (refresh)
+
+      const result = await manager.activateLicense(licenseKey);
+
+      // Verify Tauri commands were called correctly
+      expect(invoke).toHaveBeenCalledWith('activate_license', { key: licenseKey });
+      expect(invoke).toHaveBeenCalledWith('get_license_status');
+      expect(invoke).toHaveBeenCalledTimes(2);
+
+      // Verify result
+      expect(result).toEqual(mockActivationResult);
+
+      // Verify status was updated
+      expect(manager.getStatus()).toEqual(mockStatus);
+    });
+
+    test('should notify all listeners after successful activation', async () => {
+      const listener1 = jest.fn();
+      const listener2 = jest.fn();
+
+      manager.addListener(listener1);
+      manager.addListener(listener2);
+
+      const licenseKey = 'VAULT-PACAS-TEST-KEY';
+      const mockStatus = {
+        type: 'Licensed',
+        key: licenseKey,
+        features: ['pacasdb']
+      };
+
+      // Mock activation and refresh
+      invoke
+        .mockResolvedValueOnce({ success: true })  // activate_license
+        .mockResolvedValueOnce(mockStatus);        // get_license_status
+
+      await manager.activateLicense(licenseKey);
+
+      // Both listeners should have been notified
+      expect(listener1).toHaveBeenCalledWith(mockStatus);
+      expect(listener2).toHaveBeenCalledWith(mockStatus);
+    });
+
+    test('should return error on failed activation without changing state', async () => {
+      const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation();
+
+      const originalStatus = { type: 'Unlicensed' };
+      manager.status = originalStatus;
+
+      const licenseKey = 'INVALID-KEY';
+      const error = new Error('License key is invalid');
+
+      // Mock failed activation
+      invoke.mockRejectedValueOnce(error);
+
+      // Should throw error
+      await expect(manager.activateLicense(licenseKey)).rejects.toThrow('License key is invalid');
+
+      // Status should remain unchanged
+      expect(manager.getStatus()).toEqual(originalStatus);
+
+      // Should only have called activate_license, not refresh
+      expect(invoke).toHaveBeenCalledWith('activate_license', { key: licenseKey });
+      expect(invoke).toHaveBeenCalledTimes(1);
+
+      consoleErrorSpy.mockRestore();
+    });
+
+    test('should handle invalid key format validation', async () => {
+      const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation();
+
+      const invalidKey = 'INVALID';
+      const error = new Error('Invalid license key format');
+
+      // Mock validation error
+      invoke.mockRejectedValueOnce(error);
+
+      // Should throw validation error
+      await expect(manager.activateLicense(invalidKey)).rejects.toThrow('Invalid license key format');
+
+      consoleErrorSpy.mockRestore();
+    });
+  });
+
+  describe('startTrial()', () => {
+    test('should start trial and refresh status', async () => {
+      const mockTrialResult = {
+        success: true,
+        trial_expires_at: '2026-01-29T00:00:00Z'
+      };
+      const mockStatus = {
+        type: 'Trial',
+        expires_at: '2026-01-29T00:00:00Z',
+        days_remaining: 30
+      };
+
+      // Mock trial start and refresh
+      invoke
+        .mockResolvedValueOnce(mockTrialResult)  // start_trial
+        .mockResolvedValueOnce(mockStatus);      // get_license_status
+
+      const result = await manager.startTrial();
+
+      // Verify Tauri commands
+      expect(invoke).toHaveBeenCalledWith('start_trial');
+      expect(invoke).toHaveBeenCalledWith('get_license_status');
+      expect(invoke).toHaveBeenCalledTimes(2);
+
+      // Verify result
+      expect(result).toEqual(mockTrialResult);
+
+      // Verify status updated
+      expect(manager.getStatus()).toEqual(mockStatus);
+    });
+
+    test('should notify listeners after trial start', async () => {
+      const listener = jest.fn();
+      manager.addListener(listener);
+
+      const mockStatus = {
+        type: 'Trial',
+        days_remaining: 30
+      };
+
+      invoke
+        .mockResolvedValueOnce({ success: true })  // start_trial
+        .mockResolvedValueOnce(mockStatus);        // get_license_status
+
+      await manager.startTrial();
+
+      expect(listener).toHaveBeenCalledWith(mockStatus);
+    });
+
+    test('should handle trial already started error', async () => {
+      const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation();
+
+      const error = new Error('Trial already started');
+      invoke.mockRejectedValueOnce(error);
+
+      await expect(manager.startTrial()).rejects.toThrow('Trial already started');
+
+      consoleErrorSpy.mockRestore();
+    });
+  });
+
+  describe('deactivateLicense()', () => {
+    test('should deactivate license and refresh status', async () => {
+      const mockDeactivationResult = {
+        success: true,
+        message: 'License deactivated'
+      };
+      const mockStatus = {
+        type: 'Unlicensed'
+      };
+
+      // Mock deactivation and refresh
+      invoke
+        .mockResolvedValueOnce(mockDeactivationResult)  // deactivate_license
+        .mockResolvedValueOnce(mockStatus);             // get_license_status
+
+      const result = await manager.deactivateLicense();
+
+      // Verify Tauri commands
+      expect(invoke).toHaveBeenCalledWith('deactivate_license');
+      expect(invoke).toHaveBeenCalledWith('get_license_status');
+      expect(invoke).toHaveBeenCalledTimes(2);
+
+      // Verify result
+      expect(result).toEqual(mockDeactivationResult);
+
+      // Verify status updated
+      expect(manager.getStatus()).toEqual(mockStatus);
+    });
+
+    test('should notify listeners after deactivation', async () => {
+      const listener = jest.fn();
+      manager.addListener(listener);
+
+      const mockStatus = { type: 'Unlicensed' };
+
+      invoke
+        .mockResolvedValueOnce({ success: true })  // deactivate_license
+        .mockResolvedValueOnce(mockStatus);        // get_license_status
+
+      await manager.deactivateLicense();
+
+      expect(listener).toHaveBeenCalledWith(mockStatus);
+    });
+
+    test('should handle deactivation errors', async () => {
+      const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation();
+
+      const error = new Error('No active license to deactivate');
+      invoke.mockRejectedValueOnce(error);
+
+      await expect(manager.deactivateLicense()).rejects.toThrow('No active license to deactivate');
+
+      consoleErrorSpy.mockRestore();
+    });
+  });
 });
