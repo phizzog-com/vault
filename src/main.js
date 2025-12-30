@@ -26,6 +26,7 @@ import './plugin-hub/components/Toast.css';
 import EntitlementManager from './services/entitlement-manager.js';
 import GlobalSearchPanel from './components/GlobalSearchPanel.js';
 import PACASDBClient from './services/pacasdb-client.js';
+import VaultSync from './services/vault-sync.js';
 
 console.log('✅ Tauri v2 APIs and editor components imported successfully!');
 console.log('🔍 EnhancedChatPanel class:', EnhancedChatPanel);
@@ -39,6 +40,7 @@ window.__dndDebug = true;
 let entitlementManager = null;
 let pacasdbClient = null;
 let globalSearchPanel = null;
+let vaultSync = null;
 window.enableDnDDebug = () => { window.__dndDebug = true; console.log('[DnD] debug enabled'); };
 window.disableDnDDebug = () => { window.__dndDebug = false; console.log('[DnD] debug disabled'); };
 function dndLog(...args) { if (window.__dndDebug) console.log('[DnD]', ...args); }
@@ -876,10 +878,30 @@ async function initializeEditor() {
     // Hide navigation buttons initially since no tabs are open
     updateNavigationButtons();
     
+    // Listen for file events for PACASDB sync
+    window.addEventListener('file-created', async (event) => {
+      const filePath = event.detail.filePath;
+      if (vaultSync && filePath.endsWith('.md')) {
+        vaultSync.handleFileEvent(filePath, 'create');
+      }
+    });
+
+    window.addEventListener('file-deleted', async (event) => {
+      const filePath = event.detail.filePath;
+      if (vaultSync && filePath.endsWith('.md')) {
+        vaultSync.handleFileEvent(filePath, 'remove');
+      }
+    });
+
     // Listen for file updates to reload open tabs
     window.addEventListener('file-updated', async (event) => {
       const updatedFilePath = event.detail.filePath;
       console.log('📝 File updated event received:', updatedFilePath);
+
+      // Trigger PACASDB sync for markdown files
+      if (vaultSync && updatedFilePath.endsWith('.md')) {
+        vaultSync.handleFileEvent(updatedFilePath, 'modify');
+      }
       
       // Check all panes for tabs showing this file
       for (const [paneId, pane] of paneManager.panes) {
@@ -3655,6 +3677,11 @@ async function initializeApp() {
         e.preventDefault();
         await saveCurrentFile();
       }
+
+      // Stop vault sync
+      if (vaultSync) {
+        vaultSync.stop();
+      }
     });
     
   } else {
@@ -5535,6 +5562,10 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     globalSearchPanel = new GlobalSearchPanel(entitlementManager, pacasdbClient);
     console.log('✅ GlobalSearchPanel initialized');
+
+    vaultSync = new VaultSync(pacasdbClient);
+    vaultSync.start();
+    console.log('✅ VaultSync initialized and started');
   } catch (error) {
     console.error('❌ Failed to initialize premium features:', error);
   }
