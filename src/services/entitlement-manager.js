@@ -74,6 +74,72 @@ class EntitlementManager {
   }
 
   /**
+   * Get days remaining for Trial or GracePeriod status
+   * @returns {number|null} Days remaining or null if not applicable
+   */
+  getDaysRemaining() {
+    if (!this.status || typeof this.status !== 'object') {
+      return null;
+    }
+
+    switch (this.status.type) {
+      case 'Trial':
+        return this.status.days_remaining || null;
+
+      case 'GracePeriod':
+        if (this.status.grace_expires_at) {
+          const expiresAt = new Date(this.status.grace_expires_at);
+          const now = new Date();
+          const diffMs = expiresAt - now;
+          const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+          return Math.max(0, diffDays);
+        }
+        return null;
+
+      case 'Expired':
+        return 0;
+
+      default:
+        return null;
+    }
+  }
+
+  /**
+   * Get user-friendly status message
+   * @returns {string} Human-readable status message
+   */
+  getStatusMessage() {
+    if (!this.status || typeof this.status !== 'object') {
+      return 'Unknown Status';
+    }
+
+    switch (this.status.type) {
+      case 'Unlicensed':
+        return 'No active license';
+
+      case 'Trial':
+        const trialDays = this.status.days_remaining || 0;
+        return `Trial: ${trialDays} days remaining`;
+
+      case 'Licensed':
+        return 'Premium Active';
+
+      case 'Expired':
+        return 'License Expired';
+
+      case 'GracePeriod':
+        const graceDays = this.getDaysRemaining();
+        return `Grace Period: ${graceDays} days remaining`;
+
+      case 'Invalid':
+        return 'Invalid License';
+
+      default:
+        return 'Unknown Status';
+    }
+  }
+
+  /**
    * Add listener for status changes
    * @param {Function} callback - Called when status changes
    * @returns {Function} Unsubscribe function

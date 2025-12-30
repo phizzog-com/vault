@@ -332,4 +332,239 @@ describe('EntitlementManager', () => {
       expect(manager.isPremiumEnabled()).toBe(false);
     });
   });
+
+  describe('getDaysRemaining()', () => {
+    test('should return days remaining for Trial status', () => {
+      manager.status = {
+        type: 'Trial',
+        expires_at: '2025-12-29T00:00:00Z',
+        days_remaining: 15
+      };
+
+      expect(manager.getDaysRemaining()).toBe(15);
+    });
+
+    test('should calculate days remaining for GracePeriod status', () => {
+      // Use real timers for this test since we need Date.now()
+      jest.useRealTimers();
+
+      // Mock current date to 2025-12-25
+      const originalDate = global.Date;
+      const mockDate = new Date('2025-12-25T00:00:00Z');
+      global.Date = class extends Date {
+        constructor(...args) {
+          if (args.length === 0) {
+            super(mockDate);
+          } else {
+            super(...args);
+          }
+        }
+        static now() {
+          return mockDate.getTime();
+        }
+      };
+
+      manager.status = {
+        type: 'GracePeriod',
+        grace_expires_at: '2025-12-31T00:00:00Z'
+      };
+
+      expect(manager.getDaysRemaining()).toBe(6);
+
+      // Restore Date and timers
+      global.Date = originalDate;
+      jest.useFakeTimers();
+    });
+
+    test('should return null for Licensed status (no expiration)', () => {
+      manager.status = {
+        type: 'Licensed',
+        key: 'VAULT-PACAS-TEST',
+        expires_at: null
+      };
+
+      expect(manager.getDaysRemaining()).toBeNull();
+    });
+
+    test('should return 0 for Expired status', () => {
+      manager.status = {
+        type: 'Expired',
+        expired_at: '2025-06-01T00:00:00Z'
+      };
+
+      expect(manager.getDaysRemaining()).toBe(0);
+    });
+
+    test('should return null for Unlicensed status', () => {
+      manager.status = {
+        type: 'Unlicensed'
+      };
+
+      expect(manager.getDaysRemaining()).toBeNull();
+    });
+  });
+
+  describe('getStatusMessage()', () => {
+    test('should return message for Unlicensed status', () => {
+      manager.status = {
+        type: 'Unlicensed'
+      };
+
+      const message = manager.getStatusMessage();
+      expect(message).toBe('No active license');
+    });
+
+    test('should return message for Trial status', () => {
+      manager.status = {
+        type: 'Trial',
+        days_remaining: 15
+      };
+
+      const message = manager.getStatusMessage();
+      expect(message).toBe('Trial: 15 days remaining');
+    });
+
+    test('should return message for Licensed status', () => {
+      manager.status = {
+        type: 'Licensed',
+        key: 'VAULT-PACAS-TEST'
+      };
+
+      const message = manager.getStatusMessage();
+      expect(message).toBe('Premium Active');
+    });
+
+    test('should return message for Expired status', () => {
+      manager.status = {
+        type: 'Expired',
+        expired_at: '2025-06-01T00:00:00Z'
+      };
+
+      const message = manager.getStatusMessage();
+      expect(message).toBe('License Expired');
+    });
+
+    test('should return message for GracePeriod status', () => {
+      manager.status = {
+        type: 'GracePeriod',
+        grace_expires_at: '2025-12-31T00:00:00Z'
+      };
+
+      const message = manager.getStatusMessage();
+      expect(message).toMatch(/Grace Period:/);
+    });
+
+    test('should return message for Invalid status', () => {
+      manager.status = {
+        type: 'Invalid',
+        reason: 'License key is invalid'
+      };
+
+      const message = manager.getStatusMessage();
+      expect(message).toBe('Invalid License');
+    });
+
+    test('should handle unknown status type', () => {
+      manager.status = {
+        type: 'Unknown'
+      };
+
+      const message = manager.getStatusMessage();
+      expect(message).toBe('Unknown Status');
+    });
+  });
+
+  describe('addListener() / onChange pattern', () => {
+    test('should call listener when status changes', async () => {
+      const listener = jest.fn();
+      const unsubscribe = manager.addListener(listener);
+
+      // Mock Tauri response
+      const mockStatus = { type: 'Licensed', key: 'TEST' };
+      invoke.mockResolvedValueOnce(mockStatus);
+
+      // Initialize to trigger status change
+      await manager.initialize();
+
+      // Listener should have been called with new status
+      expect(listener).toHaveBeenCalledWith(mockStatus);
+      expect(listener).toHaveBeenCalledTimes(1);
+
+      // Cleanup
+      unsubscribe();
+    });
+
+    test('should allow multiple listeners', async () => {
+      const listener1 = jest.fn();
+      const listener2 = jest.fn();
+      const listener3 = jest.fn();
+
+      manager.addListener(listener1);
+      manager.addListener(listener2);
+      manager.addListener(listener3);
+
+      // Mock Tauri response
+      const mockStatus = { type: 'Trial', days_remaining: 20 };
+      invoke.mockResolvedValueOnce(mockStatus);
+
+      // Initialize to trigger status change
+      await manager.initialize();
+
+      // All listeners should have been called
+      expect(listener1).toHaveBeenCalledWith(mockStatus);
+      expect(listener2).toHaveBeenCalledWith(mockStatus);
+      expect(listener3).toHaveBeenCalledWith(mockStatus);
+    });
+
+    test('should unsubscribe listener', async () => {
+      const listener = jest.fn();
+      const unsubscribe = manager.addListener(listener);
+
+      // Mock Tauri response
+      const mockStatus1 = { type: 'Trial', days_remaining: 20 };
+      invoke.mockResolvedValueOnce(mockStatus1);
+
+      // Initialize to trigger first status change
+      await manager.initialize();
+      expect(listener).toHaveBeenCalledTimes(1);
+
+      // Unsubscribe
+      unsubscribe();
+
+      // Clear the listener mock
+      listener.mockClear();
+
+      // Trigger another status change via refresh
+      const mockStatus2 = { type: 'Licensed', key: 'TEST' };
+      invoke.mockResolvedValueOnce(mockStatus2);
+      await manager.refresh();
+
+      // Listener should NOT have been called
+      expect(listener).not.toHaveBeenCalled();
+    });
+
+    test('should handle listener errors gracefully', async () => {
+      const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation();
+      const badListener = jest.fn(() => {
+        throw new Error('Listener error');
+      });
+      const goodListener = jest.fn();
+
+      manager.addListener(badListener);
+      manager.addListener(goodListener);
+
+      // Mock Tauri response
+      const mockStatus = { type: 'Licensed', key: 'TEST' };
+      invoke.mockResolvedValueOnce(mockStatus);
+
+      // Initialize should not throw
+      await expect(manager.initialize()).resolves.not.toThrow();
+
+      // Good listener should still have been called
+      expect(goodListener).toHaveBeenCalledWith(mockStatus);
+
+      // Restore console.error
+      consoleErrorSpy.mockRestore();
+    });
+  });
 });
