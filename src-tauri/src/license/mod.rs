@@ -6,6 +6,8 @@
 /// - Trial tracking and entitlement management
 
 pub mod fingerprint;
+pub mod types;
 
-// Re-export main functions for convenience
+// Re-export main functions and types for convenience
 pub use fingerprint::get_machine_fingerprint;
+pub use types::{LicenseStatus, LicenseInfo};
