@@ -13,6 +13,8 @@ export default class GlobalSearchPanel {
     this.modeSelector = null;
     this.vaultFilter = null;
     this.resultsContainer = null;
+    this.isLoading = false;
+    this.debounceTimer = null;
   }
 
   /**
@@ -43,6 +45,7 @@ export default class GlobalSearchPanel {
     this.searchInput.type = 'text';
     this.searchInput.placeholder = 'Search across all vaults...';
     this.searchInput.className = 'search-input';
+    this.searchInput.addEventListener('input', (e) => this.onSearchInput(e.target.value));
     searchContainer.appendChild(this.searchInput);
 
     // Controls row
@@ -94,9 +97,117 @@ export default class GlobalSearchPanel {
   }
 
   /**
+   * Handle search input with debouncing
+   * @param {string} query - Search query
+   */
+  onSearchInput(query) {
+    // Clear debounce timer
+    if (this.debounceTimer) {
+      clearTimeout(this.debounceTimer);
+      this.debounceTimer = null;
+    }
+
+    // Handle empty input
+    if (query === '') {
+      this.resultsContainer.innerHTML = '';
+      return;
+    }
+
+    // Ignore queries less than 2 characters
+    if (query.length < 2) {
+      return;
+    }
+
+    // Debounce search execution (300ms)
+    this.debounceTimer = setTimeout(() => {
+      this.performSearch(query);
+    }, 300);
+  }
+
+  /**
+   * Execute search query
+   * @param {string} query - Search query
+   * @returns {Promise<void>}
+   */
+  async performSearch(query) {
+    if (!this.pacasdbClient) {
+      return;
+    }
+
+    this.isLoading = true;
+
+    try {
+      const mode = this.modeSelector.value;
+      const searchParams = {
+        mode: mode
+      };
+
+      // Different modes send different query types
+      if (mode === 'keyword') {
+        searchParams.keywords = query;
+      } else {
+        searchParams.text = query;
+      }
+
+      const results = await this.pacasdbClient.search(searchParams);
+
+      this.isLoading = false;
+      this.renderResults(results);
+
+    } catch (error) {
+      this.isLoading = false;
+      console.error('Search error:', error);
+    }
+  }
+
+  /**
+   * Render search results
+   * @param {Object} results - Search results from PACASDB
+   */
+  renderResults(results) {
+    this.resultsContainer.innerHTML = '';
+
+    if (!results.items || results.items.length === 0) {
+      const noResults = document.createElement('div');
+      noResults.className = 'no-results';
+      noResults.textContent = 'No results found';
+      this.resultsContainer.appendChild(noResults);
+      return;
+    }
+
+    results.items.forEach(item => {
+      const resultCard = document.createElement('div');
+      resultCard.className = 'search-result';
+
+      const title = document.createElement('div');
+      title.className = 'result-title';
+      title.textContent = item.title;
+      resultCard.appendChild(title);
+
+      const content = document.createElement('div');
+      content.className = 'result-content';
+      content.textContent = item.content;
+      resultCard.appendChild(content);
+
+      if (item.score !== undefined) {
+        const score = document.createElement('div');
+        score.className = 'result-score';
+        score.textContent = `Score: ${item.score.toFixed(2)}`;
+        resultCard.appendChild(score);
+      }
+
+      this.resultsContainer.appendChild(resultCard);
+    });
+  }
+
+  /**
    * Remove the panel from DOM
    */
   destroy() {
+    if (this.debounceTimer) {
+      clearTimeout(this.debounceTimer);
+    }
+
     if (this.element && this.element.parentNode) {
       this.element.parentNode.removeChild(this.element);
     }

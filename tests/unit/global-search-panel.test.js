@@ -217,4 +217,192 @@ describe('GlobalSearchPanel', () => {
       expect(panel.element).toBeNull();
     });
   });
+
+  describe('search input handling', () => {
+    let mockPacasdbClient;
+
+    beforeEach(async () => {
+      mockEntitlementManager.status = { type: 'Licensed' };
+
+      const clientModule = await import('../../src/services/pacasdb-client.js');
+      mockPacasdbClient = new clientModule.default();
+      mockPacasdbClient.search = jest.fn(async () => ({
+        items: [
+          { title: 'Result 1', content: 'Content 1', score: 0.95 }
+        ],
+        total: 1,
+        should_abstain: false
+      }));
+    });
+
+    test('should ignore queries with less than 2 characters', () => {
+      const panel = new GlobalSearchPanel(mockEntitlementManager, mockPacasdbClient);
+      panel.render();
+
+      // Call with single character
+      panel.onSearchInput('a');
+
+      // Should not trigger search
+      expect(mockPacasdbClient.search).not.toHaveBeenCalled();
+    });
+
+    test('should clear results for empty input', () => {
+      const panel = new GlobalSearchPanel(mockEntitlementManager, mockPacasdbClient);
+      const element = panel.render();
+
+      // First add some results
+      panel.resultsContainer.innerHTML = '<div>Previous results</div>';
+
+      // Clear with empty input
+      panel.onSearchInput('');
+
+      // Results should be cleared
+      expect(panel.resultsContainer.innerHTML).toBe('');
+    });
+
+    test('should debounce input with 300ms delay', (done) => {
+      jest.useFakeTimers();
+
+      const panel = new GlobalSearchPanel(mockEntitlementManager, mockPacasdbClient);
+      panel.render();
+
+      // Trigger multiple inputs quickly
+      panel.onSearchInput('test');
+      panel.onSearchInput('test query');
+
+      // Should not call immediately
+      expect(mockPacasdbClient.search).not.toHaveBeenCalled();
+
+      // Fast-forward 200ms
+      jest.advanceTimersByTime(200);
+      expect(mockPacasdbClient.search).not.toHaveBeenCalled();
+
+      // Fast-forward to 300ms
+      jest.advanceTimersByTime(100);
+
+      // Now it should have been called once (debounced)
+      setTimeout(() => {
+        expect(mockPacasdbClient.search).toHaveBeenCalledTimes(1);
+        jest.useRealTimers();
+        done();
+      }, 50);
+
+      jest.runAllTimers();
+    });
+  });
+
+  describe('search execution', () => {
+    let mockPacasdbClient;
+
+    beforeEach(async () => {
+      mockEntitlementManager.status = { type: 'Licensed' };
+
+      const clientModule = await import('../../src/services/pacasdb-client.js');
+      mockPacasdbClient = new clientModule.default();
+      mockPacasdbClient.search = jest.fn(async () => ({
+        items: [
+          { title: 'Result 1', content: 'Content 1', score: 0.95 }
+        ],
+        total: 1,
+        should_abstain: false
+      }));
+    });
+
+    test('should show loading state during search', async () => {
+      const panel = new GlobalSearchPanel(mockEntitlementManager, mockPacasdbClient);
+      const element = panel.render();
+
+      // Start search
+      const searchPromise = panel.performSearch('test query');
+
+      // Should show loading
+      expect(panel.isLoading).toBe(true);
+
+      await searchPromise;
+
+      // Loading should be false after completion
+      expect(panel.isLoading).toBe(false);
+    });
+
+    test('should call pacasdbClient.search() with query', async () => {
+      const panel = new GlobalSearchPanel(mockEntitlementManager, mockPacasdbClient);
+      panel.render();
+
+      await panel.performSearch('test query');
+
+      expect(mockPacasdbClient.search).toHaveBeenCalledWith(
+        expect.objectContaining({
+          text: 'test query'
+        })
+      );
+    });
+
+    test('should send correct query for hybrid mode', async () => {
+      const panel = new GlobalSearchPanel(mockEntitlementManager, mockPacasdbClient);
+      const element = panel.render();
+
+      panel.modeSelector.value = 'hybrid';
+
+      await panel.performSearch('test query');
+
+      expect(mockPacasdbClient.search).toHaveBeenCalledWith(
+        expect.objectContaining({
+          text: 'test query',
+          mode: 'hybrid'
+        })
+      );
+    });
+
+    test('should send correct query for semantic mode', async () => {
+      const panel = new GlobalSearchPanel(mockEntitlementManager, mockPacasdbClient);
+      const element = panel.render();
+
+      panel.modeSelector.value = 'semantic';
+
+      await panel.performSearch('test query');
+
+      expect(mockPacasdbClient.search).toHaveBeenCalledWith(
+        expect.objectContaining({
+          text: 'test query',
+          mode: 'semantic'
+        })
+      );
+    });
+
+    test('should send correct query for keyword mode', async () => {
+      const panel = new GlobalSearchPanel(mockEntitlementManager, mockPacasdbClient);
+      const element = panel.render();
+
+      panel.modeSelector.value = 'keyword';
+
+      await panel.performSearch('test query');
+
+      expect(mockPacasdbClient.search).toHaveBeenCalledWith(
+        expect.objectContaining({
+          keywords: 'test query',
+          mode: 'keyword'
+        })
+      );
+    });
+
+    test('should render results after search', async () => {
+      mockPacasdbClient.search = jest.fn(async () => ({
+        items: [
+          { title: 'Note 1', content: 'Content 1', score: 0.95 },
+          { title: 'Note 2', content: 'Content 2', score: 0.85 }
+        ],
+        total: 2,
+        should_abstain: false
+      }));
+
+      const panel = new GlobalSearchPanel(mockEntitlementManager, mockPacasdbClient);
+      const element = panel.render();
+
+      await panel.performSearch('test');
+
+      // Should render results
+      const resultElements = panel.resultsContainer.querySelectorAll('.search-result');
+      expect(resultElements.length).toBe(2);
+    });
+  });
 });
