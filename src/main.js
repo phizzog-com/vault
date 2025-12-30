@@ -23,6 +23,9 @@ import './utils/uuid-utils.js';
 import './utils/readwise-uuid-fix.js';
 import { TaskDashboard } from './tasks/TaskDashboard.js';
 import './plugin-hub/components/Toast.css';
+import EntitlementManager from './services/entitlement-manager.js';
+import GlobalSearchPanel from './components/GlobalSearchPanel.js';
+import PACASDBClient from './services/pacasdb-client.js';
 
 console.log('✅ Tauri v2 APIs and editor components imported successfully!');
 console.log('🔍 EnhancedChatPanel class:', EnhancedChatPanel);
@@ -31,6 +34,11 @@ console.log('🔍 EnhancedChatPanel class:', EnhancedChatPanel);
 window.expandedFolders = new Set();
 // Drag-and-drop debug flag (toggle via enableDnDDebug/disableDnDDebug)
 window.__dndDebug = true;
+
+// Premium features
+let entitlementManager = null;
+let pacasdbClient = null;
+let globalSearchPanel = null;
 window.enableDnDDebug = () => { window.__dndDebug = true; console.log('[DnD] debug enabled'); };
 window.disableDnDDebug = () => { window.__dndDebug = false; console.log('[DnD] debug disabled'); };
 function dndLog(...args) { if (window.__dndDebug) console.log('[DnD]', ...args); }
@@ -1053,6 +1061,87 @@ window.onMCPToolExecuted = function(toolName) {
 
 let keyboardShortcutsInitialized = false;
 
+/**
+ * Toggle global search panel visibility
+ */
+function toggleGlobalSearchPanel() {
+  if (!globalSearchPanel) {
+    console.error('Global search panel not initialized');
+    return;
+  }
+
+  const modalId = 'global-search-modal';
+  let modal = document.getElementById(modalId);
+
+  if (modal) {
+    // Modal exists, remove it
+    modal.remove();
+    return;
+  }
+
+  // Create modal
+  modal = document.createElement('div');
+  modal.id = modalId;
+  modal.className = 'modal-overlay';
+  modal.style.cssText = `
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 10000;
+  `;
+
+  // Create modal content
+  const modalContent = document.createElement('div');
+  modalContent.className = 'modal-content';
+  modalContent.style.cssText = `
+    background: var(--background);
+    border-radius: 8px;
+    padding: 20px;
+    max-width: 800px;
+    width: 90%;
+    max-height: 80vh;
+    overflow-y: auto;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+  `;
+
+  // Render search panel
+  const panelElement = globalSearchPanel.render();
+  modalContent.appendChild(panelElement);
+
+  modal.appendChild(modalContent);
+  document.body.appendChild(modal);
+
+  // Close on backdrop click
+  modal.addEventListener('click', (e) => {
+    if (e.target === modal) {
+      modal.remove();
+    }
+  });
+
+  // Close on Escape
+  const escapeHandler = (e) => {
+    if (e.key === 'Escape') {
+      modal.remove();
+      document.removeEventListener('keydown', escapeHandler);
+    }
+  };
+  document.addEventListener('keydown', escapeHandler);
+
+  // Auto-focus search input
+  setTimeout(() => {
+    const searchInput = panelElement.querySelector('input.search-input');
+    if (searchInput) {
+      searchInput.focus();
+    }
+  }, 100);
+}
+
 function setupTabKeyboardShortcuts() {
   // Only set up keyboard shortcuts once
   if (keyboardShortcutsInitialized) {
@@ -1102,24 +1191,15 @@ function setupTabKeyboardShortcuts() {
       return;
     }
     
-    // Cmd+Shift+F: Local search in editor
+    // Cmd+Shift+F: PACASDB Global Search (Premium)
     if ((e.metaKey || e.ctrlKey) && e.shiftKey && (e.key === 'f' || e.key === 'F')) {
       e.preventDefault();
-      console.log('Cmd+Shift+F pressed - Opening local search');
-      
-      // Get the active editor
-      const tabManager = paneManager ? paneManager.getActiveTabManager() : null;
-      if (tabManager) {
-        const activeTab = tabManager.getActiveTab();
-        if (activeTab && activeTab.editor && activeTab.editor.view) {
-          console.log('Opening search panel in active editor');
-          // Call the openSearch method on the editor
-          activeTab.editor.openSearch();
-        } else {
-          console.log('No active editor found');
-        }
+      console.log('Cmd+Shift+F pressed - Opening PACASDB Global Search');
+
+      if (globalSearchPanel) {
+        toggleGlobalSearchPanel();
       } else {
-        console.log('No tab manager found');
+        console.log('Global search panel not initialized');
       }
       return;
     }
@@ -5442,6 +5522,22 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   // Start performance monitoring
   perfMonitor.startMeasure('app_initialization');
+
+  // Initialize premium features
+  console.log('💎 Initializing premium features...');
+  try {
+    entitlementManager = new EntitlementManager();
+    await entitlementManager.initialize();
+    console.log('✅ EntitlementManager initialized');
+
+    pacasdbClient = new PACASDBClient();
+    console.log('✅ PACASDBClient initialized');
+
+    globalSearchPanel = new GlobalSearchPanel(entitlementManager, pacasdbClient);
+    console.log('✅ GlobalSearchPanel initialized');
+  } catch (error) {
+    console.error('❌ Failed to initialize premium features:', error);
+  }
 
   // Initialize window context first
   try {
