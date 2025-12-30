@@ -34,6 +34,106 @@ export default class VaultSync {
   }
 
   /**
+   * Sync all documents in the vault to PACASDB
+   * @param {string} vaultPath - Path to vault directory
+   * @returns {Promise<Object>} Summary with indexed/failed counts
+   */
+  async syncAllDocuments(vaultPath) {
+    if (!this.pacasdbClient) {
+      throw new Error('PACASDBClient not initialized');
+    }
+
+    console.log('🔄 Starting full vault sync...');
+    const summary = {
+      total: 0,
+      indexed: 0,
+      failed: 0,
+      errors: []
+    };
+
+    try {
+      // List all markdown files in vault
+      const files = await invoke('list_vault_files', {
+        vaultPath,
+        extension: '.md'
+      });
+
+      summary.total = files.length;
+      console.log(`📚 Found ${files.length} markdown files`);
+
+      // Process in batches of 50
+      const batchSize = 50;
+      for (let i = 0; i < files.length; i += batchSize) {
+        const batch = files.slice(i, i + batchSize);
+        const documents = [];
+
+        // Read and parse each file in batch
+        for (const filePath of batch) {
+          try {
+            // Skip hidden files
+            const pathParts = filePath.split('/');
+            if (pathParts.some(part => part.startsWith('.'))) {
+              continue;
+            }
+
+            const content = await invoke('read_file_content', { filePath });
+            const parsed = this.parseMarkdown(content);
+
+            documents.push({
+              content: parsed.body,
+              title: parsed.title,
+              metadata: {
+                file_path: filePath,
+                ...parsed.frontmatter
+              }
+            });
+          } catch (error) {
+            console.error(`Failed to read ${filePath}:`, error);
+            summary.failed++;
+            summary.errors.push({ file: filePath, error: error.message });
+          }
+        }
+
+        // Batch index documents
+        if (documents.length > 0) {
+          try {
+            const result = await this.pacasdbClient.batchIndex(documents);
+            summary.indexed += documents.length;
+
+            // Store doc_id mappings
+            if (result && result.doc_ids) {
+              documents.forEach((doc, idx) => {
+                if (result.doc_ids[idx]) {
+                  this.docIdMap.set(doc.metadata.file_path, result.doc_ids[idx]);
+                }
+              });
+            }
+
+            console.log(`✅ Batch ${Math.floor(i / batchSize) + 1}: ${documents.length} documents indexed`);
+          } catch (error) {
+            console.error('Batch indexing failed:', error);
+            summary.failed += documents.length;
+            summary.errors.push({ batch: i, error: error.message });
+          }
+        }
+
+        // Emit progress event
+        const progress = Math.floor(((i + batch.length) / files.length) * 100);
+        window.dispatchEvent(new CustomEvent('vault-sync-progress', {
+          detail: { progress, indexed: summary.indexed, total: summary.total }
+        }));
+      }
+
+      console.log(`✅ Full vault sync complete: ${summary.indexed}/${summary.total} indexed`);
+    } catch (error) {
+      console.error('Full vault sync failed:', error);
+      summary.errors.push({ error: error.message });
+    }
+
+    return summary;
+  }
+
+  /**
    * Handle file system event with filtering and debouncing
    * @param {string} path - File path
    * @param {string} eventType - Event type (create, modify, remove)
