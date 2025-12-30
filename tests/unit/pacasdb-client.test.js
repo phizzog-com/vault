@@ -649,4 +649,237 @@ describe('PACASDBClient', () => {
       ).rejects.toThrow('Not connected to PACASDB server');
     });
   });
+
+  describe('Cognitive Context', () => {
+    beforeEach(() => {
+      mockEntitlementManager.premiumEnabled = true;
+      client.connected = true;
+    });
+
+    describe('createContext()', () => {
+      test('should create context with default config', async () => {
+        global.fetch.mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: async () => ({
+            context_id: 'ctx_abc123',
+            created_at: '2025-12-30T00:00:00Z',
+            config: {
+              decay_rate: 0.1,
+              max_items: 500
+            }
+          })
+        });
+
+        const result = await client.createContext();
+
+        const fetchCall = global.fetch.mock.calls[0];
+        expect(fetchCall[0]).toBe('http://localhost:8000/api/v1/contexts');
+        expect(fetchCall[1].method).toBe('POST');
+
+        const payload = JSON.parse(fetchCall[1].body);
+        expect(payload.decay_rate).toBe(0.1);
+        expect(payload.max_items).toBe(500);
+
+        expect(result.context_id).toBe('ctx_abc123');
+      });
+
+      test('should create context with custom config', async () => {
+        global.fetch.mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: async () => ({
+            context_id: 'ctx_custom',
+            created_at: '2025-12-30T00:00:00Z',
+            config: {
+              decay_rate: 0.2,
+              max_items: 1000
+            }
+          })
+        });
+
+        const result = await client.createContext({
+          decay_rate: 0.2,
+          max_items: 1000
+        });
+
+        const fetchCall = global.fetch.mock.calls[0];
+        const payload = JSON.parse(fetchCall[1].body);
+
+        expect(payload.decay_rate).toBe(0.2);
+        expect(payload.max_items).toBe(1000);
+        expect(result.context_id).toBe('ctx_custom');
+      });
+
+      test('should store active context ID', async () => {
+        global.fetch.mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: async () => ({
+            context_id: 'ctx_stored',
+            created_at: '2025-12-30T00:00:00Z',
+            config: { decay_rate: 0.1, max_items: 500 }
+          })
+        });
+
+        await client.createContext();
+
+        expect(client.activeContextId).toBe('ctx_stored');
+      });
+
+      test('should throw error when not connected', async () => {
+        client.connected = false;
+
+        await expect(
+          client.createContext()
+        ).rejects.toThrow('Not connected to PACASDB server');
+      });
+    });
+
+    describe('think()', () => {
+      test('should send think request with correct payload', async () => {
+        global.fetch.mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: async () => ({
+            items: [
+              {
+                id: 'doc-1',
+                title: 'Test Doc',
+                score: 0.85,
+                activation: 0.92,
+                snippet: 'Test snippet'
+              }
+            ],
+            context_stats: {
+              active_items: 47,
+              total_activations: 235,
+              avg_activation: 0.34
+            }
+          })
+        });
+
+        const result = await client.think('ctx_test', 'product features', 10);
+
+        const fetchCall = global.fetch.mock.calls[0];
+        expect(fetchCall[0]).toBe('http://localhost:8000/api/v1/contexts/ctx_test/think');
+        expect(fetchCall[1].method).toBe('POST');
+
+        const payload = JSON.parse(fetchCall[1].body);
+        expect(payload.query).toBe('product features');
+        expect(payload.k).toBe(10);
+
+        expect(result.items).toHaveLength(1);
+        expect(result.items[0].activation).toBe(0.92);
+        expect(result.context_stats.active_items).toBe(47);
+      });
+
+      test('should include metadata filter when provided', async () => {
+        global.fetch.mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: async () => ({
+            items: [],
+            context_stats: {
+              active_items: 0,
+              total_activations: 0,
+              avg_activation: 0
+            }
+          })
+        });
+
+        await client.think('ctx_filter', 'test query', 5, { vault_id: 'vault-123' });
+
+        const fetchCall = global.fetch.mock.calls[0];
+        const payload = JSON.parse(fetchCall[1].body);
+
+        expect(payload.metadata_filter).toEqual({ vault_id: 'vault-123' });
+      });
+
+      test('should throw error when not connected', async () => {
+        client.connected = false;
+
+        await expect(
+          client.think('ctx_test', 'query', 10)
+        ).rejects.toThrow('Not connected to PACASDB server');
+      });
+    });
+
+    describe('markUseful()', () => {
+      test('should send feedback with correct payload', async () => {
+        global.fetch.mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: async () => ({
+            updated: true,
+            new_activation: 0.95
+          })
+        });
+
+        const result = await client.markUseful('ctx_feedback', 'doc-456');
+
+        const fetchCall = global.fetch.mock.calls[0];
+        expect(fetchCall[0]).toBe('http://localhost:8000/api/v1/feedback/useful');
+        expect(fetchCall[1].method).toBe('POST');
+
+        const payload = JSON.parse(fetchCall[1].body);
+        expect(payload.context_id).toBe('ctx_feedback');
+        expect(payload.doc_id).toBe('doc-456');
+
+        expect(result.updated).toBe(true);
+        expect(result.new_activation).toBe(0.95);
+      });
+
+      test('should throw error when not connected', async () => {
+        client.connected = false;
+
+        await expect(
+          client.markUseful('ctx_test', 'doc-123')
+        ).rejects.toThrow('Not connected to PACASDB server');
+      });
+    });
+
+    describe('getContextStats()', () => {
+      test('should return active items count', () => {
+        // Mock context stats
+        client.lastContextStats = {
+          active_items: 47,
+          total_activations: 235,
+          avg_activation: 0.34
+        };
+
+        const stats = client.getContextStats();
+
+        expect(stats.active_items).toBe(47);
+        expect(stats.total_activations).toBe(235);
+        expect(stats.avg_activation).toBe(0.34);
+      });
+
+      test('should return default stats when no context active', () => {
+        client.lastContextStats = null;
+
+        const stats = client.getContextStats();
+
+        expect(stats.active_items).toBe(0);
+        expect(stats.total_activations).toBe(0);
+        expect(stats.avg_activation).toBe(0);
+      });
+    });
+
+    describe('clearContext()', () => {
+      test('should clear active context ID', () => {
+        client.activeContextId = 'ctx_to_clear';
+        client.lastContextStats = {
+          active_items: 50,
+          total_activations: 100,
+          avg_activation: 0.5
+        };
+
+        client.clearContext();
+
+        expect(client.activeContextId).toBeNull();
+        expect(client.lastContextStats).toBeNull();
+      });
+    });
+  });
 });

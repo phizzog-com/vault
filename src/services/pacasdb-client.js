@@ -15,6 +15,8 @@ class PACASDBClient {
     this.baseUrl = 'http://localhost:8000';
     this.connected = false;
     this.connectionTimeout = 5000; // 5 seconds
+    this.activeContextId = null;
+    this.lastContextStats = null;
   }
 
   /**
@@ -263,6 +265,158 @@ class PACASDBClient {
     } catch (error) {
       throw error;
     }
+  }
+
+  /**
+   * Create a new cognitive context for adaptive search
+   * @param {Object} config - Context configuration
+   * @param {number} config.decay_rate - How quickly activation decays (0-1), default 0.1
+   * @param {number} config.max_items - Maximum active items in context, default 500
+   * @returns {Promise<Object>} Context info with context_id
+   * @throws {Error} If not connected
+   */
+  async createContext(config = {}) {
+    if (!this.connected) {
+      throw new Error('Not connected to PACASDB server');
+    }
+
+    try {
+      const payload = {
+        decay_rate: config.decay_rate || 0.1,
+        max_items: config.max_items || 500
+      };
+
+      const response = await fetch(`${this.baseUrl}/api/v1/contexts`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(payload)
+      });
+
+      if (!response.ok) {
+        throw new Error(`Context creation failed: ${response.statusText}`);
+      }
+
+      const result = await response.json();
+
+      // Store active context ID
+      this.activeContextId = result.context_id;
+
+      return result;
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  /**
+   * Perform context-aware search with activation spreading
+   * @param {string} contextId - Context identifier
+   * @param {string} query - Search query
+   * @param {number} k - Number of results to return
+   * @param {Object} metadataFilter - Optional metadata filter
+   * @returns {Promise<Object>} Search results with activation scores
+   * @throws {Error} If not connected
+   */
+  async think(contextId, query, k = 10, metadataFilter = null) {
+    if (!this.connected) {
+      throw new Error('Not connected to PACASDB server');
+    }
+
+    try {
+      const payload = {
+        query,
+        k
+      };
+
+      if (metadataFilter) {
+        payload.metadata_filter = metadataFilter;
+      }
+
+      const response = await fetch(`${this.baseUrl}/api/v1/contexts/${contextId}/think`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(payload)
+      });
+
+      if (!response.ok) {
+        throw new Error(`Think operation failed: ${response.statusText}`);
+      }
+
+      const result = await response.json();
+
+      // Store context stats for later retrieval
+      if (result.context_stats) {
+        this.lastContextStats = result.context_stats;
+      }
+
+      return result;
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  /**
+   * Mark a document as useful in cognitive context
+   * @param {string} contextId - Context identifier
+   * @param {string} docId - Document identifier
+   * @returns {Promise<Object>} Updated activation info
+   * @throws {Error} If not connected
+   */
+  async markUseful(contextId, docId) {
+    if (!this.connected) {
+      throw new Error('Not connected to PACASDB server');
+    }
+
+    try {
+      const payload = {
+        context_id: contextId,
+        doc_id: docId
+      };
+
+      const response = await fetch(`${this.baseUrl}/api/v1/feedback/useful`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(payload)
+      });
+
+      if (!response.ok) {
+        throw new Error(`Feedback failed: ${response.statusText}`);
+      }
+
+      const result = await response.json();
+      return result;
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  /**
+   * Get current context statistics
+   * @returns {Object} Context stats with active items count
+   */
+  getContextStats() {
+    if (!this.lastContextStats) {
+      return {
+        active_items: 0,
+        total_activations: 0,
+        avg_activation: 0
+      };
+    }
+
+    return this.lastContextStats;
+  }
+
+  /**
+   * Clear active context when switching modes
+   */
+  clearContext() {
+    this.activeContextId = null;
+    this.lastContextStats = null;
   }
 
   /**
