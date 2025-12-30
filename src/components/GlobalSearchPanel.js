@@ -13,8 +13,12 @@ export default class GlobalSearchPanel {
     this.modeSelector = null;
     this.vaultFilter = null;
     this.resultsContainer = null;
+    this.contextStatsElement = null;
+    this.endSessionBtn = null;
     this.isLoading = false;
     this.debounceTimer = null;
+    this.contextId = null;
+    this.isCognitiveMode = false;
   }
 
   /**
@@ -70,6 +74,8 @@ export default class GlobalSearchPanel {
       this.modeSelector.appendChild(option);
     });
 
+    this.modeSelector.addEventListener('change', () => this.onModeChange());
+
     controlsRow.appendChild(this.modeSelector);
 
     // Vault filter
@@ -82,6 +88,20 @@ export default class GlobalSearchPanel {
     this.vaultFilter.appendChild(allVaultsOption);
 
     controlsRow.appendChild(this.vaultFilter);
+
+    // Context stats (hidden by default, shown in cognitive mode)
+    this.contextStatsElement = document.createElement('div');
+    this.contextStatsElement.className = 'context-stats';
+    this.contextStatsElement.style.display = 'none';
+    controlsRow.appendChild(this.contextStatsElement);
+
+    // End session button (hidden by default, shown in cognitive mode)
+    this.endSessionBtn = document.createElement('button');
+    this.endSessionBtn.className = 'end-session-btn';
+    this.endSessionBtn.textContent = 'End Session';
+    this.endSessionBtn.style.display = 'none';
+    this.endSessionBtn.addEventListener('click', () => this.endCognitiveSession());
+    controlsRow.appendChild(this.endSessionBtn);
 
     // Results container
     this.resultsContainer = document.createElement('div');
@@ -125,6 +145,41 @@ export default class GlobalSearchPanel {
   }
 
   /**
+   * Handle mode selector change
+   * Creates context when switching to cognitive, clears when leaving
+   * @returns {Promise<void>}
+   */
+  async onModeChange() {
+    const mode = this.modeSelector.value;
+
+    if (mode === 'cognitive') {
+      // Switching TO cognitive mode
+      if (!this.isCognitiveMode && this.pacasdbClient) {
+        try {
+          const result = await this.pacasdbClient.createContext();
+          this.contextId = result.context_id;
+          this.isCognitiveMode = true;
+
+          // Show cognitive UI elements
+          if (this.contextStatsElement) {
+            this.contextStatsElement.style.display = 'block';
+          }
+          if (this.endSessionBtn) {
+            this.endSessionBtn.style.display = 'block';
+          }
+        } catch (error) {
+          console.error('Failed to create cognitive context:', error);
+        }
+      }
+    } else {
+      // Switching FROM cognitive mode to other mode
+      if (this.isCognitiveMode) {
+        this.endCognitiveSession();
+      }
+    }
+  }
+
+  /**
    * Execute search query
    * @param {string} query - Search query
    * @returns {Promise<void>}
@@ -138,21 +193,34 @@ export default class GlobalSearchPanel {
 
     try {
       const mode = this.modeSelector.value;
-      const searchParams = {
-        mode: mode
-      };
+      let results;
 
-      // Different modes send different query types
-      if (mode === 'keyword') {
-        searchParams.keywords = query;
+      // Use cognitive think operation if in cognitive mode
+      if (mode === 'cognitive' && this.contextId) {
+        results = await this.pacasdbClient.think(this.contextId, query, 10);
       } else {
-        searchParams.text = query;
-      }
+        // Regular search for other modes
+        const searchParams = {
+          mode: mode
+        };
 
-      const results = await this.pacasdbClient.search(searchParams);
+        // Different modes send different query types
+        if (mode === 'keyword') {
+          searchParams.keywords = query;
+        } else {
+          searchParams.text = query;
+        }
+
+        results = await this.pacasdbClient.search(searchParams);
+      }
 
       this.isLoading = false;
       this.renderResults(results);
+
+      // Update context stats if in cognitive mode
+      if (mode === 'cognitive' && results.context_stats) {
+        this.updateContextStats(results.context_stats);
+      }
 
     } catch (error) {
       this.isLoading = false;
@@ -196,8 +264,76 @@ export default class GlobalSearchPanel {
         resultCard.appendChild(score);
       }
 
+      // Show activation score in cognitive mode
+      if (this.isCognitiveMode && item.activation !== undefined) {
+        const activation = document.createElement('div');
+        activation.className = 'result-activation';
+        activation.textContent = `Activation: ${item.activation.toFixed(2)}`;
+        resultCard.appendChild(activation);
+      }
+
+      // Add Mark Useful button in cognitive mode
+      if (this.isCognitiveMode && item.id) {
+        const markUsefulBtn = document.createElement('button');
+        markUsefulBtn.className = 'mark-useful-btn';
+        markUsefulBtn.textContent = 'Mark Useful';
+        markUsefulBtn.addEventListener('click', () => this.markItemUseful(item.id));
+        resultCard.appendChild(markUsefulBtn);
+      }
+
       this.resultsContainer.appendChild(resultCard);
     });
+  }
+
+  /**
+   * Mark a result as useful in cognitive context
+   * @param {string} docId - Document ID
+   * @returns {Promise<void>}
+   */
+  async markItemUseful(docId) {
+    if (!this.contextId || !this.pacasdbClient) {
+      return;
+    }
+
+    try {
+      await this.pacasdbClient.markUseful(this.contextId, docId);
+      // Could add visual feedback here (e.g., show success message)
+    } catch (error) {
+      console.error('Failed to mark item useful:', error);
+    }
+  }
+
+  /**
+   * Update context stats display
+   * @param {Object} stats - Context statistics
+   */
+  updateContextStats(stats) {
+    if (!this.contextStatsElement) {
+      return;
+    }
+
+    this.contextStatsElement.textContent = `Active: ${stats.active_items} | Activations: ${stats.total_activations} | Avg: ${stats.avg_activation.toFixed(2)}`;
+  }
+
+  /**
+   * End cognitive session and clear context
+   */
+  endCognitiveSession() {
+    if (this.pacasdbClient) {
+      this.pacasdbClient.clearContext();
+    }
+
+    this.contextId = null;
+    this.isCognitiveMode = false;
+
+    // Hide cognitive UI elements
+    if (this.contextStatsElement) {
+      this.contextStatsElement.style.display = 'none';
+      this.contextStatsElement.textContent = '';
+    }
+    if (this.endSessionBtn) {
+      this.endSessionBtn.style.display = 'none';
+    }
   }
 
   /**
@@ -208,6 +344,11 @@ export default class GlobalSearchPanel {
       clearTimeout(this.debounceTimer);
     }
 
+    // Clean up cognitive session if active
+    if (this.isCognitiveMode) {
+      this.endCognitiveSession();
+    }
+
     if (this.element && this.element.parentNode) {
       this.element.parentNode.removeChild(this.element);
     }
@@ -216,5 +357,7 @@ export default class GlobalSearchPanel {
     this.modeSelector = null;
     this.vaultFilter = null;
     this.resultsContainer = null;
+    this.contextStatsElement = null;
+    this.endSessionBtn = null;
   }
 }

@@ -405,4 +405,193 @@ describe('GlobalSearchPanel', () => {
       expect(resultElements.length).toBe(2);
     });
   });
+
+  describe('Cognitive Mode', () => {
+    let mockPacasdbClient;
+
+    beforeEach(async () => {
+      mockEntitlementManager.status = { type: 'Licensed' };
+
+      const clientModule = await import('../../src/services/pacasdb-client.js');
+      mockPacasdbClient = new clientModule.default();
+
+      mockPacasdbClient.createContext = jest.fn(async () => ({
+        context_id: 'ctx_test123',
+        created_at: '2025-12-30T00:00:00Z',
+        config: { decay_rate: 0.1, max_items: 500 }
+      }));
+
+      mockPacasdbClient.think = jest.fn(async () => ({
+        items: [
+          {
+            id: 'doc-1',
+            title: 'Test Doc',
+            content: 'Test content',
+            score: 0.85,
+            activation: 0.92
+          }
+        ],
+        context_stats: {
+          active_items: 47,
+          total_activations: 235,
+          avg_activation: 0.34
+        }
+      }));
+
+      mockPacasdbClient.markUseful = jest.fn(async () => ({
+        updated: true,
+        new_activation: 0.95
+      }));
+
+      mockPacasdbClient.clearContext = jest.fn();
+      mockPacasdbClient.getContextStats = jest.fn(() => ({
+        active_items: 47,
+        total_activations: 235,
+        avg_activation: 0.34
+      }));
+    });
+
+    test('should create context when switching to cognitive mode', async () => {
+      const panel = new GlobalSearchPanel(mockEntitlementManager, mockPacasdbClient);
+      const element = panel.render();
+
+      // Trigger mode change
+      panel.modeSelector.value = 'cognitive';
+      await panel.onModeChange();
+
+      expect(mockPacasdbClient.createContext).toHaveBeenCalled();
+      expect(panel.contextId).toBe('ctx_test123');
+    });
+
+    test('should use think() when cognitive mode active', async () => {
+      const panel = new GlobalSearchPanel(mockEntitlementManager, mockPacasdbClient);
+      const element = panel.render();
+
+      // Set cognitive mode and create context
+      panel.modeSelector.value = 'cognitive';
+      await panel.onModeChange();
+
+      // Perform search
+      await panel.performSearch('test query');
+
+      expect(mockPacasdbClient.think).toHaveBeenCalledWith(
+        'ctx_test123',
+        'test query',
+        10
+      );
+    });
+
+    test('should display activation scores in cognitive mode', async () => {
+      const panel = new GlobalSearchPanel(mockEntitlementManager, mockPacasdbClient);
+      const element = panel.render();
+
+      panel.modeSelector.value = 'cognitive';
+      await panel.onModeChange();
+
+      await panel.performSearch('test query');
+
+      // Check for activation score in results
+      const resultElement = panel.resultsContainer.querySelector('.search-result');
+      const activationElement = resultElement.querySelector('.result-activation');
+
+      expect(activationElement).toBeTruthy();
+      expect(activationElement.textContent).toContain('0.92');
+    });
+
+    test('should show Mark Useful button in cognitive mode', async () => {
+      const panel = new GlobalSearchPanel(mockEntitlementManager, mockPacasdbClient);
+      const element = panel.render();
+
+      panel.modeSelector.value = 'cognitive';
+      await panel.onModeChange();
+
+      await panel.performSearch('test query');
+
+      // Check for Mark Useful button
+      const resultElement = panel.resultsContainer.querySelector('.search-result');
+      const markUsefulBtn = resultElement.querySelector('.mark-useful-btn');
+
+      expect(markUsefulBtn).toBeTruthy();
+      expect(markUsefulBtn.textContent).toContain('Mark Useful');
+    });
+
+    test('should call markUseful when button clicked', async () => {
+      const panel = new GlobalSearchPanel(mockEntitlementManager, mockPacasdbClient);
+      const element = panel.render();
+
+      panel.modeSelector.value = 'cognitive';
+      await panel.onModeChange();
+
+      await panel.performSearch('test query');
+
+      // Click Mark Useful button
+      const markUsefulBtn = panel.resultsContainer.querySelector('.mark-useful-btn');
+      markUsefulBtn.click();
+
+      await new Promise(resolve => setTimeout(resolve, 10));
+
+      expect(mockPacasdbClient.markUseful).toHaveBeenCalledWith('ctx_test123', 'doc-1');
+    });
+
+    test('should show context stats in panel header', async () => {
+      const panel = new GlobalSearchPanel(mockEntitlementManager, mockPacasdbClient);
+      const element = panel.render();
+
+      panel.modeSelector.value = 'cognitive';
+      await panel.onModeChange();
+
+      await panel.performSearch('test query');
+
+      // Check for context stats display
+      const statsElement = element.querySelector('.context-stats');
+      expect(statsElement).toBeTruthy();
+      expect(statsElement.textContent).toContain('47');
+    });
+
+    test('should have End Session button in cognitive mode', async () => {
+      const panel = new GlobalSearchPanel(mockEntitlementManager, mockPacasdbClient);
+      const element = panel.render();
+
+      panel.modeSelector.value = 'cognitive';
+      await panel.onModeChange();
+
+      // Check for End Session button
+      const endSessionBtn = element.querySelector('.end-session-btn');
+      expect(endSessionBtn).toBeTruthy();
+      expect(endSessionBtn.textContent).toContain('End Session');
+    });
+
+    test('should clear context when End Session clicked', async () => {
+      const panel = new GlobalSearchPanel(mockEntitlementManager, mockPacasdbClient);
+      const element = panel.render();
+
+      panel.modeSelector.value = 'cognitive';
+      await panel.onModeChange();
+
+      // Click End Session
+      const endSessionBtn = element.querySelector('.end-session-btn');
+      endSessionBtn.click();
+
+      expect(mockPacasdbClient.clearContext).toHaveBeenCalled();
+      expect(panel.contextId).toBeNull();
+    });
+
+    test('should clear context when switching from cognitive to other mode', async () => {
+      const panel = new GlobalSearchPanel(mockEntitlementManager, mockPacasdbClient);
+      const element = panel.render();
+
+      // Start in cognitive mode
+      panel.modeSelector.value = 'cognitive';
+      await panel.onModeChange();
+
+      expect(panel.contextId).toBe('ctx_test123');
+
+      // Switch to semantic mode
+      panel.modeSelector.value = 'semantic';
+      await panel.onModeChange();
+
+      expect(mockPacasdbClient.clearContext).toHaveBeenCalled();
+      expect(panel.contextId).toBeNull();
+    });
+  });
 });
