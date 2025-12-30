@@ -420,6 +420,37 @@ class PACASDBClient {
   }
 
   /**
+   * Get documents related to given document
+   * @param {string} docId - Source document identifier
+   * @param {number} k - Number of related docs to return (default 10)
+   * @returns {Promise<Object>} Related documents grouped by relationship type
+   * @throws {Error} If not connected
+   */
+  async getRelatedDocuments(docId, k = 10) {
+    if (!this.connected) {
+      throw new Error('Not connected to PACASDB server');
+    }
+
+    try {
+      const response = await fetch(`${this.baseUrl}/api/v1/relationships/${docId}?k=${k}`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error(`Get related documents failed: ${response.statusText}`);
+      }
+
+      const result = await response.json();
+      return result;
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  /**
    * Generate cache key from search parameters
    * @param {Object} params - Search parameters
    * @param {string} vaultId - Vault ID
