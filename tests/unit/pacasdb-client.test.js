@@ -413,4 +413,240 @@ describe('PACASDBClient', () => {
       expect(result.failed).toBe(0);
     });
   });
+
+  describe('search()', () => {
+    beforeEach(() => {
+      mockEntitlementManager.premiumEnabled = true;
+      client.connected = true;
+    });
+
+    test('should send semantic query when only text provided', async () => {
+      const searchParams = {
+        text: 'machine learning concepts',
+        k: 10
+      };
+
+      global.fetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          results: [
+            { doc_id: 'doc-1', score: 0.95, title: 'ML Basics' }
+          ]
+        })
+      });
+
+      await client.search(searchParams);
+
+      const fetchCall = global.fetch.mock.calls[0];
+      const payload = JSON.parse(fetchCall[1].body);
+
+      expect(payload.query_type).toBe('semantic');
+      expect(payload.text).toBe('machine learning concepts');
+      expect(payload.k).toBe(10);
+    });
+
+    test('should send keyword query when only keywords provided', async () => {
+      const searchParams = {
+        keywords: ['neural', 'network'],
+        k: 5
+      };
+
+      global.fetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          results: []
+        })
+      });
+
+      await client.search(searchParams);
+
+      const fetchCall = global.fetch.mock.calls[0];
+      const payload = JSON.parse(fetchCall[1].body);
+
+      expect(payload.query_type).toBe('keyword');
+      expect(payload.keywords).toEqual(['neural', 'network']);
+    });
+
+    test('should send hybrid query when both text and keywords provided', async () => {
+      const searchParams = {
+        text: 'deep learning',
+        keywords: ['tensorflow', 'pytorch'],
+        k: 10
+      };
+
+      global.fetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          results: []
+        })
+      });
+
+      await client.search(searchParams);
+
+      const fetchCall = global.fetch.mock.calls[0];
+      const payload = JSON.parse(fetchCall[1].body);
+
+      expect(payload.query_type).toBe('hybrid');
+      expect(payload.text).toBe('deep learning');
+      expect(payload.keywords).toEqual(['tensorflow', 'pytorch']);
+    });
+
+    test('should include vault filter when currentVaultOnly is true', async () => {
+      const searchParams = {
+        text: 'search query',
+        currentVaultOnly: true,
+        k: 10
+      };
+
+      global.fetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          results: []
+        })
+      });
+
+      await client.search(searchParams, 'vault-007');
+
+      const fetchCall = global.fetch.mock.calls[0];
+      const payload = JSON.parse(fetchCall[1].body);
+
+      expect(payload.vault_filter).toBe('vault-007');
+    });
+
+    test('should not include vault filter when currentVaultOnly is false', async () => {
+      const searchParams = {
+        text: 'search query',
+        currentVaultOnly: false,
+        k: 10
+      };
+
+      global.fetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          results: []
+        })
+      });
+
+      await client.search(searchParams);
+
+      const fetchCall = global.fetch.mock.calls[0];
+      const payload = JSON.parse(fetchCall[1].body);
+
+      expect(payload.vault_filter).toBeUndefined();
+    });
+
+    test('should return cached results on cache hit', async () => {
+      const searchParams = {
+        text: 'cached query',
+        k: 10
+      };
+
+      const cachedResults = {
+        results: [
+          { doc_id: 'cached-1', score: 0.9, title: 'Cached Doc' }
+        ]
+      };
+
+      // Set up cache spy
+      const getCacheSpy = jest.spyOn(client, 'getCachedSearch').mockReturnValue(cachedResults);
+
+      const results = await client.search(searchParams);
+
+      // Should use cache and not call fetch
+      expect(getCacheSpy).toHaveBeenCalled();
+      expect(global.fetch).not.toHaveBeenCalled();
+      expect(results).toEqual(cachedResults);
+
+      getCacheSpy.mockRestore();
+    });
+
+    test('should cache results after successful search', async () => {
+      const searchParams = {
+        text: 'new query',
+        k: 10
+      };
+
+      const searchResults = {
+        results: [
+          { doc_id: 'new-1', score: 0.85, title: 'New Doc' }
+        ]
+      };
+
+      global.fetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => searchResults
+      });
+
+      const setCacheSpy = jest.spyOn(client, 'setCachedSearch').mockImplementation();
+
+      await client.search(searchParams);
+
+      expect(setCacheSpy).toHaveBeenCalledWith(
+        expect.any(String),
+        searchResults,
+        60000 // 60 seconds TTL
+      );
+
+      setCacheSpy.mockRestore();
+    });
+
+    test('should throw error when not connected', async () => {
+      client.connected = false;
+
+      await expect(
+        client.search({ text: 'test', k: 10 })
+      ).rejects.toThrow('Not connected to PACASDB server');
+    });
+  });
+
+  describe('deleteDocument()', () => {
+    beforeEach(() => {
+      mockEntitlementManager.premiumEnabled = true;
+      client.connected = true;
+    });
+
+    test('should send delete request with document ID', async () => {
+      global.fetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({ deleted: true })
+      });
+
+      await client.deleteDocument('doc-to-delete');
+
+      const fetchCall = global.fetch.mock.calls[0];
+      expect(fetchCall[0]).toBe('http://localhost:8000/documents/doc-to-delete');
+      expect(fetchCall[1].method).toBe('DELETE');
+    });
+
+    test('should clear cache after deletion', async () => {
+      global.fetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({ deleted: true })
+      });
+
+      const clearCacheSpy = jest.spyOn(client, 'clearCache');
+
+      await client.deleteDocument('doc-xyz');
+
+      expect(clearCacheSpy).toHaveBeenCalled();
+
+      clearCacheSpy.mockRestore();
+    });
+
+    test('should throw error when not connected', async () => {
+      client.connected = false;
+
+      await expect(
+        client.deleteDocument('doc-123')
+      ).rejects.toThrow('Not connected to PACASDB server');
+    });
+  });
 });

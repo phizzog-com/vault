@@ -155,12 +155,187 @@ class PACASDBClient {
   }
 
   /**
+   * Search for documents
+   * @param {Object} params - Search parameters
+   * @param {string} params.text - Semantic search text
+   * @param {Array<string>} params.keywords - Keyword search terms
+   * @param {number} params.k - Number of results to return
+   * @param {boolean} params.currentVaultOnly - Filter to current vault
+   * @param {string} vaultId - Current vault ID (used when currentVaultOnly=true)
+   * @returns {Promise<Object>} Search results
+   * @throws {Error} If not connected
+   */
+  async search(params, vaultId = null) {
+    if (!this.connected) {
+      throw new Error('Not connected to PACASDB server');
+    }
+
+    // Check cache first
+    const cacheKey = this.generateCacheKey(params, vaultId);
+    const cachedResults = this.getCachedSearch(cacheKey);
+    if (cachedResults) {
+      return cachedResults;
+    }
+
+    try {
+      // Determine query type
+      let queryType;
+      if (params.text && params.keywords) {
+        queryType = 'hybrid';
+      } else if (params.text) {
+        queryType = 'semantic';
+      } else if (params.keywords) {
+        queryType = 'keyword';
+      } else {
+        throw new Error('Must provide either text or keywords');
+      }
+
+      // Build payload
+      const payload = {
+        query_type: queryType,
+        k: params.k || 10
+      };
+
+      if (params.text) {
+        payload.text = params.text;
+      }
+
+      if (params.keywords) {
+        payload.keywords = params.keywords;
+      }
+
+      if (params.currentVaultOnly && vaultId) {
+        payload.vault_filter = vaultId;
+      }
+
+      const response = await fetch(`${this.baseUrl}/search`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(payload)
+      });
+
+      if (!response.ok) {
+        throw new Error(`Search failed: ${response.statusText}`);
+      }
+
+      const results = await response.json();
+
+      // Cache the results
+      this.setCachedSearch(cacheKey, results, 60000); // 60 second TTL
+
+      return results;
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  /**
+   * Delete a document from the index
+   * @param {string} docId - Document ID to delete
+   * @returns {Promise<Object>} Deletion result
+   * @throws {Error} If not connected
+   */
+  async deleteDocument(docId) {
+    if (!this.connected) {
+      throw new Error('Not connected to PACASDB server');
+    }
+
+    try {
+      const response = await fetch(`${this.baseUrl}/documents/${docId}`, {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error(`Delete failed: ${response.statusText}`);
+      }
+
+      const result = await response.json();
+
+      // Clear cache after deletion
+      this.clearCache();
+
+      return result;
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  /**
+   * Generate cache key from search parameters
+   * @param {Object} params - Search parameters
+   * @param {string} vaultId - Vault ID
+   * @returns {string} Cache key
+   */
+  generateCacheKey(params, vaultId) {
+    const parts = [
+      params.text || '',
+      (params.keywords || []).join(','),
+      params.k || 10,
+      params.currentVaultOnly ? vaultId : 'all'
+    ];
+    return parts.join('|');
+  }
+
+  /**
+   * Get cached search results
+   * @param {string} key - Cache key
+   * @returns {Object|null} Cached results or null
+   */
+  getCachedSearch(key) {
+    if (!this.searchCache) {
+      this.searchCache = new Map();
+    }
+
+    const cached = this.searchCache.get(key);
+    if (!cached) {
+      return null;
+    }
+
+    // Check expiration
+    if (Date.now() > cached.expiresAt) {
+      this.searchCache.delete(key);
+      return null;
+    }
+
+    return cached.data;
+  }
+
+  /**
+   * Set cached search results
+   * @param {string} key - Cache key
+   * @param {Object} data - Results to cache
+   * @param {number} ttl - Time to live in milliseconds
+   */
+  setCachedSearch(key, data, ttl) {
+    if (!this.searchCache) {
+      this.searchCache = new Map();
+    }
+
+    this.searchCache.set(key, {
+      data,
+      expiresAt: Date.now() + ttl
+    });
+
+    // Simple LRU: limit cache size to 100 entries
+    if (this.searchCache.size > 100) {
+      const firstKey = this.searchCache.keys().next().value;
+      this.searchCache.delete(firstKey);
+    }
+  }
+
+  /**
    * Clear search cache
    * Called after indexing operations to invalidate stale results
    */
   clearCache() {
-    // Cache clearing implementation - placeholder for now
-    // Will be implemented when search caching is added
+    if (this.searchCache) {
+      this.searchCache.clear();
+    }
   }
 }
 
