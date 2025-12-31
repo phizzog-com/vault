@@ -49,7 +49,8 @@ class LicenseStatusBadge {
     if (!this.badgeElement) return;
 
     const status = this.entitlementManager.getStatus();
-    const statusType = status?.type || 'Unlicensed';
+    // Backend returns lowercase 'status' field
+    const statusType = status?.status || 'unlicensed';
 
     // Remove all status classes
     this.badgeElement.className = 'license-status-badge';
@@ -59,32 +60,32 @@ class LicenseStatusBadge {
     let cssClass = '';
 
     switch (statusType) {
-      case 'Unlicensed':
+      case 'unlicensed':
         text = 'Free';
         tooltip = 'Free version - upgrade to Premium for advanced features';
         cssClass = 'status-unlicensed';
         break;
 
-      case 'Trial':
+      case 'trial':
         const trialDays = this.entitlementManager.getDaysRemaining();
         text = `Trial (${trialDays} days left)`;
         tooltip = `Premium trial active - ${trialDays} days remaining`;
         cssClass = 'status-trial';
         break;
 
-      case 'Licensed':
+      case 'licensed':
         text = 'Premium';
         tooltip = 'Premium features active';
         cssClass = 'status-licensed';
         break;
 
-      case 'Expired':
+      case 'expired':
         text = 'Expired';
         tooltip = 'License expired - renew to continue using Premium features';
         cssClass = 'status-expired';
         break;
 
-      case 'GracePeriod':
+      case 'graceperiod':
         const graceDays = this.entitlementManager.getDaysRemaining();
         text = `Grace Period (${graceDays} days)`;
         tooltip = `Offline grace period - ${graceDays} days remaining`;
@@ -121,29 +122,29 @@ class LicenseStatusBadge {
     this.badgeElement.style.cursor = 'help';
     this.badgeElement.style.userSelect = 'none';
 
-    // Status-specific colors
+    // Status-specific colors (lowercase to match backend)
     switch (statusType) {
-      case 'Unlicensed':
+      case 'unlicensed':
         this.badgeElement.style.backgroundColor = '#e0e0e0';
         this.badgeElement.style.color = '#666666';
         break;
 
-      case 'Trial':
+      case 'trial':
         this.badgeElement.style.backgroundColor = '#e3f2fd';
         this.badgeElement.style.color = '#1976d2';
         break;
 
-      case 'Licensed':
+      case 'licensed':
         this.badgeElement.style.backgroundColor = '#fff9e6';
         this.badgeElement.style.color = '#f59e0b';
         break;
 
-      case 'Expired':
+      case 'expired':
         this.badgeElement.style.backgroundColor = '#ffebee';
         this.badgeElement.style.color = '#d32f2f';
         break;
 
-      case 'GracePeriod':
+      case 'graceperiod':
         this.badgeElement.style.backgroundColor = '#fff3e0';
         this.badgeElement.style.color = '#f57c00';
         break;

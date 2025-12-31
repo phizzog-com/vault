@@ -5557,8 +5557,18 @@ document.addEventListener('DOMContentLoaded', async () => {
     await entitlementManager.initialize();
     console.log('✅ EntitlementManager initialized');
 
-    pacasdbClient = new PACASDBClient();
+    pacasdbClient = new PACASDBClient(entitlementManager);
     console.log('✅ PACASDBClient initialized');
+
+    // Auto-connect to PACASDB if premium is enabled
+    if (entitlementManager.isPremiumEnabled()) {
+      const connected = await pacasdbClient.connect();
+      if (connected) {
+        console.log('✅ PACASDBClient connected to server');
+      } else {
+        console.log('⚠️ PACASDBClient could not connect (server may not be running)');
+      }
+    }
 
     globalSearchPanel = new GlobalSearchPanel(entitlementManager, pacasdbClient);
     console.log('✅ GlobalSearchPanel initialized');
@@ -5566,6 +5576,11 @@ document.addEventListener('DOMContentLoaded', async () => {
     vaultSync = new VaultSync(pacasdbClient);
     vaultSync.start();
     console.log('✅ VaultSync initialized and started');
+
+    // Set window globals for GlobalSearch integration
+    window.entitlementManager = entitlementManager;
+    window.pacasdbClient = pacasdbClient;
+    window.vaultSync = vaultSync;
   } catch (error) {
     console.error('❌ Failed to initialize premium features:', error);
   }

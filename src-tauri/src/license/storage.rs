@@ -1,75 +1,82 @@
-/// Secure license storage using OS keychain
+/// File-based license storage
 ///
-/// Stores license information securely in the system keychain:
-/// - macOS: Keychain Access
-/// - Windows: Credential Manager
-/// - Linux: Secret Service
+/// Stores license information in the app's data directory:
+/// - macOS: ~/Library/Application Support/com.vault/license.json
+/// - Windows: %APPDATA%/com.vault/license.json
+/// - Linux: ~/.config/com.vault/license.json
 
-use keyring::Entry;
 use super::types::LicenseInfo;
-use serde_json;
+use std::fs;
+use std::path::PathBuf;
 
-const SERVICE_NAME: &str = "com.vault.pacasdb";
+const APP_NAME: &str = "com.vault";
+const LICENSE_FILE: &str = "license.json";
 
-/// Store license information in the OS keychain
-pub fn store_license(machine_id: &str, license_info: &LicenseInfo) -> Result<(), String> {
-    // Create keyring entry for this machine
-    let entry = Entry::new(SERVICE_NAME, machine_id)
-        .map_err(|e| format!("Failed to create keyring entry: {}", e))?;
+/// Get the license file path
+fn get_license_path() -> Result<PathBuf, String> {
+    let data_dir = dirs::config_dir()
+        .ok_or_else(|| "Failed to get config directory".to_string())?;
+
+    let app_dir = data_dir.join(APP_NAME);
+
+    // Create directory if it doesn't exist
+    if !app_dir.exists() {
+        fs::create_dir_all(&app_dir)
+            .map_err(|e| format!("Failed to create app directory: {}", e))?;
+    }
+
+    Ok(app_dir.join(LICENSE_FILE))
+}
+
+/// Store license information to file
+pub fn store_license(_machine_id: &str, license_info: &LicenseInfo) -> Result<(), String> {
+    let path = get_license_path()?;
 
     // Serialize license info to JSON
-    let json = serde_json::to_string(license_info)
+    let json = serde_json::to_string_pretty(license_info)
         .map_err(|e| format!("Failed to serialize license: {}", e))?;
 
-    // Store in keychain
-    entry.set_password(&json)
-        .map_err(|e| format!("Failed to store license in keychain: {}", e))?;
+    // Write to file
+    fs::write(&path, json)
+        .map_err(|e| format!("Failed to write license file: {}", e))?;
 
     Ok(())
 }
 
-/// Load license information from the OS keychain
-pub fn load_license(machine_id: &str) -> Result<Option<LicenseInfo>, String> {
-    // Create keyring entry for this machine
-    let entry = Entry::new(SERVICE_NAME, machine_id)
-        .map_err(|e| format!("Failed to create keyring entry: {}", e))?;
+/// Load license information from file
+pub fn load_license(_machine_id: &str) -> Result<Option<LicenseInfo>, String> {
+    let path = get_license_path()?;
 
-    // Try to get password from keychain
-    match entry.get_password() {
-        Ok(json) => {
-            // Deserialize license info from JSON
-            let license_info = serde_json::from_str(&json)
-                .map_err(|e| format!("Failed to deserialize license: {}", e))?;
-            Ok(Some(license_info))
-        }
-        Err(keyring::Error::NoEntry) => {
-            // No license found - this is OK
-            Ok(None)
-        }
-        Err(e) => {
-            // Other errors
-            Err(format!("Failed to load license from keychain: {}", e))
-        }
+    // Check if file exists
+    if !path.exists() {
+        return Ok(None);
     }
+
+    // Read file contents
+    let json = fs::read_to_string(&path)
+        .map_err(|e| format!("Failed to read license file: {}", e))?;
+
+    // Deserialize license info
+    let license_info = serde_json::from_str(&json)
+        .map_err(|e| format!("Failed to deserialize license: {}", e))?;
+
+    Ok(Some(license_info))
 }
 
-/// Delete license information from the OS keychain
-pub fn delete_license(machine_id: &str) -> Result<(), String> {
-    // Create keyring entry for this machine
-    let entry = Entry::new(SERVICE_NAME, machine_id)
-        .map_err(|e| format!("Failed to create keyring entry: {}", e))?;
+/// Delete license information from file
+pub fn delete_license(_machine_id: &str) -> Result<(), String> {
+    let path = get_license_path()?;
 
-    // Delete from keychain (use delete_password method)
-    match entry.delete_password() {
-        Ok(_) => Ok(()),
-        Err(keyring::Error::NoEntry) => {
-            // Already deleted - this is OK
-            Ok(())
-        }
-        Err(e) => {
-            Err(format!("Failed to delete license from keychain: {}", e))
-        }
+    // Check if file exists
+    if !path.exists() {
+        return Ok(()); // Already deleted
     }
+
+    // Delete the file
+    fs::remove_file(&path)
+        .map_err(|e| format!("Failed to delete license file: {}", e))?;
+
+    Ok(())
 }
 
 #[cfg(test)]
@@ -77,7 +84,7 @@ mod tests {
     use super::*;
     use chrono::Utc;
 
-    // Test machine ID for keychain tests (unique to avoid conflicts)
+    // Test machine ID (not used in file storage, but kept for API compatibility)
     fn test_machine_id() -> String {
         format!("test-machine-{}", std::process::id())
     }

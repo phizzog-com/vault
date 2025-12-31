@@ -1619,9 +1619,9 @@ fn main() {
             generate_mcp_config,
             // License commands
             commands::license::get_license_status,
-            commands::license::start_trial_command,
-            commands::license::activate_license_command,
-            commands::license::deactivate_license_command,
+            commands::license::start_trial_cmd,
+            commands::license::activate_license,
+            commands::license::deactivate_license,
             write_mcp_config,
             validate_mcp_server,
             check_mcp_servers_status,

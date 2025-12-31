@@ -4,11 +4,15 @@
 /// validation, and deactivation operations.
 
 use super::types::LicenseInfo;
+use chrono::Utc;
 use reqwest;
 use serde::{Deserialize, Serialize};
 
 const LICENSE_SERVER_URL: &str = "https://license.vaultapp.com/api/v1";
 const REQUEST_TIMEOUT_SECS: u64 = 30;
+
+/// Dev license key prefix - bypasses online validation for development testing
+const DEV_LICENSE_PREFIX: &str = "DEV-";
 
 #[derive(Debug, Serialize)]
 struct ActivationRequest {
@@ -27,6 +31,11 @@ struct ActivationResponse {
 
 /// Activate a license key online
 pub async fn activate_online(key: &str, machine_id: &str) -> Result<LicenseInfo, String> {
+    // Check for dev license key (DEV-xxxx) - bypasses online validation
+    if key.starts_with(DEV_LICENSE_PREFIX) {
+        return Ok(create_dev_license(key));
+    }
+
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(REQUEST_TIMEOUT_SECS))
         .build()
@@ -133,6 +142,11 @@ pub async fn validate_online(key: &str, machine_id: &str) -> Result<bool, String
 
 /// Deactivate a license key online
 pub async fn deactivate_online(key: &str, machine_id: &str) -> Result<(), String> {
+    // Dev licenses can be deactivated locally without server call
+    if key.starts_with(DEV_LICENSE_PREFIX) {
+        return Ok(());
+    }
+
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(REQUEST_TIMEOUT_SECS))
         .build()
@@ -156,6 +170,18 @@ pub async fn deactivate_online(key: &str, machine_id: &str) -> Result<(), String
         Ok(())
     } else {
         Err(format!("Deactivation failed: {}", response.status()))
+    }
+}
+
+/// Create a development license for testing purposes
+/// Only accepts keys starting with "DEV-"
+fn create_dev_license(key: &str) -> LicenseInfo {
+    LicenseInfo {
+        key: key.to_string(),
+        license_type: "lifetime".to_string(),
+        features: vec!["pacasdb".to_string()],
+        activated_at: Utc::now(),
+        expires_at: None, // Dev licenses don't expire
     }
 }
 

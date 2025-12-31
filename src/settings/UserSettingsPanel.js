@@ -2,6 +2,8 @@ import { invoke } from '@tauri-apps/api/core';
 
 import pluginSettingsPanel from './PluginSettingsPanel.js';
 import EntitlementManager from '../services/entitlement-manager.js';
+import PACASDBClient from '../services/pacasdb-client.js';
+import VaultSync from '../services/vault-sync.js';
 import LicenseStatusBadge from '../components/LicenseStatusBadge.js';
 import ActivationDialog from '../components/ActivationDialog.js';
 
@@ -406,14 +408,18 @@ export class UserSettingsPanel {
             await this.entitlementManager.initialize();
         }
 
-        // Get PACASDB client from window if available
+        // Get PACASDB client from window if available, or create new instance
         if (window.pacasdbClient) {
             this.pacasdbClient = window.pacasdbClient;
+        } else if (!this.pacasdbClient) {
+            this.pacasdbClient = new PACASDBClient(this.entitlementManager);
         }
 
-        // Get VaultSync from window if available
+        // Get VaultSync from window if available, or create new instance
         if (window.vaultSync) {
             this.vaultSync = window.vaultSync;
+        } else if (!this.vaultSync && this.pacasdbClient) {
+            this.vaultSync = new VaultSync(this.pacasdbClient);
         }
 
         // Initialize activation dialog
@@ -447,6 +453,12 @@ export class UserSettingsPanel {
             if (!this.activationDialog) {
                 await this.initializePACASDB();
             }
+
+            // Set up callback to re-render panel after successful activation
+            this.activationDialog.onSuccess = () => {
+                this.showNotification('License activated successfully!', 'success');
+                this.render();
+            };
 
             this.activationDialog.show();
         } catch (error) {
@@ -593,10 +605,11 @@ export class UserSettingsPanel {
     }
     
     renderPACASDBSection() {
-        const licenseStatus = this.entitlementManager ? this.entitlementManager.getStatus() : { type: 'Unlicensed' };
+        const licenseStatus = this.entitlementManager ? this.entitlementManager.getStatus() : { status: 'unlicensed' };
         const isPremium = this.entitlementManager ? this.entitlementManager.isPremiumEnabled() : false;
-        const isUnlicensed = licenseStatus.type === 'Unlicensed';
-        const isLicensed = licenseStatus.type === 'Licensed';
+        // Backend returns lowercase status field
+        const isUnlicensed = licenseStatus.status === 'unlicensed';
+        const isLicensed = licenseStatus.status === 'licensed';
 
         return `
             <div class="settings-section pacasdb-section">
@@ -703,12 +716,9 @@ export class UserSettingsPanel {
                                     <p>To use PACASDB features, you need to run the PACASDB server:</p>
                                     <ol>
                                         <li>Install Docker if not already installed</li>
-                                        <li>Run: <code>docker run -p 8000:8000 pacasdb</code></li>
+                                        <li>Run: <code>docker run -p 8000:8000 pacasdb/pacasdb</code></li>
                                         <li>Click "Test Connection" above to verify</li>
                                     </ol>
-                                    <a href="#" onclick="return false;" class="help-link">
-                                        View detailed setup guide →
-                                    </a>
                                 </div>
                             </div>
                         `}

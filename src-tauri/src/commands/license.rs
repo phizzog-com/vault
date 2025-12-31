@@ -96,15 +96,15 @@ pub async fn get_license_status() -> Result<LicenseStatusResponse, String> {
 }
 
 /// Start a trial period
-#[tauri::command]
-pub async fn start_trial_command() -> Result<LicenseStatusResponse, String> {
+#[tauri::command(rename_all = "snake_case")]
+pub async fn start_trial_cmd() -> Result<LicenseStatusResponse, String> {
     let status = start_trial()?;
     Ok(LicenseStatusResponse::from(status))
 }
 
 /// Activate a license key
-#[tauri::command]
-pub async fn activate_license_command(key: String) -> Result<LicenseStatusResponse, String> {
+#[tauri::command(rename_all = "snake_case")]
+pub async fn activate_license(key: String) -> Result<LicenseStatusResponse, String> {
     let machine_id = get_machine_fingerprint()?;
 
     // Activate online
@@ -125,8 +125,8 @@ pub async fn activate_license_command(key: String) -> Result<LicenseStatusRespon
 }
 
 /// Deactivate current license
-#[tauri::command]
-pub async fn deactivate_license_command() -> Result<(), String> {
+#[tauri::command(rename_all = "snake_case")]
+pub async fn deactivate_license() -> Result<(), String> {
     let machine_id = get_machine_fingerprint()?;
 
     // Load current license
@@ -207,7 +207,7 @@ mod tests {
         let machine_id = get_machine_fingerprint().unwrap();
         let _ = delete_license(&machine_id);
 
-        let result = deactivate_license_command().await;
+        let result = deactivate_license().await;
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("No license"));
     }

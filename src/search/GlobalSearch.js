@@ -5,17 +5,31 @@ export class GlobalSearch {
   constructor() {
     this.container = null;
     this.isVisible = false;
-    this.searchMode = 'keyword'; // 'keyword' mode only - graph/semantic integration removed
+    this.searchMode = 'hybrid'; // Default to hybrid (PACASDB semantic + keyword)
     this.currentQuery = '';
     this.searchResults = [];
     this.selectedIndex = -1;
-    
+
     // Bind methods
     this.show = this.show.bind(this);
     this.hide = this.hide.bind(this);
     this.toggle = this.toggle.bind(this);
     this.handleKeyDown = this.handleKeyDown.bind(this);
     this.handleSearch = this.handleSearch.bind(this);
+  }
+
+  /**
+   * Check if PACASDB search is available (premium enabled + connected)
+   */
+  isPacasdbAvailable() {
+    const client = window.pacasdbClient;
+    const entitlementManager = window.entitlementManager;
+
+    if (!client || !entitlementManager) {
+      return false;
+    }
+
+    return entitlementManager.isPremiumEnabled() && client.isConnected();
   }
 
   mount() {
@@ -243,6 +257,32 @@ export class GlobalSearch {
       `;
 
       let results = [];
+
+      // Semantic and Hybrid modes require PACASDB Premium
+      console.log('🔍 handleSearch - mode:', this.searchMode);
+      console.log('🔍 handleSearch - isPacasdbAvailable:', this.isPacasdbAvailable());
+
+      if (this.searchMode === 'semantic' || this.searchMode === 'hybrid') {
+        if (!this.isPacasdbAvailable()) {
+          console.log('🔍 PACASDB not available, showing premium required');
+          this.displayPremiumRequired();
+          return;
+        }
+        results = await this.performPacasdbSearch(this.currentQuery);
+        this.searchResults = results;
+        this.displayResults(results);
+        return;
+      }
+
+      // Keyword mode - use simple file search
+      if (this.searchMode === 'keyword') {
+        results = await this.performKeywordSearch(this.currentQuery);
+        this.searchResults = results;
+        this.displayResults(results);
+        return;
+      }
+
+      // Legacy fallback (should not reach here)
       if (this.searchMode === 'hybrid') {
         // For hybrid search, combine backend graph search with frontend semantic search
         try {
@@ -449,6 +489,50 @@ export class GlobalSearch {
         color: var(--text-secondary);
       ">
         Start typing to search your notes
+      </div>
+    `;
+  }
+
+  displayPremiumRequired() {
+    const resultsContainer = this.container.querySelector('.search-results');
+    const entitlementManager = window.entitlementManager;
+    const pacasdbClient = window.pacasdbClient;
+
+    // Determine the specific issue
+    let message = '';
+    let actionText = '';
+
+    if (!entitlementManager || !entitlementManager.isPremiumEnabled()) {
+      message = 'Semantic and Hybrid search require PACASDB Premium.';
+      actionText = 'Go to Settings → PACASDB Premium to activate your license.';
+    } else if (!pacasdbClient || !pacasdbClient.isConnected()) {
+      message = 'PACASDB server is not connected.';
+      actionText = 'Go to Settings → PACASDB Premium to connect to your PACASDB server.';
+    }
+
+    resultsContainer.innerHTML = `
+      <div style="
+        padding: 40px;
+        text-align: center;
+      ">
+        <div style="
+          font-size: 32px;
+          margin-bottom: 16px;
+        ">🔒</div>
+        <div style="
+          color: var(--text-primary);
+          font-weight: 500;
+          margin-bottom: 8px;
+        ">${message}</div>
+        <div style="
+          color: var(--text-secondary);
+          font-size: 13px;
+          margin-bottom: 16px;
+        ">${actionText}</div>
+        <div style="
+          color: var(--text-secondary);
+          font-size: 12px;
+        ">Use <strong>Keyword</strong> mode for basic file name search.</div>
       </div>
     `;
   }
@@ -784,6 +868,66 @@ export class GlobalSearch {
     return files;
   }
   
+  /**
+   * Perform search using PACASDB (premium feature)
+   */
+  async performPacasdbSearch(query) {
+    const client = window.pacasdbClient;
+    console.log('🔍 performPacasdbSearch called with:', query);
+    console.log('🔍 client:', client);
+    console.log('🔍 client.isConnected():', client?.isConnected());
+
+    if (!client) {
+      throw new Error('PACASDB client not available');
+    }
+
+    try {
+      const searchParams = {
+        k: 20,
+        currentVaultOnly: true
+      };
+
+      // Set search type based on mode
+      if (this.searchMode === 'hybrid') {
+        searchParams.text = query;
+        searchParams.keywords = query.split(/\s+/);
+      } else if (this.searchMode === 'semantic') {
+        searchParams.text = query;
+      }
+
+      console.log('🔍 searchParams:', searchParams);
+      const response = await client.search(searchParams, window.currentVaultId);
+      console.log('🔍 PACASDB response:', response);
+
+      // Transform PACASDB results to match display format
+      // Response structure: { items: [{ doc_id, rank, score, document: { content: {title, body}, metadata: {file_path} } }] }
+      const results = [];
+      if (response && response.items) {
+        for (const item of response.items) {
+          const doc = item.document || {};
+          const content = doc.content || {};
+          const metadata = doc.metadata || {};
+
+          results.push({
+            note: {
+              title: content.title || metadata.file_path?.split('/').pop()?.replace('.md', '') || 'Untitled',
+              path: metadata.file_path || '',
+              content: content.body || ''
+            },
+            score: item.score || 0,
+            matchType: this.searchMode === 'hybrid' ? 'hybrid' : 'semantic'
+          });
+        }
+      }
+
+      return results;
+    } catch (error) {
+      console.error('PACASDB search failed:', error);
+      // Fall back to keyword search
+      return this.performKeywordSearch(query);
+    }
+  }
+
   async performKeywordSearch(query) {
     // Simple keyword search in file names and content
     const results = [];
@@ -826,13 +970,60 @@ export class GlobalSearch {
     return results.slice(0, 20); // Limit to 20 results
   }
 
+  /**
+   * Handle sync to PACASDB (premium feature)
+   */
+  async handlePacasdbSync(syncStatus, syncBtn, style) {
+    const vaultSync = window.vaultSync;
+    if (!vaultSync) {
+      throw new Error('VaultSync not available');
+    }
+
+    syncStatus.textContent = 'Syncing to PACASDB...';
+
+    // Listen for progress events
+    const progressHandler = (event) => {
+      const { progress, indexed, total } = event.detail;
+      syncStatus.textContent = `Syncing to PACASDB: ${indexed}/${total} (${progress}%)`;
+    };
+    window.addEventListener('vault-sync-progress', progressHandler);
+
+    try {
+      const vaultPath = window.currentVaultPath || '';
+      const result = await vaultSync.syncAllDocuments(vaultPath);
+
+      syncStatus.textContent = `Sync complete: ${result.indexed}/${result.total} indexed`;
+      syncStatus.style.color = result.failed > 0 ? 'var(--warning-color)' : 'var(--success-color)';
+
+      // Reset button after delay
+      setTimeout(() => {
+        syncStatus.style.display = 'none';
+        syncStatus.style.color = '';
+      }, 5000);
+
+    } finally {
+      window.removeEventListener('vault-sync-progress', progressHandler);
+
+      // Re-enable button
+      syncBtn.disabled = false;
+      syncBtn.style.opacity = '1';
+      syncBtn.innerHTML = `
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+          <circle cx="12" cy="12" r="3"></circle>
+        </svg>
+        Sync
+      `;
+
+      // Clean up style
+      style.remove();
+    }
+  }
+
   async handleSync() {
-    // This method syncs the current vault to Qdrant
-    // It first syncs the vault name to ensure Qdrant has the correct vault context
-    // Then syncs all the notes from the vault
     const syncBtn = this.container.querySelector('.sync-btn');
     const syncStatus = this.container.querySelector('.sync-status');
-    
+
     // Disable button during sync
     syncBtn.disabled = true;
     syncBtn.style.opacity = '0.5';
@@ -842,7 +1033,7 @@ export class GlobalSearch {
       </svg>
       Syncing...
     `;
-    
+
     // Add spinning animation
     const style = document.createElement('style');
     style.textContent = `
@@ -854,11 +1045,46 @@ export class GlobalSearch {
       }
     `;
     document.head.appendChild(style);
-    
+
     syncStatus.style.display = 'block';
     syncStatus.textContent = 'Preparing sync...';
-    
+
     try {
+      // Check if PACASDB is available
+      if (!this.isPacasdbAvailable()) {
+        // Show premium required message
+        const entitlementManager = window.entitlementManager;
+        if (!entitlementManager || !entitlementManager.isPremiumEnabled()) {
+          syncStatus.textContent = 'Sync requires PACASDB Premium license';
+        } else {
+          syncStatus.textContent = 'Connect to PACASDB server first';
+        }
+        syncStatus.style.color = 'var(--warning-color)';
+
+        setTimeout(() => {
+          syncStatus.style.display = 'none';
+          syncStatus.style.color = '';
+        }, 3000);
+
+        // Re-enable button
+        syncBtn.disabled = false;
+        syncBtn.style.opacity = '1';
+        syncBtn.innerHTML = `
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+            <circle cx="12" cy="12" r="3"></circle>
+          </svg>
+          Sync
+        `;
+        style.remove();
+        return;
+      }
+
+      // Use PACASDB sync
+      await this.handlePacasdbSync(syncStatus, syncBtn, style);
+      return;
+
+      // Legacy Qdrant sync (disabled)
       // First sync vault name to ensure Qdrant has the correct vault context
       syncStatus.textContent = 'Syncing vault name...';
       try {
@@ -868,7 +1094,7 @@ export class GlobalSearch {
         console.error('Failed to sync vault name:', error);
         // Continue with sync even if vault name sync fails
       }
-      
+
       // Wait a moment for the server to restart if needed
       await new Promise(resolve => setTimeout(resolve, 1000));
       

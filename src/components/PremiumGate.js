@@ -46,7 +46,8 @@ export default class PremiumGate {
     const buttonContainer = document.createElement('div');
     buttonContainer.className = 'button-container';
 
-    if (status.type === 'Unlicensed') {
+    // Backend returns lowercase 'status' field
+    if (status.status === 'unlicensed') {
       description.textContent = 'Unlock semantic search and cognitive memory features with a free 30-day trial.';
 
       const trialButton = this.createButton('Start Free Trial', 'primary', () => this.handleStartTrial());
@@ -55,13 +56,13 @@ export default class PremiumGate {
       buttonContainer.appendChild(trialButton);
       buttonContainer.appendChild(purchaseButton);
 
-    } else if (status.type === 'Expired') {
+    } else if (status.status === 'expired') {
       description.textContent = 'Your trial has expired. Purchase a license to continue using premium features.';
 
       const purchaseButton = this.createButton('Purchase License', 'primary', () => this.handlePurchase());
       buttonContainer.appendChild(purchaseButton);
 
-    } else if (status.type === 'Invalid') {
+    } else if (status.status === 'invalid') {
       description.textContent = 'Your license is invalid. Please purchase a valid license.';
 
       const purchaseButton = this.createButton('Purchase License', 'primary', () => this.handlePurchase());

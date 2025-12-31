@@ -52,45 +52,46 @@ export default class VaultSync {
     };
 
     try {
-      // List all markdown files in vault
-      const files = await invoke('list_vault_files', {
-        vaultPath,
-        extension: '.md'
-      });
+      // Get all notes in vault using existing command
+      const notes = await invoke('get_vault_notes');
 
-      summary.total = files.length;
-      console.log(`📚 Found ${files.length} markdown files`);
+      summary.total = notes.length;
+      console.log(`📚 Found ${notes.length} markdown files`);
 
       // Process in batches of 50
       const batchSize = 50;
-      for (let i = 0; i < files.length; i += batchSize) {
-        const batch = files.slice(i, i + batchSize);
+      for (let i = 0; i < notes.length; i += batchSize) {
+        const batch = notes.slice(i, i + batchSize);
         const documents = [];
 
         // Read and parse each file in batch
-        for (const filePath of batch) {
+        for (const note of batch) {
           try {
             // Skip hidden files
-            const pathParts = filePath.split('/');
+            const pathParts = note.path.split('/');
             if (pathParts.some(part => part.startsWith('.'))) {
               continue;
             }
 
-            const content = await invoke('read_file_content', { filePath });
+            // Build full path from vault path and relative note path
+            const fullPath = `${vaultPath}/${note.path}`;
+            const content = await invoke('read_file_content', { filePath: fullPath });
             const parsed = this.parseMarkdown(content);
 
             documents.push({
-              content: parsed.body,
-              title: parsed.title,
+              content: {
+                title: parsed.title || note.title,
+                body: parsed.body
+              },
               metadata: {
-                file_path: filePath,
+                file_path: note.path,
                 ...parsed.frontmatter
               }
             });
           } catch (error) {
-            console.error(`Failed to read ${filePath}:`, error);
+            console.error(`Failed to read ${note.path}:`, error);
             summary.failed++;
-            summary.errors.push({ file: filePath, error: error.message });
+            summary.errors.push({ file: note.path, error: error.message });
           }
         }
 
@@ -118,7 +119,7 @@ export default class VaultSync {
         }
 
         // Emit progress event
-        const progress = Math.floor(((i + batch.length) / files.length) * 100);
+        const progress = Math.floor(((i + batch.length) / notes.length) * 100);
         window.dispatchEvent(new CustomEvent('vault-sync-progress', {
           detail: { progress, indexed: summary.indexed, total: summary.total }
         }));
@@ -201,8 +202,10 @@ export default class VaultSync {
 
       // Prepare document for indexing
       const doc = {
-        content: parsed.body,
-        title: parsed.title,
+        content: {
+          title: parsed.title,
+          body: parsed.body
+        },
         metadata: {
           file_path: path,
           ...parsed.frontmatter

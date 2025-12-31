@@ -47,7 +47,7 @@ class PACASDBClient {
       const timeoutId = setTimeout(() => controller.abort(), this.connectionTimeout);
 
       // Perform health check
-      const response = await fetch(`${this.baseUrl}/health`, {
+      const response = await fetch(`${this.baseUrl}/api/v1/health`, {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json'
@@ -91,14 +91,25 @@ class PACASDBClient {
     }
 
     try {
-      const response = await fetch(`${this.baseUrl}/index`, {
+      // Add vault_id to document metadata
+      const docWithVault = {
+        ...document,
+        metadata: {
+          ...document.metadata,
+          vault_id: vaultId
+        }
+      };
+
+      const response = await fetch(`${this.baseUrl}/api/v1/documents`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-          vault_id: vaultId,
-          document: document
+          content: docWithVault.content,
+          metadata: docWithVault.metadata,
+          embed: true,
+          index_text: true
         })
       });
 
@@ -130,14 +141,24 @@ class PACASDBClient {
     }
 
     try {
-      const response = await fetch(`${this.baseUrl}/batch-index`, {
+      // Add vault_id to each document's metadata
+      const docsWithVault = documents.map(doc => ({
+        ...doc,
+        metadata: {
+          ...doc.metadata,
+          vault_id: vaultId
+        }
+      }));
+
+      const response = await fetch(`${this.baseUrl}/api/v1/documents/batch`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-          vault_id: vaultId,
-          documents: documents
+          documents: docsWithVault,
+          embed: true,
+          index_text: true
         })
       });
 
@@ -180,37 +201,36 @@ class PACASDBClient {
     }
 
     try {
-      // Determine query type
-      let queryType;
-      if (params.text && params.keywords) {
-        queryType = 'hybrid';
-      } else if (params.text) {
-        queryType = 'semantic';
-      } else if (params.keywords) {
-        queryType = 'keyword';
-      } else {
-        throw new Error('Must provide either text or keywords');
-      }
-
-      // Build payload
+      // Build payload matching QueryRequest schema
       const payload = {
-        query_type: queryType,
         k: params.k || 10
       };
 
+      // text for semantic search
       if (params.text) {
         payload.text = params.text;
       }
 
+      // keywords must be a string (not array)
       if (params.keywords) {
-        payload.keywords = params.keywords;
+        if (Array.isArray(params.keywords)) {
+          payload.keywords = params.keywords.join(' ');
+        } else {
+          payload.keywords = params.keywords;
+        }
       }
 
+      // Must have at least text or keywords
+      if (!payload.text && !payload.keywords) {
+        throw new Error('Must provide either text or keywords');
+      }
+
+      // Vault filter goes in filters object
       if (params.currentVaultOnly && vaultId) {
-        payload.vault_filter = vaultId;
+        payload.filters = { vault_id: vaultId };
       }
 
-      const response = await fetch(`${this.baseUrl}/search`, {
+      const response = await fetch(`${this.baseUrl}/api/v1/query`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
@@ -245,7 +265,7 @@ class PACASDBClient {
     }
 
     try {
-      const response = await fetch(`${this.baseUrl}/documents/${docId}`, {
+      const response = await fetch(`${this.baseUrl}/api/v1/documents/${docId}`, {
         method: 'DELETE',
         headers: {
           'Content-Type': 'application/json'
@@ -520,6 +540,46 @@ class PACASDBClient {
   clearCache() {
     if (this.searchCache) {
       this.searchCache.clear();
+    }
+  }
+
+  /**
+   * Get database statistics from PACASDB server
+   * @returns {Promise<Object>} Stats with document_count, index_size, etc.
+   * @throws {Error} If not connected
+   */
+  async getStats() {
+    if (!this.connected) {
+      throw new Error('Not connected to PACASDB server');
+    }
+
+    try {
+      const response = await fetch(`${this.baseUrl}/api/v1/stats`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (!response.ok) {
+        // Stats endpoint may not exist - return defaults
+        return {
+          document_count: 0,
+          index_size: 0
+        };
+      }
+
+      const stats = await response.json();
+      return {
+        document_count: stats.document_count || stats.total_documents || 0,
+        index_size: stats.index_size || 0
+      };
+    } catch (error) {
+      // Return defaults on error
+      return {
+        document_count: 0,
+        index_size: 0
+      };
     }
   }
 }

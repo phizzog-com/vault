@@ -70,7 +70,8 @@ class EntitlementManager {
     if (!this.status || typeof this.status !== 'object') {
       return false;
     }
-    return ['Trial', 'Licensed', 'GracePeriod'].includes(this.status.type);
+    // Backend returns lowercase status field: 'trial', 'licensed', 'graceperiod'
+    return ['trial', 'licensed', 'graceperiod'].includes(this.status.status);
   }
 
   /**
@@ -82,11 +83,12 @@ class EntitlementManager {
       return null;
     }
 
-    switch (this.status.type) {
-      case 'Trial':
+    // Backend returns lowercase status field
+    switch (this.status.status) {
+      case 'trial':
         return this.status.days_remaining || null;
 
-      case 'GracePeriod':
+      case 'graceperiod':
         if (this.status.grace_expires_at) {
           const expiresAt = new Date(this.status.grace_expires_at);
           const now = new Date();
@@ -96,7 +98,7 @@ class EntitlementManager {
         }
         return null;
 
-      case 'Expired':
+      case 'expired':
         return 0;
 
       default:
@@ -113,25 +115,26 @@ class EntitlementManager {
       return 'Unknown Status';
     }
 
-    switch (this.status.type) {
-      case 'Unlicensed':
+    // Backend returns lowercase status field
+    switch (this.status.status) {
+      case 'unlicensed':
         return 'No active license';
 
-      case 'Trial':
+      case 'trial':
         const trialDays = this.status.days_remaining || 0;
         return `Trial: ${trialDays} days remaining`;
 
-      case 'Licensed':
+      case 'licensed':
         return 'Premium Active';
 
-      case 'Expired':
+      case 'expired':
         return 'License Expired';
 
-      case 'GracePeriod':
+      case 'graceperiod':
         const graceDays = this.getDaysRemaining();
         return `Grace Period: ${graceDays} days remaining`;
 
-      case 'Invalid':
+      case 'invalid':
         return 'Invalid License';
 
       default:
@@ -228,7 +231,7 @@ class EntitlementManager {
    */
   async startTrial() {
     try {
-      const result = await invoke('start_trial');
+      const result = await invoke('start_trial_cmd');
       await this.refresh(); // Refresh status after trial start
       return result;
     } catch (error) {
