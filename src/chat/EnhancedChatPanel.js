@@ -17,6 +17,7 @@ import { mcpManager } from '../mcp/MCPManager.js';
 import { mcpToolHandler } from '../mcp/MCPToolHandler.js';
 import { gemmaPromptToolCalling } from './GemmaPromptToolCalling.js';
 import { tagContextExpander } from './TagContextExpander.js';
+import { ClaudeAgentSDK } from './ClaudeAgentSDK.js';
 
 // Import Tauri API
 import { invoke } from '@tauri-apps/api/core';
@@ -49,6 +50,12 @@ export class EnhancedChatPanel {
             },
             bedrock: {
                 name: 'Amazon Bedrock (Claude)',
+                sdk: null,
+                configured: false,
+                status: 'unknown'
+            },
+            claudeAgent: {
+                name: 'Claude Agent',
                 sdk: null,
                 configured: false,
                 status: 'unknown'
@@ -141,6 +148,7 @@ export class EnhancedChatPanel {
         this.providers.openai.sdk = new OpenAISDK();
         this.providers.gemini.sdk = new GeminiSDK();
         this.providers.bedrock.sdk = new BedrockClaudeSDK();
+        this.providers.claudeAgent.sdk = new ClaudeAgentSDK();
         
         await this.initializeProviders();
         
@@ -189,23 +197,33 @@ export class EnhancedChatPanel {
     
     async initializeProviders() {
         console.log('🚀 Initializing AI providers...');
-        
+
         try {
+            // Get settings first for all providers
+            const settings = await invoke('get_ai_settings');
+
             // Initialize both SDKs
             const openaiInit = await this.providers.openai.sdk.initialize();
             this.providers.openai.configured = openaiInit;
             this.providers.openai.status = openaiInit ? 'ready' : 'not-configured';
-            
+
             const geminiInit = await this.providers.gemini.sdk.initialize();
             this.providers.gemini.configured = geminiInit;
             this.providers.gemini.status = geminiInit ? 'ready' : 'not-configured';
-            
+
             const bedrockInit = await this.providers.bedrock.sdk.initialize();
             this.providers.bedrock.configured = bedrockInit;
             this.providers.bedrock.status = bedrockInit ? 'ready' : 'not-configured';
-            
+
+            // Initialize Claude Agent SDK with API key from settings
+            const claudeAgentInit = await this.providers.claudeAgent.sdk.initialize({
+                apiKey: settings?.anthropic_api_key || settings?.api_key,
+                model: 'claude-sonnet-4-5-20250929'
+            });
+            this.providers.claudeAgent.configured = claudeAgentInit;
+            this.providers.claudeAgent.status = claudeAgentInit ? 'ready' : 'not-configured';
+
             // Determine which provider to use based on the endpoint
-            const settings = await invoke('get_ai_settings');
             this.updateContextCharLimit(settings);
             if (settings?.endpoint?.includes('generativelanguage.googleapis.com')) {
                 // Check if the endpoint has the incorrect /openai/ path
@@ -237,12 +255,16 @@ export class EnhancedChatPanel {
             this.providers.gemini.status = 'error';
             this.providers.bedrock.configured = false;
             this.providers.bedrock.status = 'error';
+            this.providers.claudeAgent.configured = false;
+            this.providers.claudeAgent.status = 'error';
             this.currentProvider = 'openai'; // Fallback to OpenAI
         }
-        
+
         console.log('Providers initialized:', {
             openai: this.providers.openai.status,
             gemini: this.providers.gemini.status,
+            bedrock: this.providers.bedrock.status,
+            claudeAgent: this.providers.claudeAgent.status,
             current: this.currentProvider
         });
     }
@@ -732,8 +754,106 @@ export class EnhancedChatPanel {
             
             
             let response = '';
-            
-            if (this.currentProvider === 'claude') {
+
+            if (this.currentProvider === 'claudeAgent') {
+                // Use Claude Agent SDK with streaming
+                console.log('🤖 Using Claude Agent SDK');
+
+                // Create a streaming message
+                const messageId = 'msg_' + Date.now();
+                const streamingMessage = {
+                    id: messageId,
+                    type: 'assistant',
+                    content: '',
+                    timestamp: new Date()
+                };
+                this.interface.addMessage(streamingMessage);
+                this.interface.hideTyping();
+
+                try {
+                    for await (const event of provider.sdk.chat(message, allContext)) {
+                        switch (event.type) {
+                            case 'start':
+                                console.log('🚀 Claude Agent started, model:', event.model);
+                                break;
+
+                            case 'chunk':
+                                // Streaming text chunk
+                                streamingMessage.content += event.text;
+                                this.interface.updateMessage(messageId, streamingMessage.content);
+                                break;
+
+                            case 'tool_start':
+                                // Tool invocation started
+                                console.log('🔧 Tool started:', event.toolName);
+                                this.interface.addMessage({
+                                    type: 'tool',
+                                    content: `Using tool: ${event.toolName}`,
+                                    timestamp: new Date()
+                                });
+                                break;
+
+                            case 'tool_use':
+                                console.log('🔧 Tool use:', event.toolName, event.toolInput);
+                                break;
+
+                            case 'tool_result':
+                                console.log('✅ Tool result:', event.toolName);
+                                break;
+
+                            case 'assistant':
+                                // Complete message - extract text content
+                                if (event.content && Array.isArray(event.content)) {
+                                    const textContent = event.content
+                                        .filter(block => block.type === 'text')
+                                        .map(block => block.text)
+                                        .join('');
+                                    if (textContent && !streamingMessage.content) {
+                                        streamingMessage.content = textContent;
+                                        this.interface.updateMessage(messageId, streamingMessage.content);
+                                    }
+                                }
+                                break;
+
+                            case 'result':
+                                // Final result with statistics
+                                console.log('📊 Result:', {
+                                    success: event.success,
+                                    cost: event.cost,
+                                    turns: event.turns
+                                });
+                                break;
+
+                            case 'error':
+                                console.error('❌ Claude Agent error:', event.error);
+                                this.interface.finalizeStreamingMessage(messageId);
+                                this.interface.addMessage({
+                                    type: 'error',
+                                    content: event.error,
+                                    timestamp: new Date()
+                                });
+                                return;
+
+                            case 'aborted':
+                                console.log('🛑 Request aborted');
+                                this.interface.finalizeStreamingMessage(messageId);
+                                return;
+                        }
+                    }
+
+                    // Finalize the streaming message
+                    this.interface.finalizeStreamingMessage(messageId);
+
+                } catch (agentError) {
+                    console.error('Claude Agent error:', agentError);
+                    this.interface.finalizeStreamingMessage(messageId);
+                    this.interface.addMessage({
+                        type: 'error',
+                        content: `Claude Agent error: ${agentError.message}`,
+                        timestamp: new Date()
+                    });
+                }
+            } else if (this.currentProvider === 'claude') {
                 // Use Claude SDK
                 response = await provider.sdk.sendMessage(message, allContext);
                 this.interface.hideTyping();
