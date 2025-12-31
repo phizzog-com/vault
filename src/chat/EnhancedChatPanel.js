@@ -242,6 +242,9 @@ export class EnhancedChatPanel {
             } else if (settings?.endpoint?.includes('amazonaws.com/bedrock')) {
                 this.currentProvider = 'bedrock';
                 console.log('🎯 Detected Bedrock host, using Bedrock Claude SDK');
+            } else if (settings?.provider === 'claudeAgent' || settings?.endpoint?.includes('anthropic.com')) {
+                this.currentProvider = 'claudeAgent';
+                console.log('🎯 Using Claude Agent SDK');
             } else {
                 this.currentProvider = 'openai';
                 console.log('🎯 Using OpenAI SDK for endpoint:', settings?.endpoint);

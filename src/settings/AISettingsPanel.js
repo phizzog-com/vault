@@ -1,4 +1,5 @@
 import { invoke } from '@tauri-apps/api/core';
+import { icons } from '../icons/icon-utils.js';
 
 export class AISettingsPanel {
     constructor() {
@@ -216,6 +217,13 @@ export class AISettingsPanel {
                 this.state.temperature = 0.7;
                 this.state.maxTokens = 4096;
                 break;
+            case 'claudeAgent':
+                this.state.endpoint = 'https://api.anthropic.com';
+                this.state.model = 'claude-sonnet-4-5-20250929';
+                this.state.apiKey = '';
+                this.state.temperature = 0.7;
+                this.state.maxTokens = 8192;
+                break;
         }
     }
     
@@ -291,6 +299,8 @@ export class AISettingsPanel {
             return 'Examples: llama2, mistral, codellama';
         } else if (endpoint.includes('1234')) {
             return 'Examples: Use model name from LM Studio';
+        } else if (endpoint.includes('anthropic.com')) {
+            return 'Examples: claude-sonnet-4-5-20250929, claude-opus-4-5-20251101, claude-haiku-3-5-20241022';
         }
         return 'Enter the model name for your AI provider';
     }
@@ -308,40 +318,46 @@ export class AISettingsPanel {
                 <div class="quick-setup">
                     <p>Quick Setup:</p>
                     <div class="quick-setup-buttons">
-                        <button onclick="aiSettingsPanel.quickSetup('openai')" 
+                        <button onclick="aiSettingsPanel.quickSetup('openai')"
                                 class="quick-setup-btn ${this.state.provider === 'openai' ? 'selected' : ''} ${this.activeProvider === 'openai' ? 'active' : ''}">
-                            <span class="provider-icon">🤖</span>
+                            <span class="provider-icon">${icons.bot({ size: 16 })}</span>
                             OpenAI
-                            ${this.activeProvider === 'openai' ? '<span class="active-badge">✓</span>' : ''}
+                            ${this.activeProvider === 'openai' ? `<span class="active-badge">${icons.check({ size: 12 })}</span>` : ''}
                         </button>
-                        <button onclick="aiSettingsPanel.quickSetup('gemini')" 
+                        <button onclick="aiSettingsPanel.quickSetup('gemini')"
                                 class="quick-setup-btn ${this.state.provider === 'gemini' ? 'selected' : ''} ${this.activeProvider === 'gemini' ? 'active' : ''}">
-                            <span class="provider-icon">💎</span>
+                            <span class="provider-icon">${icons.gem({ size: 16 })}</span>
                             Gemini
-                            ${this.activeProvider === 'gemini' ? '<span class="active-badge">✓</span>' : ''}
+                            ${this.activeProvider === 'gemini' ? `<span class="active-badge">${icons.check({ size: 12 })}</span>` : ''}
                         </button>
-                        <button onclick="aiSettingsPanel.quickSetup('ollama')" 
+                        <button onclick="aiSettingsPanel.quickSetup('ollama')"
                                 class="quick-setup-btn ${this.state.provider === 'ollama' ? 'selected' : ''} ${this.activeProvider === 'ollama' ? 'active' : ''}">
-                            <span class="provider-icon">🦙</span>
+                            <span class="provider-icon">${icons.cat({ size: 16 })}</span>
                             Ollama
-                            ${this.activeProvider === 'ollama' ? '<span class="active-badge">✓</span>' : ''}
+                            ${this.activeProvider === 'ollama' ? `<span class="active-badge">${icons.check({ size: 12 })}</span>` : ''}
                         </button>
-                        <button onclick="aiSettingsPanel.quickSetup('lmstudio')" 
+                        <button onclick="aiSettingsPanel.quickSetup('lmstudio')"
                                 class="quick-setup-btn ${this.state.provider === 'lmstudio' ? 'selected' : ''} ${this.activeProvider === 'lmstudio' ? 'active' : ''}">
-                            <span class="provider-icon">🖥️</span>
+                            <span class="provider-icon">${icons.monitor({ size: 16 })}</span>
                             LM Studio
-                            ${this.activeProvider === 'lmstudio' ? '<span class="active-badge">✓</span>' : ''}
+                            ${this.activeProvider === 'lmstudio' ? `<span class="active-badge">${icons.check({ size: 12 })}</span>` : ''}
                         </button>
-                        <button onclick="aiSettingsPanel.quickSetup('bedrock')" 
+                        <button onclick="aiSettingsPanel.quickSetup('bedrock')"
                                 class="quick-setup-btn ${this.state.provider === 'bedrock' ? 'selected' : ''} ${this.activeProvider === 'bedrock' ? 'active' : ''}">
-                            <span class="provider-icon">🌩️</span>
+                            <span class="provider-icon">${icons.cloud({ size: 16 })}</span>
                             Bedrock (Claude)
-                            ${this.activeProvider === 'bedrock' ? '<span class=\"active-badge\">✓</span>' : ''}
+                            ${this.activeProvider === 'bedrock' ? `<span class="active-badge">${icons.check({ size: 12 })}</span>` : ''}
+                        </button>
+                        <button onclick="aiSettingsPanel.quickSetup('claudeAgent')"
+                                class="quick-setup-btn ${this.state.provider === 'claudeAgent' ? 'selected' : ''} ${this.activeProvider === 'claudeAgent' ? 'active' : ''}">
+                            <span class="provider-icon">${icons.sparkles({ size: 16 })}</span>
+                            Claude Agent
+                            ${this.activeProvider === 'claudeAgent' ? `<span class="active-badge">${icons.check({ size: 12 })}</span>` : ''}
                         </button>
                     </div>
                     <p class="quick-setup-info">
-                        ${this.state.provider !== this.activeProvider ? 
-                            `<span class="warning">⚠️ You're editing ${this.state.provider} settings. Click Save to make it active.</span>` : 
+                        ${this.state.provider !== this.activeProvider ?
+                            `<span class="warning">${icons.alertTriangle({ size: 14 })} You're editing ${this.state.provider} settings. Click Save to make it active.</span>` :
                             `<span class="info">Currently using ${this.activeProvider}</span>`}
                     </p>
                 </div>
@@ -370,7 +386,7 @@ export class AISettingsPanel {
                                 class="form-input"
                             />
                             <button onclick="aiSettingsPanel.toggleApiKeyVisibility()" class="toggle-visibility-btn">
-                                ${this.state.showApiKey ? '🙈' : '👁️'}
+                                ${this.state.showApiKey ? icons.lockKeyhole({ size: 14 }) : icons.eye({ size: 14 })}
                             </button>
                         </div>
                         <small>Leave empty for local AI servers</small>
@@ -495,7 +511,7 @@ export class AISettingsPanel {
                                 gap: 6px;
                                 transition: all 0.2s;
                             " onmouseover="this.style.background='var(--bg-tertiary)'" onmouseout="this.style.background='var(--bg-secondary)'">
-                                <span>🔧</span> MCP Settings
+                                ${icons.settings({ size: 14 })} MCP Settings
                             </button>
                         </div>
                     </div>
@@ -507,33 +523,36 @@ export class AISettingsPanel {
     renderTestStatus() {
         const status = this.state.testStatus;
         const overall = status.overall_status || status.overallStatus;
-        
+
         if (!overall) return '';
-        
+
+        const successIcon = icons.checkCircle({ size: 14 });
+        const errorIcon = icons.alertCircle({ size: 14 });
+
         return `
             <div class="test-status ${overall.success ? 'success' : 'error'}">
                 <div class="test-result">
-                    <span class="status-icon">${overall.success ? '✓' : '✗'}</span>
+                    <span class="status-icon">${overall.success ? successIcon : errorIcon}</span>
                     <span class="status-message">${overall.message}</span>
                 </div>
-                
+
                 ${status.endpoint_status ? `
                     <div class="test-detail">
-                        <span class="detail-icon">${status.endpoint_status.success ? '✓' : '✗'}</span>
+                        <span class="detail-icon">${status.endpoint_status.success ? successIcon : errorIcon}</span>
                         Endpoint: ${status.endpoint_status.message}
                     </div>
                 ` : ''}
-                
+
                 ${status.auth_status ? `
                     <div class="test-detail">
-                        <span class="detail-icon">${status.auth_status.success ? '✓' : '✗'}</span>
+                        <span class="detail-icon">${status.auth_status.success ? successIcon : errorIcon}</span>
                         Authentication: ${status.auth_status.message}
                     </div>
                 ` : ''}
-                
+
                 ${status.model_status ? `
                     <div class="test-detail">
-                        <span class="detail-icon">${status.model_status.success ? '✓' : '✗'}</span>
+                        <span class="detail-icon">${status.model_status.success ? successIcon : errorIcon}</span>
                         Model: ${status.model_status.message}
                     </div>
                 ` : ''}
