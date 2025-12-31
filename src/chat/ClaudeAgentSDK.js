@@ -5,6 +5,7 @@ console.log('🤖 ClaudeAgentSDK loading...');
 import { query, tool, createSdkMcpServer } from "@anthropic-ai/claude-agent-sdk";
 import { z } from "zod";
 import { invoke } from '@tauri-apps/api/core';
+import { markdownUtils } from '../editor/markdown-extensions.js';
 
 export class ClaudeAgentSDK {
   constructor() {
@@ -70,6 +71,8 @@ export class ClaudeAgentSDK {
       this.createSearchNotesTool(),
       this.createGetNoteTool(),
       this.createGetCurrentNoteTool(),
+      this.createListTagsTool(),
+      this.createNotesByTagTool(),
       // Additional tools will be added in subsequent tasks
     ];
   }
@@ -274,6 +277,170 @@ export class ClaudeAgentSDK {
             content: [{
               type: "text",
               text: JSON.stringify({ error: error.message || 'Failed to get current note', hasNote: false })
+            }]
+          };
+        }
+      }
+    );
+  }
+
+  /**
+   * Create the list_tags tool
+   * @returns {Object} - Tool definition
+   */
+  createListTagsTool() {
+    return tool(
+      "list_tags",
+      "List all unique tags used across all notes in the vault. Returns tags with their usage counts.",
+      {},
+      async () => {
+        console.log('🏷️ list_tags called');
+
+        try {
+          // Get file tree to access all markdown files
+          const fileTree = await invoke('getFileTree');
+
+          if (!fileTree || !fileTree.files) {
+            return {
+              content: [{
+                type: "text",
+                text: JSON.stringify({ tags: [], total: 0, message: "No files found in vault" })
+              }]
+            };
+          }
+
+          const tagCounts = new Map();
+
+          // Process each markdown file
+          for (const file of fileTree.files) {
+            if (!file.path.endsWith('.md')) continue;
+
+            try {
+              const content = await invoke('readFileContent', { filePath: file.path });
+              const tags = markdownUtils.extractTags(content);
+
+              for (const tagInfo of tags) {
+                const tag = tagInfo.tag;
+                tagCounts.set(tag, (tagCounts.get(tag) || 0) + 1);
+              }
+            } catch {
+              // Skip files that can't be read
+            }
+          }
+
+          // Convert to sorted array
+          const tagsArray = Array.from(tagCounts.entries())
+            .map(([tag, count]) => ({ tag, count }))
+            .sort((a, b) => b.count - a.count);
+
+          console.log('✅ list_tags found', tagsArray.length, 'unique tags');
+
+          return {
+            content: [{
+              type: "text",
+              text: JSON.stringify({
+                tags: tagsArray,
+                total: tagsArray.length
+              })
+            }]
+          };
+        } catch (error) {
+          console.error('❌ list_tags error:', error);
+          return {
+            content: [{
+              type: "text",
+              text: JSON.stringify({ error: error.message || 'Failed to list tags' })
+            }]
+          };
+        }
+      }
+    );
+  }
+
+  /**
+   * Create the notes_by_tag tool
+   * @returns {Object} - Tool definition
+   */
+  createNotesByTagTool() {
+    return tool(
+      "notes_by_tag",
+      "Find all notes containing a specific tag. Returns note paths and titles.",
+      {
+        tag: z.string().describe("Tag to search for (with or without # prefix)")
+      },
+      async (args) => {
+        console.log('🏷️ notes_by_tag called:', args);
+
+        try {
+          // Strip # prefix if present
+          let searchTag = args.tag;
+          if (searchTag.startsWith('#')) {
+            searchTag = searchTag.slice(1);
+          }
+
+          if (!searchTag) {
+            return {
+              content: [{
+                type: "text",
+                text: JSON.stringify({ error: "Tag is required", notes: [] })
+              }]
+            };
+          }
+
+          // Get file tree
+          const fileTree = await invoke('getFileTree');
+
+          if (!fileTree || !fileTree.files) {
+            return {
+              content: [{
+                type: "text",
+                text: JSON.stringify({ notes: [], tag: searchTag, message: "No files found in vault" })
+              }]
+            };
+          }
+
+          const matchingNotes = [];
+
+          // Search each markdown file for the tag
+          for (const file of fileTree.files) {
+            if (!file.path.endsWith('.md')) continue;
+
+            try {
+              const content = await invoke('readFileContent', { filePath: file.path });
+              const tags = markdownUtils.extractTags(content);
+
+              const hasTag = tags.some(t => t.tag.toLowerCase() === searchTag.toLowerCase());
+
+              if (hasTag) {
+                matchingNotes.push({
+                  path: file.path,
+                  title: file.name.replace('.md', ''),
+                  allTags: tags.map(t => t.tag)
+                });
+              }
+            } catch {
+              // Skip files that can't be read
+            }
+          }
+
+          console.log('✅ notes_by_tag found', matchingNotes.length, 'notes with tag:', searchTag);
+
+          return {
+            content: [{
+              type: "text",
+              text: JSON.stringify({
+                notes: matchingNotes,
+                tag: searchTag,
+                count: matchingNotes.length
+              })
+            }]
+          };
+        } catch (error) {
+          console.error('❌ notes_by_tag error:', error);
+          return {
+            content: [{
+              type: "text",
+              text: JSON.stringify({ error: error.message || 'Failed to search by tag', tag: args.tag })
             }]
           };
         }
