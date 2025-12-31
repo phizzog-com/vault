@@ -73,6 +73,7 @@ export class ClaudeAgentSDK {
       this.createGetCurrentNoteTool(),
       this.createListTagsTool(),
       this.createNotesByTagTool(),
+      this.createSemanticSearchTool(),
       // Additional tools will be added in subsequent tasks
     ];
   }
@@ -441,6 +442,110 @@ export class ClaudeAgentSDK {
             content: [{
               type: "text",
               text: JSON.stringify({ error: error.message || 'Failed to search by tag', tag: args.tag })
+            }]
+          };
+        }
+      }
+    );
+  }
+
+  /**
+   * Create the semantic_search tool (PACASDB Premium)
+   * @returns {Object} - Tool definition
+   */
+  createSemanticSearchTool() {
+    return tool(
+      "semantic_search",
+      "Search notes using semantic similarity or hybrid search. Requires PACASDB Premium. Returns notes ranked by relevance.",
+      {
+        query: z.string().describe("Natural language search query"),
+        searchType: z.enum(["semantic", "hybrid", "keyword"]).default("hybrid").describe("Search type: semantic (meaning), keyword (text match), or hybrid (both)"),
+        limit: z.number().optional().default(10).describe("Maximum number of results")
+      },
+      async (args) => {
+        console.log('🧠 semantic_search called:', args);
+
+        try {
+          // Check premium status first
+          const entitlementManager = window.entitlementManager;
+          if (!entitlementManager || !entitlementManager.isPremiumEnabled()) {
+            return {
+              content: [{
+                type: "text",
+                text: JSON.stringify({
+                  error: "PACASDB Premium required",
+                  message: "Semantic search requires PACASDB Premium. Use search_notes for basic name matching, or upgrade to Premium for semantic search capabilities.",
+                  isPremium: false
+                })
+              }]
+            };
+          }
+
+          // Check PACASDB client connection
+          const client = window.pacasdbClient;
+          if (!client || !client.isConnected()) {
+            return {
+              content: [{
+                type: "text",
+                text: JSON.stringify({
+                  error: "PACASDB not connected",
+                  message: "Premium is enabled but PACASDB server is not connected. Please check your PACASDB server settings.",
+                  isPremium: true,
+                  connected: false
+                })
+              }]
+            };
+          }
+
+          // Build search parameters based on search type
+          const searchParams = {
+            k: args.limit || 10
+          };
+
+          if (args.searchType === 'keyword') {
+            searchParams.keywords = args.query;
+          } else if (args.searchType === 'semantic') {
+            searchParams.text = args.query;
+          } else {
+            // hybrid - use both
+            searchParams.text = args.query;
+            searchParams.keywords = args.query;
+          }
+
+          const results = await client.search(searchParams);
+
+          // Format results for the agent
+          const formattedResults = (results || []).map(result => ({
+            path: result.metadata?.path || result.metadata?.file || 'unknown',
+            title: result.metadata?.title || result.metadata?.file?.replace('.md', '') || 'Untitled',
+            score: result.score || 0,
+            snippet: result.content?.substring(0, 200) || ''
+          }));
+
+          console.log('✅ semantic_search found', formattedResults.length, 'results');
+
+          return {
+            content: [{
+              type: "text",
+              text: JSON.stringify({
+                results: formattedResults,
+                query: args.query,
+                searchType: args.searchType,
+                count: formattedResults.length,
+                isPremium: true,
+                connected: true
+              })
+            }]
+          };
+        } catch (error) {
+          console.error('❌ semantic_search error:', error);
+          return {
+            content: [{
+              type: "text",
+              text: JSON.stringify({
+                error: error.message || 'Semantic search failed',
+                query: args.query
+              })
             }]
           };
         }
