@@ -42,8 +42,23 @@ export class ClaudeAgentSDK {
    * @returns {Object} - MCP server instance
    */
   createVaultMcpServer() {
-    // Placeholder - will be implemented in cas-2.x tasks
-    return null;
+    console.log('🔧 Creating vault MCP server...');
+
+    try {
+      const tools = this.createVaultTools();
+
+      const server = createSdkMcpServer({
+        name: "vault",
+        version: "1.0.0",
+        tools
+      });
+
+      console.log('✅ Vault MCP server created with', tools.length, 'tools');
+      return server;
+    } catch (error) {
+      console.error('❌ Failed to create vault MCP server:', error);
+      throw error;
+    }
   }
 
   /**
