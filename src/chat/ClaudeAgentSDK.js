@@ -66,8 +66,63 @@ export class ClaudeAgentSDK {
    * @returns {Array} - Array of tool definitions
    */
   createVaultTools() {
-    // Placeholder - will be implemented in cas-2.x tasks
-    return [];
+    return [
+      this.createSearchNotesTool(),
+      // Additional tools will be added in subsequent tasks
+    ];
+  }
+
+  /**
+   * Create the search_notes tool
+   * @returns {Object} - Tool definition
+   */
+  createSearchNotesTool() {
+    return tool(
+      "search_notes",
+      "Search through notes in the vault by name. Returns matching note names and paths.",
+      {
+        query: z.string().describe("Search query to match against note names"),
+        limit: z.number().optional().default(10).describe("Maximum number of results to return")
+      },
+      async (args) => {
+        console.log('🔍 search_notes called:', args);
+
+        try {
+          if (!args.query || args.query.trim() === '') {
+            return {
+              content: [{ type: "text", text: JSON.stringify({ results: [], message: "Empty query provided" }) }]
+            };
+          }
+
+          const results = await invoke('searchNotesByName', {
+            searchTerm: args.query
+          });
+
+          const limitedResults = results.slice(0, args.limit || 10);
+
+          console.log('✅ search_notes found', limitedResults.length, 'results');
+
+          return {
+            content: [{
+              type: "text",
+              text: JSON.stringify({
+                results: limitedResults,
+                total: results.length,
+                query: args.query
+              })
+            }]
+          };
+        } catch (error) {
+          console.error('❌ search_notes error:', error);
+          return {
+            content: [{
+              type: "text",
+              text: JSON.stringify({ error: error.message || 'Search failed', query: args.query })
+            }]
+          };
+        }
+      }
+    );
   }
 
   /**
