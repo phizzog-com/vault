@@ -74,6 +74,9 @@ export class ClaudeAgentSDK {
       this.createListTagsTool(),
       this.createNotesByTagTool(),
       this.createSemanticSearchTool(),
+      this.createWriteNoteTool(),
+      this.createUpdateNoteTool(),
+      this.createAppendToNoteTool(),
       // Additional tools will be added in subsequent tasks
     ];
   }
@@ -546,6 +549,245 @@ export class ClaudeAgentSDK {
                 error: error.message || 'Semantic search failed',
                 query: args.query
               })
+            }]
+          };
+        }
+      }
+    );
+  }
+
+  /**
+   * Validate path is safe (no traversal, within vault)
+   * @param {string} path - Path to validate
+   * @returns {Object} - { valid: boolean, error?: string }
+   */
+  validatePath(path) {
+    if (!path) {
+      return { valid: false, error: "Path is required" };
+    }
+    if (path.includes('..')) {
+      return { valid: false, error: "Invalid path: Cannot use '..' for path traversal" };
+    }
+    if (path.startsWith('/') || path.startsWith('\\')) {
+      return { valid: false, error: "Invalid path: Must be relative to vault root" };
+    }
+    // Ensure it ends with .md
+    if (!path.endsWith('.md')) {
+      return { valid: false, error: "Invalid path: Must be a markdown file (.md)" };
+    }
+    return { valid: true };
+  }
+
+  /**
+   * Create the write_note tool
+   * @returns {Object} - Tool definition
+   */
+  createWriteNoteTool() {
+    return tool(
+      "write_note",
+      "Create a new note at the specified path. Will fail if the file already exists.",
+      {
+        path: z.string().describe("Path for the new note relative to vault root (e.g., 'folder/new-note.md')"),
+        content: z.string().describe("Markdown content for the new note")
+      },
+      async (args) => {
+        console.log('✍️ write_note called:', args.path);
+
+        try {
+          const validation = this.validatePath(args.path);
+          if (!validation.valid) {
+            return {
+              content: [{ type: "text", text: JSON.stringify({ error: validation.error }) }]
+            };
+          }
+
+          // Check if file already exists
+          try {
+            await invoke('readFileContent', { filePath: args.path });
+            // If we get here, file exists
+            return {
+              content: [{
+                type: "text",
+                text: JSON.stringify({ error: "File already exists", path: args.path, suggestion: "Use update_note to modify existing files" })
+              }]
+            };
+          } catch {
+            // File doesn't exist, we can create it
+          }
+
+          // Create the file
+          await invoke('writeFileContent', {
+            filePath: args.path,
+            content: args.content
+          });
+
+          // Dispatch file-created event to refresh file tree
+          window.dispatchEvent(new CustomEvent('file-created', { detail: { path: args.path } }));
+
+          console.log('✅ write_note created:', args.path);
+
+          return {
+            content: [{
+              type: "text",
+              text: JSON.stringify({
+                success: true,
+                path: args.path,
+                message: `Created note: ${args.path}`,
+                length: args.content.length
+              })
+            }]
+          };
+        } catch (error) {
+          console.error('❌ write_note error:', error);
+          return {
+            content: [{
+              type: "text",
+              text: JSON.stringify({ error: error.message || 'Failed to create note', path: args.path })
+            }]
+          };
+        }
+      }
+    );
+  }
+
+  /**
+   * Create the update_note tool
+   * @returns {Object} - Tool definition
+   */
+  createUpdateNoteTool() {
+    return tool(
+      "update_note",
+      "Update an existing note with new content. Will fail if the file doesn't exist.",
+      {
+        path: z.string().describe("Path to the note relative to vault root"),
+        content: z.string().describe("New markdown content to replace existing content")
+      },
+      async (args) => {
+        console.log('📝 update_note called:', args.path);
+
+        try {
+          const validation = this.validatePath(args.path);
+          if (!validation.valid) {
+            return {
+              content: [{ type: "text", text: JSON.stringify({ error: validation.error }) }]
+            };
+          }
+
+          // Check if file exists
+          try {
+            await invoke('readFileContent', { filePath: args.path });
+          } catch {
+            return {
+              content: [{
+                type: "text",
+                text: JSON.stringify({ error: "File not found", path: args.path, suggestion: "Use write_note to create new files" })
+              }]
+            };
+          }
+
+          // Update the file
+          await invoke('writeFileContent', {
+            filePath: args.path,
+            content: args.content
+          });
+
+          // Dispatch file-updated event to refresh editor if open
+          window.dispatchEvent(new CustomEvent('file-updated', { detail: { path: args.path } }));
+
+          console.log('✅ update_note updated:', args.path);
+
+          return {
+            content: [{
+              type: "text",
+              text: JSON.stringify({
+                success: true,
+                path: args.path,
+                message: `Updated note: ${args.path}`,
+                length: args.content.length
+              })
+            }]
+          };
+        } catch (error) {
+          console.error('❌ update_note error:', error);
+          return {
+            content: [{
+              type: "text",
+              text: JSON.stringify({ error: error.message || 'Failed to update note', path: args.path })
+            }]
+          };
+        }
+      }
+    );
+  }
+
+  /**
+   * Create the append_to_note tool
+   * @returns {Object} - Tool definition
+   */
+  createAppendToNoteTool() {
+    return tool(
+      "append_to_note",
+      "Append content to the end of an existing note. Preserves existing content.",
+      {
+        path: z.string().describe("Path to the note relative to vault root"),
+        content: z.string().describe("Content to append to the note")
+      },
+      async (args) => {
+        console.log('➕ append_to_note called:', args.path);
+
+        try {
+          const validation = this.validatePath(args.path);
+          if (!validation.valid) {
+            return {
+              content: [{ type: "text", text: JSON.stringify({ error: validation.error }) }]
+            };
+          }
+
+          // Read existing content
+          let existingContent;
+          try {
+            existingContent = await invoke('readFileContent', { filePath: args.path });
+          } catch {
+            return {
+              content: [{
+                type: "text",
+                text: JSON.stringify({ error: "File not found", path: args.path, suggestion: "Use write_note to create new files" })
+              }]
+            };
+          }
+
+          // Append new content
+          const newContent = existingContent + '\n' + args.content;
+
+          // Write updated content
+          await invoke('writeFileContent', {
+            filePath: args.path,
+            content: newContent
+          });
+
+          // Dispatch file-updated event
+          window.dispatchEvent(new CustomEvent('file-updated', { detail: { path: args.path } }));
+
+          console.log('✅ append_to_note appended to:', args.path);
+
+          return {
+            content: [{
+              type: "text",
+              text: JSON.stringify({
+                success: true,
+                path: args.path,
+                message: `Appended to note: ${args.path}`,
+                appendedLength: args.content.length,
+                totalLength: newContent.length
+              })
+            }]
+          };
+        } catch (error) {
+          console.error('❌ append_to_note error:', error);
+          return {
+            content: [{
+              type: "text",
+              text: JSON.stringify({ error: error.message || 'Failed to append to note', path: args.path })
             }]
           };
         }
