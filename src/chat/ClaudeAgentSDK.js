@@ -26,10 +26,35 @@ export class ClaudeAgentSDK {
     console.log('🚀 Initializing Claude Agent SDK...');
 
     try {
-      this.settings = settings;
+      // Validate required settings
+      if (!settings) {
+        console.error('❌ No settings provided');
+        return false;
+      }
+
+      if (!settings.apiKey) {
+        console.error('❌ API key is required');
+        return false;
+      }
+
+      // Store settings
+      this.settings = {
+        apiKey: settings.apiKey,
+        model: settings.model || 'claude-sonnet-4-5-20250929',
+        maxTurns: settings.maxTurns || 10,
+        systemPromptAddition: settings.systemPromptAddition || '',
+        allowedTools: settings.allowedTools || null, // null means all tools allowed
+        ...settings
+      };
+
+      // Set model
+      this.currentModel = this.settings.model;
+
+      // Create MCP server
       this.mcpServer = this.createVaultMcpServer();
+
       this.isInitialized = true;
-      console.log('✅ Claude Agent SDK initialized');
+      console.log('✅ Claude Agent SDK initialized with model:', this.currentModel);
       return true;
     } catch (error) {
       console.error('❌ Failed to initialize Claude Agent SDK:', error);
@@ -796,15 +821,95 @@ export class ClaudeAgentSDK {
   }
 
   /**
+   * Get list of allowed tool names for the SDK
+   * @returns {Array|undefined} - Array of tool names or undefined for all tools
+   */
+  getAllowedTools() {
+    if (this.settings?.allowedTools) {
+      return this.settings.allowedTools;
+    }
+    // Default: all vault tools allowed
+    return [
+      "mcp__vault__search_notes",
+      "mcp__vault__get_note",
+      "mcp__vault__get_current_note",
+      "mcp__vault__list_tags",
+      "mcp__vault__notes_by_tag",
+      "mcp__vault__semantic_search",
+      "mcp__vault__write_note",
+      "mcp__vault__update_note",
+      "mcp__vault__append_to_note",
+      "WebSearch"
+    ];
+  }
+
+  /**
    * Stream chat with the agent
    * @param {string} userMessage - User's message
    * @param {Array} contextNotes - Optional context notes
    * @yields {Object} - Processed message objects
    */
   async *chat(userMessage, contextNotes = []) {
-    // Placeholder - will be implemented in cas-3.x tasks
     console.log('📤 Chat called with:', userMessage);
-    yield { type: 'error', error: 'Not yet implemented' };
+    console.log('📎 With context:', contextNotes.length, 'notes');
+
+    if (!this.isInitialized) {
+      yield { type: 'error', error: 'SDK not initialized. Call initialize() first.' };
+      return;
+    }
+
+    try {
+      // Create abort controller for this request
+      this.abortController = new AbortController();
+
+      // Build system prompt with context
+      const systemPrompt = this.buildSystemPrompt(contextNotes);
+
+      // Create async generator for user input
+      async function* generateInput() {
+        yield {
+          type: "user",
+          message: { role: "user", content: userMessage }
+        };
+      }
+
+      // Call SDK query with options
+      const queryOptions = {
+        prompt: generateInput(),
+        options: {
+          model: this.currentModel,
+          systemPrompt,
+          mcpServers: this.mcpServer ? { vault: this.mcpServer } : undefined,
+          allowedTools: this.getAllowedTools(),
+          maxTurns: this.settings?.maxTurns || 10,
+          includePartialMessages: true,
+          signal: this.abortController.signal
+        }
+      };
+
+      console.log('🔄 Starting SDK query with model:', this.currentModel);
+
+      // Iterate through SDK messages and yield processed events
+      for await (const message of query(queryOptions)) {
+        const processed = this.processMessage(message);
+        if (processed) {
+          yield processed;
+        }
+      }
+
+      console.log('✅ Chat query completed');
+
+    } catch (error) {
+      if (error.name === 'AbortError') {
+        console.log('🛑 Chat query aborted');
+        yield { type: 'aborted', message: 'Request was cancelled' };
+      } else {
+        console.error('❌ Chat error:', error);
+        yield { type: 'error', error: error.message || 'Chat query failed' };
+      }
+    } finally {
+      this.abortController = null;
+    }
   }
 
   /**
@@ -813,7 +918,101 @@ export class ClaudeAgentSDK {
    * @returns {Object|null} - Processed message for UI
    */
   processMessage(message) {
-    // Placeholder - will be implemented in cas-3.x tasks
+    if (!message) return null;
+
+    switch (message.type) {
+      case 'stream_event':
+        // Real-time text streaming event
+        return this.handleStreamEvent(message.event);
+
+      case 'assistant':
+        // Complete assistant message with content blocks
+        return {
+          type: 'assistant',
+          content: message.message?.content || [],
+          role: 'assistant'
+        };
+
+      case 'result':
+        // Final result with statistics
+        return {
+          type: 'result',
+          success: message.subtype === 'success',
+          text: message.result || '',
+          cost: message.total_cost_usd,
+          usage: message.usage,
+          turns: message.num_turns,
+          duration: message.duration_ms
+        };
+
+      case 'tool_use':
+        // Tool invocation
+        return {
+          type: 'tool_use',
+          toolName: message.tool_name || message.name,
+          toolInput: message.tool_input || message.input,
+          id: message.id
+        };
+
+      case 'tool_result':
+        // Tool result
+        return {
+          type: 'tool_result',
+          toolName: message.tool_name,
+          result: message.result,
+          id: message.tool_use_id
+        };
+
+      default:
+        // Unknown message type - log and return raw
+        console.log('📨 Unknown message type:', message.type, message);
+        return null;
+    }
+  }
+
+  /**
+   * Handle stream_event messages
+   * @param {Object} event - Stream event from SDK
+   * @returns {Object|null} - Processed event for UI
+   */
+  handleStreamEvent(event) {
+    if (!event) return null;
+
+    // Handle content_block_delta for text streaming
+    if (event.type === 'content_block_delta' && event.delta?.text) {
+      return {
+        type: 'chunk',
+        text: event.delta.text
+      };
+    }
+
+    // Handle message_start
+    if (event.type === 'message_start') {
+      return {
+        type: 'start',
+        model: event.message?.model,
+        usage: event.message?.usage
+      };
+    }
+
+    // Handle message_delta (stop reason, usage)
+    if (event.type === 'message_delta') {
+      return {
+        type: 'delta',
+        stopReason: event.delta?.stop_reason,
+        usage: event.usage
+      };
+    }
+
+    // Handle content_block_start for tool use
+    if (event.type === 'content_block_start' && event.content_block?.type === 'tool_use') {
+      return {
+        type: 'tool_start',
+        toolName: event.content_block.name,
+        id: event.content_block.id
+      };
+    }
+
     return null;
   }
 
@@ -823,8 +1022,57 @@ export class ClaudeAgentSDK {
    * @returns {string} - Complete system prompt
    */
   buildSystemPrompt(contextNotes = []) {
-    // Placeholder - will be implemented in cas-3.x tasks
-    return '';
+    const maxNoteLength = 10000; // Truncate notes over 10k chars
+
+    // Base system prompt
+    let prompt = `You are a helpful AI assistant integrated into Vault, a note-taking application. You have access to the user's notes and can search, read, create, and modify notes using MCP tools.
+
+Available capabilities:
+- Search notes by name or content using search_notes
+- Read specific notes using get_note
+- Get the currently open note using get_current_note
+- List all tags in the vault using list_tags
+- Find notes by tag using notes_by_tag
+- Perform semantic search using semantic_search (requires PACASDB Premium)
+- Create new notes using write_note
+- Update existing notes using update_note
+- Append to notes using append_to_note
+- Search the web for current information using WebSearch
+
+Guidelines:
+- When the user refers to "this note" or "the current note", use get_current_note to access it
+- Search for relevant notes before answering questions about the user's knowledge base
+- When creating or modifying notes, use proper markdown formatting
+- Be concise but thorough in your responses
+- Respect the user's note organization and naming conventions
+`;
+
+    // Add context notes if provided
+    if (contextNotes.length > 0) {
+      prompt += '\n\n=== CURRENT CONTEXT ===\n';
+      prompt += 'The user has the following notes in their current context:\n\n';
+
+      for (const note of contextNotes) {
+        const title = note.title || note.name || 'Untitled';
+        let content = note.content || '';
+
+        // Truncate long notes
+        if (content.length > maxNoteLength) {
+          content = content.substring(0, maxNoteLength) + '\n\n[... note truncated due to length ...]';
+        }
+
+        prompt += `--- ${title} ---\n${content}\n\n`;
+      }
+
+      prompt += '=== END CONTEXT ===\n';
+    }
+
+    // Add custom system prompt addition from settings
+    if (this.settings?.systemPromptAddition) {
+      prompt += '\n' + this.settings.systemPromptAddition;
+    }
+
+    return prompt;
   }
 
   /**
@@ -860,10 +1108,16 @@ export class ClaudeAgentSDK {
   }
 
   /**
-   * Get current settings
-   * @returns {Object} - Current settings
+   * Get current settings and configuration
+   * @returns {Object} - Current configuration including model, maxTurns, allowedTools
    */
   getSettings() {
-    return this.settings;
+    return {
+      ...this.settings,
+      model: this.currentModel,
+      maxTurns: this.settings?.maxTurns || 10,
+      allowedTools: this.getAllowedTools(),
+      isInitialized: this.isInitialized
+    };
   }
 }
