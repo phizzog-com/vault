@@ -68,6 +68,8 @@ export class ClaudeAgentSDK {
   createVaultTools() {
     return [
       this.createSearchNotesTool(),
+      this.createGetNoteTool(),
+      this.createGetCurrentNoteTool(),
       // Additional tools will be added in subsequent tasks
     ];
   }
@@ -118,6 +120,160 @@ export class ClaudeAgentSDK {
             content: [{
               type: "text",
               text: JSON.stringify({ error: error.message || 'Search failed', query: args.query })
+            }]
+          };
+        }
+      }
+    );
+  }
+
+  /**
+   * Create the get_note tool
+   * @returns {Object} - Tool definition
+   */
+  createGetNoteTool() {
+    return tool(
+      "get_note",
+      "Read the content of a specific note by its path. Returns the full markdown content.",
+      {
+        path: z.string().describe("Path to the note file relative to vault root (e.g., 'folder/note.md')")
+      },
+      async (args) => {
+        console.log('📄 get_note called:', args);
+
+        try {
+          if (!args.path) {
+            return {
+              content: [{ type: "text", text: JSON.stringify({ error: "Path is required" }) }]
+            };
+          }
+
+          // Security: Validate path doesn't contain traversal attempts
+          if (args.path.includes('..') || args.path.startsWith('/') || args.path.startsWith('\\')) {
+            return {
+              content: [{
+                type: "text",
+                text: JSON.stringify({ error: "Invalid path: Cannot access files outside vault" })
+              }]
+            };
+          }
+
+          const content = await invoke('readFileContent', {
+            filePath: args.path
+          });
+
+          console.log('✅ get_note read', content.length, 'characters');
+
+          return {
+            content: [{
+              type: "text",
+              text: JSON.stringify({
+                path: args.path,
+                content: content,
+                length: content.length
+              })
+            }]
+          };
+        } catch (error) {
+          console.error('❌ get_note error:', error);
+          return {
+            content: [{
+              type: "text",
+              text: JSON.stringify({ error: error.message || 'Failed to read note', path: args.path })
+            }]
+          };
+        }
+      }
+    );
+  }
+
+  /**
+   * Create the get_current_note tool
+   * @returns {Object} - Tool definition
+   */
+  createGetCurrentNoteTool() {
+    return tool(
+      "get_current_note",
+      "Get the content of the note currently open in the editor. Returns the note's path, title, and content.",
+      {},
+      async () => {
+        console.log('📝 get_current_note called');
+
+        try {
+          // Access the pane manager to get current note
+          if (!window.paneManager) {
+            return {
+              content: [{
+                type: "text",
+                text: JSON.stringify({ error: "No editor available", hasNote: false })
+              }]
+            };
+          }
+
+          const activeTabManager = window.paneManager.getActiveTabManager();
+          if (!activeTabManager) {
+            return {
+              content: [{
+                type: "text",
+                text: JSON.stringify({ error: "No active tab manager", hasNote: false })
+              }]
+            };
+          }
+
+          const activeTab = activeTabManager.getActiveTab();
+          if (!activeTab) {
+            return {
+              content: [{
+                type: "text",
+                text: JSON.stringify({ message: "No note is currently open", hasNote: false })
+              }]
+            };
+          }
+
+          const title = activeTab.title || 'Untitled';
+          const filePath = activeTab.filePath || '';
+
+          // Try to get content from editor
+          let content = '';
+          if (activeTab.editor) {
+            if (typeof activeTab.editor.getContent === 'function') {
+              content = activeTab.editor.getContent();
+            } else if (activeTab.editor.view) {
+              content = activeTab.editor.view.state.doc.toString();
+            } else if (activeTab.editor.state) {
+              content = activeTab.editor.state.doc.toString();
+            }
+          }
+
+          // Fallback to reading from file if no editor content
+          if ((!content || content.length === 0) && filePath) {
+            try {
+              content = await invoke('readFileContent', { filePath });
+            } catch {
+              content = '';
+            }
+          }
+
+          console.log('✅ get_current_note:', title, content.length, 'chars');
+
+          return {
+            content: [{
+              type: "text",
+              text: JSON.stringify({
+                hasNote: true,
+                title,
+                path: filePath,
+                content,
+                length: content.length
+              })
+            }]
+          };
+        } catch (error) {
+          console.error('❌ get_current_note error:', error);
+          return {
+            content: [{
+              type: "text",
+              text: JSON.stringify({ error: error.message || 'Failed to get current note', hasNote: false })
             }]
           };
         }
