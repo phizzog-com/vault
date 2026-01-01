@@ -11,13 +11,14 @@ use base64::{Engine as _, engine::general_purpose};
 
 // Provider enum to identify different AI providers
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
-#[serde(rename_all = "lowercase")]
+#[serde(rename_all = "camelCase")]
 pub enum AIProvider {
     OpenAI,
     Gemini,
     Ollama,
     LMStudio,
     Bedrock,
+    ClaudeAgent,
 }
 
 impl AIProvider {
@@ -28,16 +29,25 @@ impl AIProvider {
             AIProvider::Ollama => "ollama",
             AIProvider::LMStudio => "lmstudio",
             AIProvider::Bedrock => "bedrock",
+            AIProvider::ClaudeAgent => "claudeAgent",
         }
     }
-    
+
     pub fn from_str(s: &str) -> Option<Self> {
-        match s.to_lowercase().as_str() {
+        match s {
             "openai" => Some(AIProvider::OpenAI),
             "gemini" => Some(AIProvider::Gemini),
             "ollama" => Some(AIProvider::Ollama),
             "lmstudio" => Some(AIProvider::LMStudio),
             "bedrock" => Some(AIProvider::Bedrock),
+            "claudeAgent" => Some(AIProvider::ClaudeAgent),
+            // Fallback for case-insensitive matching
+            s if s.eq_ignore_ascii_case("openai") => Some(AIProvider::OpenAI),
+            s if s.eq_ignore_ascii_case("gemini") => Some(AIProvider::Gemini),
+            s if s.eq_ignore_ascii_case("ollama") => Some(AIProvider::Ollama),
+            s if s.eq_ignore_ascii_case("lmstudio") => Some(AIProvider::LMStudio),
+            s if s.eq_ignore_ascii_case("bedrock") => Some(AIProvider::Bedrock),
+            s if s.eq_ignore_ascii_case("claudeagent") => Some(AIProvider::ClaudeAgent),
             _ => None,
         }
     }
@@ -102,6 +112,18 @@ impl AIProvider {
                 model: "anthropic.claude-sonnet-4-20250514-v1:0".to_string(),
                 temperature: 0.7,
                 max_tokens: 4096,
+                system_prompt: None,
+                streaming_enabled: true,
+                last_modified: chrono::Utc::now(),
+                headers: None,
+            },
+            AIProvider::ClaudeAgent => AISettings {
+                provider: self.clone(),
+                endpoint: "https://api.anthropic.com".to_string(),
+                api_key: None,
+                model: "claude-sonnet-4-5-20250929".to_string(),
+                temperature: 0.7,
+                max_tokens: 8192,
                 system_prompt: None,
                 streaming_enabled: true,
                 last_modified: chrono::Utc::now(),
@@ -408,6 +430,8 @@ pub async fn migrate_ai_settings(app: AppHandle) -> Result<bool, String> {
         AIProvider::Ollama
     } else if old_settings.endpoint.contains("localhost:1234") {
         AIProvider::LMStudio
+    } else if old_settings.endpoint.contains("anthropic.com") {
+        AIProvider::ClaudeAgent
     } else {
         // Default to OpenAI for unknown endpoints
         AIProvider::OpenAI

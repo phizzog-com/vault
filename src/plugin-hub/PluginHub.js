@@ -1,5 +1,6 @@
 import { PluginContext } from './PluginContext.js';
 import { viewLoader } from './utils/lazyLoader.js';
+import { icons } from '../icons/icon-utils.js';
 import './PluginHub.css';
 import './components/PluginCard.css';
 import './components/LoadingStates.css';
@@ -293,20 +294,22 @@ export class PluginHub {
         <div class="plugin-hub-modal">
           <!-- Screen reader announcements -->
           <div id="plugin-hub-announcement" role="status" aria-live="polite" aria-atomic="true" class="sr-only"></div>
-          
+
+          <!-- Close button (positioned absolutely in top-right) -->
+          <button class="plugin-hub-close" aria-label="Close Plugin Hub">×</button>
+
           <!-- Header -->
           <header class="plugin-hub-header">
             <h1 class="plugin-hub-title">Plugin Hub</h1>
             <div class="plugin-search-container">
-              <input 
-                type="search" 
-                class="plugin-search-input" 
-                placeholder="Search plugins..." 
+              <input
+                type="search"
+                class="plugin-search-input"
+                placeholder="Search plugins..."
                 value="${this.searchQuery}"
                 aria-label="Search plugins"
               />
             </div>
-            <button class="plugin-hub-close" aria-label="Close Plugin Hub">×</button>
           </header>
           
           <!-- Main Layout -->
@@ -321,14 +324,6 @@ export class PluginHub {
               <!-- View content will be rendered here -->
             </main>
           </div>
-          
-          <!-- Footer with keyboard hints -->
-          <footer class="plugin-hub-footer">
-            <span><kbd>1-4</kbd> Navigate</span>
-            <span><kbd>⌘K</kbd> Search</span>
-            <span><kbd>Tab</kbd> Focus</span>
-            <span><kbd>Esc</kbd> Close</span>
-          </footer>
         </div>
       `;
       
@@ -361,10 +356,10 @@ export class PluginHub {
    */
   renderNavigation() {
     const views = [
-      { id: 'discover', label: 'Discover', icon: '🔍', hotkey: '1' },
-      { id: 'installed', label: 'Installed', icon: '📦', hotkey: '2' },
-      { id: 'permissions', label: 'Permissions', icon: '🔐', hotkey: '3' },
-      { id: 'resources', label: 'Resources', icon: '📊', hotkey: '4' }
+      { id: 'discover', label: 'Discover', icon: icons.search({ size: 16 }), hotkey: '1' },
+      { id: 'installed', label: 'Installed', icon: icons.package({ size: 16 }), hotkey: '2' },
+      { id: 'permissions', label: 'Permissions', icon: icons.lock({ size: 16 }), hotkey: '3' },
+      { id: 'resources', label: 'Resources', icon: icons.chartBar({ size: 16 }), hotkey: '4' }
     ];
     
     return views.map(view => `

@@ -34,6 +34,7 @@ mod plugin_runtime;
 mod plugins;
 mod identity;
 mod tasks;
+mod vault_agent_commands;
 
 use vault::Vault;
 use identity::IdentityManager;
@@ -1666,6 +1667,14 @@ fn main() {
             plugin_runtime::ipc_commands::plugin_workspace_notice,
             plugin_runtime::ipc_commands::plugin_settings_get,
             plugin_runtime::ipc_commands::plugin_settings_set,
+            // Vault agent commands (secure path validation in Rust)
+            vault_agent_commands::agent_read_note,
+            vault_agent_commands::agent_write_note,
+            vault_agent_commands::agent_update_note,
+            vault_agent_commands::agent_append_to_note,
+            vault_agent_commands::agent_list_tags,
+            vault_agent_commands::agent_notes_by_tag,
+            vault_agent_commands::agent_semantic_search,
         ])
         .setup(|app| {
             // Create MCP manager with app handle

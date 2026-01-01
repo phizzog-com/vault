@@ -3,9 +3,9 @@
 /// Handles trial lifecycle, license activation, and status checking
 
 use super::types::{LicenseStatus, LicenseInfo};
-use super::storage::{store_license, load_license, delete_license};
+use super::storage::{store_license, load_license};
 use super::fingerprint::get_machine_fingerprint;
-use chrono::{DateTime, Utc, Duration};
+use chrono::{Utc, Duration};
 
 const TRIAL_DURATION_DAYS: i64 = 30;
 

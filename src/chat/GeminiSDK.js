@@ -12,9 +12,10 @@ export class GeminiSDK {
     async initialize() {
         try {
             console.log('Initializing Gemini SDK...');
-            this.settings = await invoke('get_ai_settings');
-            this.isInitialized = !!this.settings;
-            console.log('Gemini SDK initialized:', this.isInitialized);
+            this.settings = await invoke('get_ai_settings_for_provider', { provider: 'gemini' });
+            // Rust returns snake_case field names
+            this.isInitialized = !!this.settings?.api_key;
+            console.log('Gemini SDK initialized:', this.isInitialized, 'has API key:', !!this.settings?.api_key);
             return this.isInitialized;
         } catch (error) {
             console.error('Failed to initialize Gemini SDK:', error);
@@ -128,19 +129,19 @@ export class GeminiSDK {
         }
         
         const model = options.model || this.settings?.model || 'gemini-2.0-flash';
-        const apiKey = this.settings?.apiKey;
-        
+        const apiKey = this.settings?.api_key;
+
         if (!apiKey) {
             throw new Error('Gemini API key not configured');
         }
-        
+
         const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
-        
+
         const requestBody = {
             contents: contents,
             generationConfig: {
                 temperature: options.temperature || this.settings?.temperature || 0.7,
-                maxOutputTokens: options.maxTokens || this.settings?.maxTokens || 2048,
+                maxOutputTokens: options.maxTokens || this.settings?.max_tokens || 2048,
                 topP: 0.95,
                 topK: 40
             }
@@ -240,20 +241,20 @@ export class GeminiSDK {
         }
         
         const model = options.model || this.settings?.model || 'gemini-2.0-flash';
-        const apiKey = this.settings?.apiKey;
-        
+        const apiKey = this.settings?.api_key;
+
         if (!apiKey) {
             throw new Error('Gemini API key not configured');
         }
-        
+
         // Use streamGenerateContent endpoint for streaming
         const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:streamGenerateContent?alt=sse&key=${apiKey}`;
-        
+
         const requestBody = {
             contents: contents,
             generationConfig: {
                 temperature: options.temperature || this.settings?.temperature || 0.7,
-                maxOutputTokens: options.maxTokens || this.settings?.maxTokens || 2048,
+                maxOutputTokens: options.maxTokens || this.settings?.max_tokens || 2048,
                 topP: 0.95,
                 topK: 40
             }
@@ -343,7 +344,7 @@ export class GeminiSDK {
         const messages = [];
         
         // Get custom system prompt if available
-        const systemPrompt = this.settings?.systemPrompt || 
+        const systemPrompt = this.settings?.system_prompt || 
             `You are a helpful AI assistant integrated into a note-taking application.
 You have access to the user's notes and can help them with various tasks.
 When referencing files or folders, always use forward slashes (/) in paths.

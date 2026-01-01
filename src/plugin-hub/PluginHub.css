@@ -1,40 +1,11 @@
-/* Plugin Hub Overlay - Minimalist Design System */
+/* Plugin Hub Overlay - Uses app design tokens from variables.css */
 .plugin-hub-overlay {
-  /* Light theme - Notion/Obsidian inspired */
-  --bg-primary: #ffffff;
-  --bg-secondary: #f7f7f7;
-  --bg-tertiary: #fafafa;
-  --bg-hover: #f0f0f0;
-  --bg-active: #e8e8e8;
-  
-  --border-subtle: #e5e5e5;
-  --border-default: #d4d4d4;
-  --border-strong: #b8b8b8;
-  
-  --text-primary: #191919;
-  --text-secondary: #6b6b6b;
-  --text-tertiary: #9b9b9b;
-  --text-muted: #b8b8b8;
-  
-  /* Minimal accent colors */
-  --accent-primary: #0969da;
-  --accent-hover: #0860ca;
-  --accent-subtle: #dbeafe;
-  --accent-text: #0969da;
-  
-  /* Semantic colors */
-  --success: #1a7f37;
-  --warning: #9a6700;
-  --danger: #cf222e;
-  --info: #0969da;
-  
-  /* Component specific */
-  --plugin-card-bg: #ffffff;
-  --plugin-card-border: var(--border-subtle);
-  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.06);
-  --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.07);
-  --shadow-lg: 0 10px 15px rgba(0, 0, 0, 0.1);
-  
+  /*
+   * REMOVED local CSS custom property overrides.
+   * Plugin Hub now inherits design tokens from :root and [data-theme="dark"]
+   * defined in /src/tokens/variables.css for consistent theming.
+   */
+
   /* Layout styles */
   position: fixed;
   top: 0;
@@ -68,11 +39,11 @@
   max-width: 1200px;
   height: 85%;
   max-height: 800px;
-  background: var(--bg-primary, #ffffff); /* Fallback colors */
-  border: 2px solid var(--border-default, #333); /* Stronger border */
+  background: var(--bg-primary);
+  border: 1px solid var(--border-card);
   border-radius: 8px;
   overflow: hidden;
-  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5); /* Stronger shadow */
+  box-shadow: var(--elevation-overlay);
   display: flex;
   flex-direction: column;
   animation: slideUp 0.25s cubic-bezier(0.25, 0.46, 0.45, 0.94);
@@ -96,8 +67,8 @@
   align-items: center;
   gap: 1rem;
   padding: 1rem 1.5rem;
-  border-bottom: 1px solid var(--background-modifier-border, #333);
-  background: var(--background-secondary, #252525);
+  border-bottom: 1px solid var(--border-section);
+  background: var(--bg-secondary);
 }
 
 .plugin-hub-title {
@@ -106,6 +77,11 @@
   margin: 0;
   color: var(--text-primary);
   letter-spacing: -0.01em;
+}
+
+/* Ensure header text is visible in dark mode */
+[data-theme="dark"] .plugin-hub-header .plugin-hub-title {
+  color: var(--neutral-50);
 }
 
 .plugin-search-container {
@@ -129,7 +105,7 @@
 
 .plugin-search-input:focus {
   border-color: var(--accent-primary);
-  box-shadow: 0 0 0 3px var(--accent-subtle);
+  box-shadow: 0 0 0 3px var(--accent-bg);
   background: var(--bg-primary);
 }
 
@@ -139,23 +115,39 @@
 }
 
 .plugin-hub-close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
   width: 28px;
   height: 28px;
-  border-radius: 4px;
-  border: none;
-  background: transparent;
-  color: var(--text-tertiary);
-  font-size: 18px;
+  border-radius: 6px;
+  border: 1px solid var(--border-card);
+  background: var(--bg-primary);
+  color: var(--text-secondary);
+  font-size: 16px;
   cursor: pointer;
   transition: all 0.15s;
   display: flex;
   align-items: center;
   justify-content: center;
+  z-index: 10;
+}
+
+[data-theme="dark"] .plugin-hub-close {
+  border-color: var(--neutral-600);
+  background: var(--neutral-800);
+  color: var(--neutral-400);
 }
 
 .plugin-hub-close:hover {
   background: var(--bg-hover);
+  border-color: var(--border-hover, var(--border-card));
   color: var(--text-primary);
+}
+
+[data-theme="dark"] .plugin-hub-close:hover {
+  background: var(--neutral-700);
+  color: var(--neutral-200);
 }
 
 /* Layout */
@@ -199,7 +191,7 @@
 }
 
 .plugin-nav-item.active {
-  background: var(--accent-subtle);
+  background: var(--accent-bg);
   color: var(--accent-primary);
   font-weight: 500;
 }
@@ -215,10 +207,7 @@
   border-radius: 1px;
 }
 
-.plugin-nav-item.active .nav-hotkey {
-  background: var(--accent-primary);
-  color: white;
-}
+/* nav-hotkey is hidden, so no active state styling needed */
 
 .nav-icon {
   font-size: 14px;
@@ -234,17 +223,8 @@
 }
 
 .nav-hotkey {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 16px;
-  height: 16px;
-  font-size: 11px;
-  color: var(--text-tertiary);
-  background: var(--border-subtle);
-  border-radius: 2px;
-  font-weight: 600;
-  font-family: system-ui, -apple-system, sans-serif;
+  /* Hide keyboard hint badges - they add clutter without value */
+  display: none;
 }
 
 /* Content Area - Clean Background */
@@ -428,32 +408,6 @@
   color: #ff6b6b;
 }
 
-/* Footer - Keyboard Hints */
-.plugin-hub-footer {
-  display: flex;
-  gap: 16px;
-  height: 32px;
-  padding: 0 16px;
-  background: var(--bg-secondary);
-  border-top: 1px solid var(--border-subtle);
-  font-size: 11px;
-  color: var(--text-tertiary);
-  align-items: center;
-  justify-content: center;
-}
-
-.plugin-hub-footer kbd {
-  padding: 2px 4px;
-  background: var(--bg-primary);
-  border: 1px solid var(--border-default);
-  border-radius: 2px;
-  font-family: system-ui, -apple-system, sans-serif;
-  font-size: 10px;
-  color: var(--text-primary);
-  font-weight: 500;
-  margin: 0 2px;
-}
-
 /* Accessibility */
 .sr-only {
   position: absolute;
@@ -492,4 +446,212 @@
   padding: 0 2px;
   border-radius: 2px;
   font-weight: 600;
+}
+
+/* =============================================================================
+   PACASDB Settings Modal Styles
+   ============================================================================= */
+
+.pacasdb-settings-modal .modal {
+  max-width: 600px;
+}
+
+.pacasdb-settings-content {
+  padding: 0;
+}
+
+.pacasdb-settings-content .settings-section {
+  padding: 20px 24px;
+  border-bottom: 1px solid var(--border-subtle, #333);
+}
+
+.pacasdb-settings-content .settings-section:last-child {
+  border-bottom: none;
+}
+
+.pacasdb-settings-content .settings-section h3 {
+  font-size: 14px;
+  font-weight: 600;
+  margin: 0 0 12px 0;
+  color: var(--text-primary);
+}
+
+.pacasdb-settings-content .section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.pacasdb-settings-content .section-header h3 {
+  margin: 0;
+}
+
+.pacasdb-settings-content .section-description {
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin: 0 0 16px 0;
+  line-height: 1.5;
+}
+
+.pacasdb-settings-content .settings-group {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* License Controls */
+.pacasdb-settings-content .license-controls {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+/* Connection Status */
+.pacasdb-settings-content .connection-status-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.pacasdb-settings-content .status-indicator {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.pacasdb-settings-content .status-indicator.connected {
+  background: rgba(34, 197, 94, 0.15);
+  color: #22c55e;
+}
+
+.pacasdb-settings-content .status-indicator.disconnected {
+  background: rgba(239, 68, 68, 0.15);
+  color: #ef4444;
+}
+
+.pacasdb-settings-content .form-help {
+  font-size: 12px;
+  color: var(--text-tertiary);
+  margin: 8px 0 0 0;
+}
+
+.pacasdb-settings-content .form-help code {
+  background: var(--bg-secondary);
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-family: 'SF Mono', Monaco, monospace;
+  font-size: 11px;
+}
+
+/* Database Stats */
+.pacasdb-settings-content .database-stats {
+  display: flex;
+  gap: 24px;
+}
+
+.pacasdb-settings-content .stat-item {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.pacasdb-settings-content .stat-label {
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.pacasdb-settings-content .stat-value {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+/* Sync Controls */
+.pacasdb-settings-content .sync-controls {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.pacasdb-settings-content .last-sync {
+  font-size: 12px;
+  color: var(--text-tertiary);
+}
+
+/* Setup Instructions */
+.pacasdb-settings-content .setup-instructions {
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.6;
+}
+
+.pacasdb-settings-content .setup-instructions ol {
+  margin: 12px 0 0 0;
+  padding-left: 20px;
+}
+
+.pacasdb-settings-content .setup-instructions li {
+  margin-bottom: 8px;
+}
+
+.pacasdb-settings-content .setup-instructions code {
+  background: var(--bg-secondary);
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-family: 'SF Mono', Monaco, monospace;
+  font-size: 11px;
+}
+
+/* Premium Required */
+.pacasdb-settings-content .premium-required {
+  padding: 20px;
+  background: var(--bg-secondary);
+  border-radius: 8px;
+  text-align: center;
+}
+
+.pacasdb-settings-content .premium-required p {
+  margin: 0 0 8px 0;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.pacasdb-settings-content .premium-required p:last-child {
+  margin-bottom: 0;
+}
+
+/* Bundled Plugin Badge in Plugin Card */
+.plugin-card .bundled-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  background: rgba(124, 58, 237, 0.15);
+  color: var(--accent-primary, #7c3aed);
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  border-radius: 4px;
+  margin-left: 8px;
+}
+
+/* Premium badge */
+.plugin-card .premium-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  background: linear-gradient(135deg, rgba(251, 191, 36, 0.2), rgba(245, 158, 11, 0.2));
+  color: #f59e0b;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  border-radius: 4px;
+  margin-left: 8px;
 }

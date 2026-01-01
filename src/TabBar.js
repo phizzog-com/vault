@@ -1,4 +1,5 @@
 import { NewTabScreen } from './NewTabScreen.js';
+import { icons } from './icons/icon-utils.js';
 
 /**
  * TabBar UI component for managing editor tabs
@@ -18,24 +19,20 @@ export class TabBar {
     
     init() {
         // Create tab bar structure
+        // New Tab button is inside tab-list to flow dynamically after last tab
         this.container.innerHTML = `
             <div class="tab-bar">
-                <div class="tab-list" id="tab-list"></div>
+                <div class="tab-list" id="tab-list">
+                    <button class="tab-add-button" id="tab-add-button" title="New Tab">
+                        ${icons.plus({ size: 12 })}
+                    </button>
+                </div>
+                <div class="tab-bar-spacer"></div>
                 <button class="highlights-summary-button" id="highlights-summary-button" title="Generate Highlights Summary (Cmd+Shift+H)" style="display: none;">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z"/>
-                    </svg>
+                    ${icons.star()}
                 </button>
                 <button class="copy-text-button" id="copy-text-button" title="Copy All Text" style="display: none;">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
-                        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
-                    </svg>
-                </button>
-                <button class="tab-add-button" id="tab-add-button" title="New Tab">
-                    <svg width="12" height="12" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg">
-                        <path d="M6 1V11M1 6H11" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
-                    </svg>
+                    ${icons.copy()}
                 </button>
             </div>
         `;
@@ -103,11 +100,10 @@ export class TabBar {
         tabElement.draggable = true;
         
         tabElement.innerHTML = `
+            <span class="tab-icon">${icons.fileText({ size: 14 })}</span>
             <span class="tab-title">${this.escapeHtml(tab.title)}</span>
             <button class="tab-close" title="Close">
-                <svg width="8" height="8" viewBox="0 0 8 8" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <path d="M1 1L7 7M1 7L7 1" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
-                </svg>
+                ${icons.x({ size: 12 })}
             </button>
         `;
         
@@ -143,7 +139,8 @@ export class TabBar {
             this.draggedIndex = null;
         });
         
-        this.tabList.appendChild(tabElement);
+        // Insert before the add button so tabs appear before it
+        this.tabList.insertBefore(tabElement, this.addButton);
         this.tabElements.set(tabId, tabElement);
         
         // Update dirty indicator
@@ -208,13 +205,12 @@ export class TabBar {
     }
     
     reorderTabElements() {
-        // Clear and re-add all tabs in the correct order
-        this.tabList.innerHTML = '';
+        // Re-add all tabs in the correct order, keeping add button last
         const tabs = this.tabManager.getTabs();
         tabs.forEach(tab => {
             const element = this.tabElements.get(tab.id);
             if (element) {
-                this.tabList.appendChild(element);
+                this.tabList.insertBefore(element, this.addButton);
             }
         });
     }

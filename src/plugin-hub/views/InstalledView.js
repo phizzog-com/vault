@@ -8,6 +8,7 @@ class InstalledView {
         this.pluginCards = new Map();
         this.sortOrder = 'name'; // name, status, recent
         this.filterStatus = 'all'; // all, enabled, disabled
+        this.expandedPluginIds = new Set(); // Track which plugins are expanded
     }
 
     render() {
@@ -133,8 +134,17 @@ class InstalledView {
         plugins.forEach(plugin => {
             const listItem = document.createElement('div');
             listItem.setAttribute('role', 'listitem');
-            
-            const card = new PluginCard(plugin, this.context);
+
+            const card = new PluginCard(plugin, this.context, {
+                expanded: this.expandedPluginIds.has(plugin.id),
+                onToggleExpand: (pluginId, expanded) => {
+                    if (expanded) {
+                        this.expandedPluginIds.add(pluginId);
+                    } else {
+                        this.expandedPluginIds.delete(pluginId);
+                    }
+                }
+            });
             this.pluginCards.set(plugin.id, card);
             const cardElement = card.render();
             listItem.appendChild(cardElement);

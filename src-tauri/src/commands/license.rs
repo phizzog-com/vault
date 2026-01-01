@@ -169,7 +169,7 @@ mod tests {
         let _ = delete_license(&machine_id);
 
         // Start trial
-        let _ = start_trial_command().await.unwrap();
+        let _ = start_trial_cmd().await.unwrap();
 
         // Get status
         let result = get_license_status().await;
@@ -190,7 +190,7 @@ mod tests {
         let _ = delete_license(&machine_id);
 
         // Start trial
-        let result = start_trial_command().await;
+        let result = start_trial_cmd().await;
         assert!(result.is_ok());
 
         let status = result.unwrap();

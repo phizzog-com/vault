@@ -16,4 +16,4 @@ pub use fingerprint::get_machine_fingerprint;
 pub use types::{LicenseStatus, LicenseInfo};
 pub use storage::{store_license, load_license, delete_license};
 pub use service::{start_trial, check_trial};
-pub use validation::{activate_online, validate_online, deactivate_online};
+pub use validation::{activate_online, deactivate_online};

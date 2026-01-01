@@ -18,6 +18,7 @@ import { mcpToolHandler } from '../mcp/MCPToolHandler.js';
 import { gemmaPromptToolCalling } from './GemmaPromptToolCalling.js';
 import { tagContextExpander } from './TagContextExpander.js';
 import { ClaudeAgentSDK } from './ClaudeAgentSDK.js';
+import { AgentCostDisplay } from '../components/AgentCostDisplay.js';
 
 // Import Tauri API
 import { invoke } from '@tauri-apps/api/core';
@@ -55,7 +56,7 @@ export class EnhancedChatPanel {
                 status: 'unknown'
             },
             claudeAgent: {
-                name: 'Claude Agent',
+                name: 'Claude',
                 sdk: null,
                 configured: false,
                 status: 'unknown'
@@ -69,6 +70,7 @@ export class EnhancedChatPanel {
         this.persistence = null;
         this.settingsPanel = null;
         this.showingSettings = false;
+        this.costDisplay = null; // AgentCostDisplay for Claude Agent
         
         // Resize state
         this.isResizing = false;
@@ -179,7 +181,7 @@ export class EnhancedChatPanel {
         parentElement.appendChild(this.container);
         
         // Load saved settings
-        this.loadSavedProvider();
+        await this.loadSavedProvider();
         
         // Check authentication status
         this.auth.checkAuthStatus();
@@ -215,10 +217,27 @@ export class EnhancedChatPanel {
             this.providers.bedrock.configured = bedrockInit;
             this.providers.bedrock.status = bedrockInit ? 'ready' : 'not-configured';
 
-            // Initialize Claude Agent SDK with API key from settings
+            // Initialize Claude Agent SDK - get its own settings if claudeAgent is selected
+            let claudeAgentApiKey = settings?.api_key;
+            let claudeAgentModel = settings?.model || 'claude-sonnet-4-5-20250929';
+
+            // If current provider is claudeAgent, the settings already have the right key
+            // Otherwise, try to load Claude Agent specific settings
+            if (settings?.provider !== 'claudeAgent') {
+                try {
+                    const claudeSettings = await invoke('get_ai_settings_for_provider', { provider: 'claudeAgent' });
+                    if (claudeSettings?.api_key) {
+                        claudeAgentApiKey = claudeSettings.api_key;
+                        claudeAgentModel = claudeSettings.model || claudeAgentModel;
+                    }
+                } catch (e) {
+                    console.log('No Claude Agent settings found, using current settings');
+                }
+            }
+
             const claudeAgentInit = await this.providers.claudeAgent.sdk.initialize({
-                apiKey: settings?.anthropic_api_key || settings?.api_key,
-                model: 'claude-sonnet-4-5-20250929'
+                apiKey: claudeAgentApiKey,
+                model: claudeAgentModel
             });
             this.providers.claudeAgent.configured = claudeAgentInit;
             this.providers.claudeAgent.status = claudeAgentInit ? 'ready' : 'not-configured';
@@ -579,12 +598,17 @@ export class EnhancedChatPanel {
         
         leftSection.appendChild(title);
         leftSection.appendChild(statusDot);
-        
-        // Mode toggle
-        this.modeToggle = new ModeToggle({
-            initialMode: this.currentMode,
-            onToggle: (mode) => this.handleModeToggle(mode)
-        });
+
+        // Mode toggle - reuse existing instance to prevent listener accumulation
+        if (!this.modeToggle) {
+            this.modeToggle = new ModeToggle({
+                initialMode: this.currentMode,
+                onToggle: (mode) => this.handleModeToggle(mode)
+            });
+        } else {
+            // Update mode in case it changed
+            this.modeToggle.setMode(this.currentMode);
+        }
         leftSection.appendChild(this.modeToggle.element);
         
         // All action buttons moved to AI chat toolbar
@@ -778,6 +802,19 @@ export class EnhancedChatPanel {
                         switch (event.type) {
                             case 'start':
                                 console.log('🚀 Claude Agent started, model:', event.model);
+                                // Initialize or reset cost display
+                                if (!this.costDisplay) {
+                                    this.costDisplay = new AgentCostDisplay({
+                                        model: event.model || this.providers.claudeAgent.sdk.currentModel
+                                    });
+                                    // Add to chat interface header or messages area
+                                    this.interface.addElement(this.costDisplay.getElement());
+                                }
+                                this.costDisplay.setModel(event.model || this.providers.claudeAgent.sdk.currentModel);
+                                this.costDisplay.show();
+                                if (event.usage) {
+                                    this.costDisplay.update(event.usage);
+                                }
                                 break;
 
                             case 'chunk':
@@ -787,21 +824,20 @@ export class EnhancedChatPanel {
                                 break;
 
                             case 'tool_start':
-                                // Tool invocation started
+                                // Deprecated - now handled by tool_use
                                 console.log('🔧 Tool started:', event.toolName);
-                                this.interface.addMessage({
-                                    type: 'tool',
-                                    content: `Using tool: ${event.toolName}`,
-                                    timestamp: new Date()
-                                });
                                 break;
 
                             case 'tool_use':
+                                // Create tool use card with running status
                                 console.log('🔧 Tool use:', event.toolName, event.toolInput);
+                                this.interface.addToolUse(event.id, event.toolName, event.toolInput);
                                 break;
 
                             case 'tool_result':
-                                console.log('✅ Tool result:', event.toolName);
+                                // Update tool card with result
+                                console.log('✅ Tool result:', event.toolName, event.id);
+                                this.interface.updateToolResult(event.id, event.result);
                                 break;
 
                             case 'assistant':
@@ -825,6 +861,10 @@ export class EnhancedChatPanel {
                                     cost: event.cost,
                                     turns: event.turns
                                 });
+                                // Update cost display with final usage
+                                if (this.costDisplay && event.usage) {
+                                    this.costDisplay.update(event.usage);
+                                }
                                 break;
 
                             case 'error':
@@ -852,7 +892,7 @@ export class EnhancedChatPanel {
                     this.interface.finalizeStreamingMessage(messageId);
                     this.interface.addMessage({
                         type: 'error',
-                        content: `Claude Agent error: ${agentError.message}`,
+                        content: `Claude error: ${agentError.message}`,
                         timestamp: new Date()
                     });
                 }
@@ -874,6 +914,77 @@ export class EnhancedChatPanel {
                     content: response,
                     timestamp: new Date()
                 });
+            } else if (this.currentProvider === 'gemini') {
+                // Use Gemini SDK with streaming
+                console.log('🤖 Using Gemini SDK');
+
+                // Get conversation history
+                const conversationHistory = this.interface.getMessages() || [];
+                const formattedHistory = conversationHistory
+                    .filter(msg => msg.type !== 'error' && msg.type !== 'context')
+                    .map(msg => ({
+                        role: msg.type === 'user' ? 'user' : 'assistant',
+                        content: msg.content
+                    }));
+
+                // Format messages for Gemini
+                const messages = await provider.sdk.formatMessages(message, allContext, tagEnhancement);
+
+                // Add history
+                const historyWithoutCurrent = formattedHistory.filter(
+                    msg => !(msg.role === 'user' && msg.content === message)
+                );
+
+                const fullMessages = [
+                    ...messages.filter(m => m.role === 'system'),
+                    ...historyWithoutCurrent.slice(-10),
+                    messages.find(m => m.role === 'user')
+                ].filter(Boolean);
+
+                // Create streaming message (add to UI when first chunk arrives)
+                const messageId = 'msg_' + Date.now();
+                const streamingMessage = {
+                    id: messageId,
+                    type: 'assistant',
+                    content: '',
+                    timestamp: new Date()
+                };
+                let messageAdded = false;
+
+                try {
+                    const stream = await provider.sdk.streamChat(fullMessages);
+
+                    for await (const chunk of stream) {
+                        if (chunk.type === 'text') {
+                            // Add message to UI on first chunk (keeps "Thinking..." visible until then)
+                            if (!messageAdded) {
+                                this.interface.addMessage(streamingMessage);
+                                messageAdded = true;
+                            }
+                            streamingMessage.content += chunk.content;
+                            this.interface.updateMessage(messageId, streamingMessage.content);
+                        } else if (chunk.type === 'function_call') {
+                            console.log('Function call in stream:', chunk.functionCall);
+                        }
+                    }
+
+                    console.log('✅ Gemini streaming complete - final content length:', streamingMessage.content.length);
+                    this.interface.finalizeStreamingMessage(messageId);
+
+                } catch (geminiError) {
+                    console.error('Gemini streaming error:', geminiError);
+                    // Hide typing indicator if message wasn't added yet
+                    if (!messageAdded) {
+                        this.interface.hideTyping();
+                    } else {
+                        this.interface.finalizeStreamingMessage(messageId);
+                    }
+                    this.interface.addMessage({
+                        type: 'error',
+                        content: `Gemini error: ${geminiError.message}`,
+                        timestamp: new Date()
+                    });
+                }
             } else if (this.currentProvider === 'openai') {
                 // Use OpenAI SDK
                 // Get conversation history for context (excluding errors and context messages)
@@ -1352,11 +1463,28 @@ export class EnhancedChatPanel {
         }
     }
     
-    loadSavedProvider() {
-        // Always use OpenAI, ignore any saved Claude preference
-        this.currentProvider = 'openai';
-        localStorage.setItem('gaimplan-chat-provider', 'openai');
-        
+    async loadSavedProvider() {
+        // Load the active provider from backend
+        try {
+            const activeProvider = await invoke('get_active_ai_provider');
+            // Convert backend format to frontend format (e.g., "claude_agent" -> "claudeAgent")
+            const providerKey = typeof activeProvider === 'string'
+                ? activeProvider
+                : activeProvider?.toLowerCase?.() || 'openai';
+
+            // Check if this provider exists in our providers map
+            if (this.providers[providerKey]) {
+                this.currentProvider = providerKey;
+                console.log('Loaded active provider from backend:', providerKey);
+            } else {
+                console.log('Unknown provider from backend:', activeProvider, '- defaulting to openai');
+                this.currentProvider = 'openai';
+            }
+        } catch (error) {
+            console.error('Failed to load active provider:', error);
+            this.currentProvider = 'openai';
+        }
+
         // Load saved visibility state
         const savedVisibility = localStorage.getItem('gaimplan-chat-visible');
         if (savedVisibility === 'true') {

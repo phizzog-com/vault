@@ -1,4 +1,5 @@
 import { getBundledServers } from './bundledServers.js';
+import { homeDir } from '@tauri-apps/api/path';
 
 /**
  * MCPConfigGenerator - Multi-agent MCP configuration generator
@@ -222,7 +223,7 @@ export default class MCPConfigGenerator {
    *     env: { API_KEY: '${MY_KEY}' }
    *   }
    * };
-   * const config = generator._generateGeminiConfig(servers);
+   * const config = generator._generateGeminiConfig(servers, '/Users/john');
    * // Returns:
    * // {
    * //   path: '/Users/john/.gemini/settings.json',
@@ -230,9 +231,7 @@ export default class MCPConfigGenerator {
    * //   format: 'json'
    * // }
    */
-  _generateGeminiConfig(servers) {
-    // Get user home directory
-    const homedir = process.env.HOME || process.env.USERPROFILE;
+  _generateGeminiConfig(servers, homedir) {
 
     // Build mcpServers object with Gemini-specific fields
     const mcpServers = {};
@@ -328,16 +327,23 @@ export default class MCPConfigGenerator {
     console.log('[MCPConfigGenerator] Enabled bundled servers:', Object.keys(expandedBundledServers));
     console.log('[MCPConfigGenerator] Enabled user servers:', Object.keys(expandedUserServers));
 
+    // Get home directory from Tauri for agents that need it
+    let homedir = null;
+    if (agent === 'gemini' || agent === 'codex') {
+      homedir = await homeDir();
+      console.log('[MCPConfigGenerator] Using home directory:', homedir);
+    }
+
     // Route to appropriate generator based on agent type
     switch (agent) {
       case 'claude':
         return this._generateClaudeConfig(allServers, vaultPath);
 
       case 'gemini':
-        return this._generateGeminiConfig(allServers);
+        return this._generateGeminiConfig(allServers, homedir);
 
       case 'codex':
-        return this._generateCodexConfig(allServers);
+        return this._generateCodexConfig(allServers, homedir);
 
       default:
         throw new Error(`Unknown agent: ${agent}`);
@@ -365,7 +371,7 @@ export default class MCPConfigGenerator {
    *     env: { VAULT_PATH: '/vault' }
    *   }
    * };
-   * const config = generator._generateCodexConfig(servers);
+   * const config = generator._generateCodexConfig(servers, '/Users/john');
    * // Returns:
    * // {
    * //   path: '/Users/john/.codex/config.toml',
@@ -373,9 +379,7 @@ export default class MCPConfigGenerator {
    * //   format: 'toml'
    * // }
    */
-  _generateCodexConfig(servers) {
-    // Get user home directory
-    const homedir = process.env.HOME || process.env.USERPROFILE;
+  _generateCodexConfig(servers, homedir) {
 
     // Build TOML content
     let toml = '';

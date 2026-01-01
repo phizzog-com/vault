@@ -28,13 +28,16 @@
     },
     "windows": [
       {
-        "title": "",
+        "title": "Vault",
         "width": 1200,
         "height": 800,
         "minWidth": 800,
         "minHeight": 600,
         "label": "main",
-        "transparent": true
+        "transparent": true,
+        "decorations": true,
+        "titleBarStyle": "Overlay",
+        "hiddenTitle": true
       }
     ]
   },

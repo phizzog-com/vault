@@ -2,6 +2,7 @@
 
 import { invoke } from '@tauri-apps/api/core';
 import windowContext from '../contexts/WindowContext.js';
+import { icons } from '../icons/icon-utils.js';
 
 export class VaultPicker {
     constructor(container) {
@@ -45,9 +46,7 @@ export class VaultPicker {
             <div class="vault-picker">
                 <button class="vault-picker-button" id="vault-picker-toggle">
                     <span class="vault-icon">
-                        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
-                            <path d="M2 3a1 1 0 011-1h10a1 1 0 011 1v10a1 1 0 01-1 1H3a1 1 0 01-1-1V3z"/>
-                        </svg>
+                        ${icons.lockKeyhole({ size: 16 })}
                     </span>
                     <span class="vault-name">
                         ${this.currentVault ? this.escapeHtml(this.currentVault.name) : 'No Vault'}
@@ -81,7 +80,7 @@ export class VaultPicker {
                     <div class="vault-picker-item ${isActive ? 'active' : ''}" 
                          data-action="open-vault" 
                          data-path="${this.escapeHtml(vault.path)}">
-                        ${isActive ? '<span class="checkmark">✓</span>' : '<span class="spacer"></span>'}
+                        ${isActive ? `<span class="checkmark">${icons.check({ size: 14 })}</span>` : '<span class="spacer"></span>'}
                         <span class="vault-item-name">${this.escapeHtml(vault.name)}</span>
                         <span class="vault-item-path">${this.escapeHtml(this.shortenPath(vault.path))}</span>
                     </div>

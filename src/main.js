@@ -1,6 +1,9 @@
 // Tauri v2 Modern Approach with CodeMirror Editor Integration
 console.log('🚀 TAURI V2 APPROACH WITH EDITOR - Loading...');
 
+// Initialize Node.js shims for browser compatibility (must be first!)
+import './shims/process-shim.js';
+
 // Import Tauri v2 APIs and editor components
 import { invoke } from '@tauri-apps/api/core';
 import { open } from '@tauri-apps/plugin-dialog';
@@ -22,6 +25,7 @@ import pluginHub from './plugin-hub/PluginHub.js';
 import './utils/uuid-utils.js';
 import './utils/readwise-uuid-fix.js';
 import { TaskDashboard } from './tasks/TaskDashboard.js';
+import { icons } from './icons/icon-utils.js';
 import './plugin-hub/components/Toast.css';
 import EntitlementManager from './services/entitlement-manager.js';
 import GlobalSearchPanel from './components/GlobalSearchPanel.js';
@@ -1920,60 +1924,37 @@ function updateEditorHeader(fileName = 'Welcome to Vault') {
 function rebuildEditorHeader(fileName = 'Welcome to Vault') {
   const editorHeader = document.getElementById('editor-header');
   if (editorHeader) {
+    // Ensure drag region attribute is set
+    editorHeader.setAttribute('data-tauri-drag-region', '');
     editorHeader.innerHTML = `
       <div class="editor-left-controls">
         <button id="sidebar-toggle" class="editor-control-btn" onclick="toggleSidebar()" title="Toggle Sidebar">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
-            <line x1="9" y1="9" x2="9" y2="15"></line>
-          </svg>
+          ${icons.panelLeft()}
         </button>
         <button id="split-view-btn" class="editor-control-btn" onclick="toggleSplitView()" title="Split View (Cmd+\\)">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
-            <line x1="12" y1="3" x2="12" y2="21"></line>
-          </svg>
+          ${icons.columns2()}
         </button>
         <button id="zen-mode-btn" class="editor-control-btn" onclick="toggleZenMode()" title="Zen Mode (Cmd+Option+Z)">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-            <circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="2"/>
-            <path d="M12 2a10 10 0 0 1 0 20 5 5 0 0 1 0-10 5 5 0 0 0 0-10z" fill="currentColor"/>
-            <circle cx="12" cy="7" r="1.5" fill="white"/>
-            <circle cx="12" cy="17" r="1.5" fill="currentColor"/>
-          </svg>
+          ${icons.yinYang()}
         </button>
         <button id="nav-back-btn" class="editor-control-btn" onclick="navigateBack()" title="Go back (Cmd+[)" disabled>
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <polyline points="15 18 9 12 15 6"></polyline>
-          </svg>
+          ${icons.chevronLeft()}
         </button>
         <button id="nav-forward-btn" class="editor-control-btn" onclick="navigateForward()" title="Go forward (Cmd+])" disabled>
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <polyline points="9 18 15 12 9 6"></polyline>
-          </svg>
+          ${icons.chevronRight()}
         </button>
       </div>
       <span class="file-name">${fileName}</span>
       <div class="editor-controls">
         <button class="widget-toggle-btn editor-control-btn${window.widgetSidebar?.visible ? ' active' : ''}" onclick="toggleWidgetSidebar()" title="Toggle Widgets">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M3 3h18v18H3V3z"/>
-            <path d="M3 9h18"/>
-            <path d="M9 3v18"/>
-          </svg>
+          ${icons.layoutGrid()}
         </button>
         <button class="chat-toggle-btn editor-control-btn${window.chatPanel?.isVisible ? ' active' : ''}" onclick="toggleChatPanel()" title="AI Chat (Cmd+Shift+C)">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
-          </svg>
+          ${icons.messageSquare()}
         </button>
         <div class="editor-menu-container">
           <button id="editor-menu-btn" class="editor-control-btn" onclick="toggleEditorMenu()" title="Editor Menu">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <line x1="3" y1="12" x2="21" y2="12"></line>
-              <line x1="3" y1="6" x2="21" y2="6"></line>
-              <line x1="3" y1="18" x2="21" y2="18"></line>
-            </svg>
+            ${icons.menu()}
           </button>
           <div id="editor-dropdown" class="editor-dropdown hidden">
             <div class="editor-dropdown-item" onclick="showEditorSettings()">
@@ -2101,21 +2082,21 @@ function showWelcomeScreen() {
         <div class="features-section">
           <div class="feature-cards">
             <div class="feature-card">
-              <div class="feature-icon">🔒</div>
+              <div class="feature-icon">${icons.fileLock({ size: 32 })}</div>
               <h3>Private</h3>
               <h4>SECURE BY DESIGN</h4>
               <p>No Cloud. No Tracking. No BS. Every note stays local as plain Markdown. Total control, total privacy.</p>
             </div>
-            
+
             <div class="feature-card">
-              <div class="feature-icon">⚡</div>
+              <div class="feature-icon">${icons.sparkles({ size: 32 })}</div>
               <h3>Blazing Fast</h3>
               <h4>NATIVE PERFORMANCE</h4>
               <p>Locally powered personal knowledge vault & context engine with instant search, zero lag. Built for flow state.</p>
             </div>
-            
+
             <div class="feature-card">
-              <div class="feature-icon">🧠</div>
+              <div class="feature-icon">${icons.messageCircleCode({ size: 32 })}</div>
               <h3>Agent-Ready</h3>
               <h4>PROGRESSIVE CONTEXT</h4>
               <p>Each note, highlight, and connection strengthens your AI context. Watch your intelligence amplify over time.</p>
@@ -2503,7 +2484,7 @@ function displayFileTree(fileTree) {
           <span class="expand-icon" onclick="toggleFolder('${escapedPath}', event)">${expandIcon}</span>
           <span class="tree-label" onclick="handleFolderClick('${escapedPath}', event)">${file.name}</span>
           <span class="folder-actions">
-            <button class="folder-action-btn" onclick="showCreateFileModal('${escapedPath}', event)" title="New File in Folder">📄</button>
+            <button class="folder-action-btn" onclick="showCreateFileModal('${escapedPath}', event)" title="New File in Folder">${icons.filePlus({ size: 14 })}</button>
           </span>
         </div>
       `;
@@ -3081,6 +3062,36 @@ async function initializeApp() {
     appElement.innerHTML = `
       <div class="app-container">
         <div class="sidebar">
+          <div class="sidebar-ribbon" id="vault-actions" data-tauri-drag-region style="display: none;">
+            <button class="ribbon-button" onclick="showCreateFileModal('')" title="New File">
+              ${icons.fileText()}
+            </button>
+            <button class="ribbon-button" onclick="showCreateFolderModal()" title="New Folder">
+              ${icons.folderOpen()}
+            </button>
+            <button class="ribbon-button" onclick="refreshFileTree()" title="Refresh files">
+              ${icons.refresh()}
+            </button>
+            <div class="sort-menu-container">
+              <button id="sort-menu" class="ribbon-button" title="Sort files" onclick="toggleSortMenu()">
+                ${icons.arrowDown()}
+              </button>
+              <div id="sort-dropdown" class="sort-dropdown hidden">
+                <div class="dropdown-item" onclick="setSortOption('alphabetical')">
+                  <span class="dropdown-icon">${icons.aArrowDown({ size: 14 })}</span>
+                  <span class="dropdown-label">Alphabetical</span>
+                </div>
+                <div class="dropdown-item" onclick="setSortOption('created')">
+                  <span class="dropdown-icon">${icons.calendar({ size: 14 })}</span>
+                  <span class="dropdown-label">Date Created</span>
+                </div>
+                <div class="dropdown-item" onclick="setSortOption('modified')">
+                  <span class="dropdown-icon">${icons.clock({ size: 14 })}</span>
+                  <span class="dropdown-label">Date Modified</span>
+                </div>
+              </div>
+            </div>
+          </div>
           <div class="sidebar-header">
             <div id="vault-picker-container"></div>
             <div class="header-actions">
@@ -3094,90 +3105,28 @@ async function initializeApp() {
               <button id="create-vault" class="secondary-button" onclick="window.createVault()">Create Vault</button>
             </div>
           </div>
-          <div class="sidebar-ribbon" id="vault-actions" style="display: none;">
-            <button class="ribbon-button" onclick="showCreateFileModal('')" title="New File">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-                <polyline points="14,2 14,8 20,8"/>
-                <line x1="12" y1="18" x2="12" y2="12"/>
-                <line x1="9" y1="15" x2="15" y2="15"/>
-              </svg>
-            </button>
-            <button class="ribbon-button" onclick="showCreateFolderModal()" title="New Folder">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
-                <line x1="12" y1="11" x2="12" y2="17"/>
-                <line x1="9" y1="14" x2="15" y2="14"/>
-              </svg>
-            </button>
-            <button class="ribbon-button" onclick="refreshFileTree()" title="Refresh files">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M23 4v6h-6"/>
-                <path d="M1 20v-6h6"/>
-                <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
-              </svg>
-            </button>
-            <div class="sort-menu-container">
-              <button id="sort-menu" class="ribbon-button" title="Sort files" onclick="toggleSortMenu()">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="pointer-events: none;">
-                  <path d="M3 6h18M7 12h10M11 18h2"/>
-                </svg>
-              </button>
-              <div id="sort-dropdown" class="sort-dropdown hidden">
-                <div class="dropdown-item" onclick="setSortOption('alphabetical')">
-                  <span class="dropdown-icon">🔤</span>
-                  <span class="dropdown-label">Alphabetical</span>
-                </div>
-                <div class="dropdown-item" onclick="setSortOption('created')">
-                  <span class="dropdown-icon">📅</span>
-                  <span class="dropdown-label">Date Created</span>
-                </div>
-                <div class="dropdown-item" onclick="setSortOption('modified')">
-                  <span class="dropdown-icon">🕐</span>
-                  <span class="dropdown-label">Date Modified</span>
-                </div>
-              </div>
-            </div>
-          </div>
         </div>
         <div class="editor-container">
-          <div class="editor-header" id="editor-header">
+          <div class="editor-header" id="editor-header" data-tauri-drag-region>
             <div class="editor-left-controls">
               <button id="sidebar-toggle" class="editor-control-btn" onclick="toggleSidebar()" title="Toggle Sidebar">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
-                  <line x1="9" y1="9" x2="9" y2="15"></line>
-                </svg>
+                ${icons.panelLeft()}
               </button>
               <button id="zen-mode-btn" class="editor-control-btn" onclick="toggleZenMode()" title="Zen Mode (Cmd+Option+Z)">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                  <circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="2"/>
-                  <path d="M12 2a10 10 0 0 1 0 20 5 5 0 0 1 0-10 5 5 0 0 0 0-10z" fill="currentColor"/>
-                  <circle cx="12" cy="7" r="1.5" fill="white"/>
-                  <circle cx="12" cy="17" r="1.5" fill="currentColor"/>
-                </svg>
+                ${icons.yinYang()}
               </button>
             </div>
             <span class="file-name">Welcome to Gamplan</span>
             <div class="editor-controls">
               <button class="chat-toggle-btn editor-control-btn${window.chatPanel?.isVisible ? ' active' : ''}" onclick="toggleChatPanel()" title="AI Chat (Cmd+Shift+C)">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
-                </svg>
+                ${icons.messageSquare()}
               </button>
               <button id="split-view-btn" class="editor-control-btn" onclick="toggleSplitView()" title="Split View">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
-                  <line x1="12" y1="3" x2="12" y2="21"></line>
-                </svg>
+                ${icons.columns2()}
               </button>
               <div class="editor-menu-container">
                 <button id="editor-menu-btn" class="editor-control-btn" onclick="toggleEditorMenu()" title="Editor Menu">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <line x1="3" y1="12" x2="21" y2="12"></line>
-                    <line x1="3" y1="6" x2="21" y2="6"></line>
-                    <line x1="3" y1="18" x2="21" y2="18"></line>
-                  </svg>
+                  ${icons.menu()}
                 </button>
                 <div id="editor-dropdown" class="editor-dropdown hidden">
                   <div class="editor-dropdown-item" onclick="toggleZenMode()">

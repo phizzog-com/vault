@@ -1,4 +1,6 @@
 // ModeToggle.js - Toggle between Chat and CLI modes
+import { icons } from '../icons/icon-utils.js';
+
 export class ModeToggle {
   constructor(options = {}) {
     this.currentMode = options.initialMode || 'chat';
@@ -6,7 +8,8 @@ export class ModeToggle {
     this.disabled = false;
     this.element = null;
     this.button = null;
-    
+    this.keydownHandler = null; // Store reference for cleanup
+
     this.createUI();
     this.setupKeyboardShortcuts();
   }
@@ -40,24 +43,19 @@ export class ModeToggle {
     const isCliMode = this.currentMode === 'cli';
     
     this.button.innerHTML = `
-      <svg class="mode-icon mode-icon-chat ${!isCliMode ? 'active' : ''}" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
-      </svg>
+      ${icons.messageSquare({ class: `mode-icon mode-icon-chat ${!isCliMode ? 'active' : ''}` })}
       <div class="mode-toggle-track">
         <div class="mode-toggle-thumb ${isCliMode ? 'cli-mode' : ''}"></div>
       </div>
-      <svg class="mode-icon mode-icon-cli ${isCliMode ? 'active' : ''}" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
-        <path d="M9 9l3 3-3 3"></path>
-        <line x1="16" y1="15" x2="16" y2="15"></line>
-      </svg>
+      ${icons.terminal({ class: `mode-icon mode-icon-cli ${isCliMode ? 'active' : ''}` })}
     `;
     
     this.button.classList.toggle('cli-mode', isCliMode);
   }
   
   setupKeyboardShortcuts() {
-    document.addEventListener('keydown', (e) => {
+    // Store handler reference for cleanup
+    this.keydownHandler = (e) => {
       // Cmd/Ctrl + ` to toggle mode
       if ((e.metaKey || e.ctrlKey) && e.key === '`') {
         e.preventDefault();
@@ -65,7 +63,15 @@ export class ModeToggle {
           this.toggle();
         }
       }
-    });
+    };
+    document.addEventListener('keydown', this.keydownHandler);
+  }
+
+  removeKeyboardShortcuts() {
+    if (this.keydownHandler) {
+      document.removeEventListener('keydown', this.keydownHandler);
+      this.keydownHandler = null;
+    }
   }
   
   toggle() {
@@ -107,8 +113,15 @@ export class ModeToggle {
   }
   
   unmount() {
+    this.removeKeyboardShortcuts();
     if (this.element && this.element.parentNode) {
       this.element.parentNode.removeChild(this.element);
     }
+  }
+
+  destroy() {
+    this.unmount();
+    this.element = null;
+    this.button = null;
   }
 }

@@ -14,9 +14,10 @@ export class OpenAISDK {
     async initialize() {
         try {
             console.log('Initializing OpenAI SDK...');
-            this.settings = await invoke('get_ai_settings');
-            this.isInitialized = !!this.settings;
-            console.log('OpenAI SDK initialized:', this.isInitialized);
+            this.settings = await invoke('get_ai_settings_for_provider', { provider: 'openai' });
+            // Rust returns snake_case field names
+            this.isInitialized = !!this.settings?.api_key;
+            console.log('OpenAI SDK initialized:', this.isInitialized, 'has API key:', !!this.settings?.api_key);
             return this.isInitialized;
         } catch (error) {
             console.error('Failed to initialize OpenAI SDK:', error);
@@ -139,7 +140,7 @@ export class OpenAISDK {
                          model.toLowerCase().includes('mistral');
         
         // Use custom system prompt if available, otherwise use default
-        const defaultPrompt = 'You are a helpful AI assistant integrated into a note-taking app called Gaimplan. You help users with their notes, writing, research, and questions. Always provide helpful, accurate, and relevant responses.';
+        const defaultPrompt = 'You are a helpful AI assistant integrated into a note-taking app called Vault. You help users with their notes, writing, research, and questions. Always provide helpful, accurate, and relevant responses.';
         let systemContent = settings?.system_prompt || defaultPrompt;
         
         // Add tag context awareness

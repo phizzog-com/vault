@@ -91,6 +91,7 @@ pub async fn activate_online(key: &str, machine_id: &str) -> Result<LicenseInfo,
 }
 
 /// Validate an existing license key online
+#[allow(dead_code)] // Reserved for periodic validation feature
 pub async fn validate_online(key: &str, machine_id: &str) -> Result<bool, String> {
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(REQUEST_TIMEOUT_SECS))
@@ -123,6 +124,7 @@ pub async fn validate_online(key: &str, machine_id: &str) -> Result<bool, String
     if status.is_success() {
         #[derive(Deserialize)]
         struct ValidationResponse {
+            #[allow(dead_code)] // Field read via deserialization
             valid: bool,
         }
 

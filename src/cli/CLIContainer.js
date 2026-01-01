@@ -1,6 +1,7 @@
 // CLIContainer.js - Container for CLI mode with Ghostty terminal
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
+import { icons } from '../icons/icon-utils.js';
 
 export class CLIContainer {
   constructor(options = {}) {
@@ -90,7 +91,7 @@ export class CLIContainer {
       console.log('CLI: Mounting status container...');
       container.innerHTML = `
         <div class="cli-status">
-          <div class="cli-status-icon">🚀</div>
+          <div class="cli-status-icon">${icons.rocket({ size: 32 })}</div>
           <div class="cli-status-message">
             <h3>Claude Code CLI Launched</h3>
             <p>Ghostty terminal opened in a new window with Claude Code CLI.</p>
@@ -273,7 +274,7 @@ export class CLIContainer {
       
       this.container.innerHTML = `
         <div class="cli-error">
-          <div class="cli-error-icon">⚠️</div>
+          <div class="cli-error-icon">${icons.alertTriangle({ size: 32 })}</div>
           <div class="cli-error-message">${message}</div>
           ${isGhosttyError ? `
             <div class="cli-error-help">

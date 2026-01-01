@@ -2,6 +2,7 @@ import { invoke } from '@tauri-apps/api/core';
 import toast from '../plugin-hub/components/Toast.js';
 import { formatDistanceToNow, format, isToday, isTomorrow, isPast, isWithinInterval, addDays } from 'date-fns';
 import { createTaskCard } from './TaskCard.js';
+import { icons } from '../icons/icon-utils.js';
 
 export class TaskWidget {
     constructor() {
@@ -91,7 +92,7 @@ export class TaskWidget {
         // Dashboard button
         const dashboardBtn = document.createElement('button');
         dashboardBtn.className = 'task-dashboard-btn';
-        dashboardBtn.innerHTML = '⊞';
+        dashboardBtn.innerHTML = icons.layoutGrid({ size: 14 });
         dashboardBtn.title = 'Open Task Dashboard';
         dashboardBtn.addEventListener('click', this.openDashboard);
         
@@ -116,7 +117,7 @@ export class TaskWidget {
         
         const searchIcon = document.createElement('span');
         searchIcon.className = 'task-search-icon';
-        searchIcon.innerHTML = '🔍';
+        searchIcon.innerHTML = icons.search({ size: 14 });
         
         searchContainer.appendChild(searchIcon);
         searchContainer.appendChild(searchInput);
@@ -129,18 +130,18 @@ export class TaskWidget {
         tabContainer.className = 'task-filter-tabs';
         
         const filters = [
-            { id: 'all', label: 'All', icon: '📋' },
-            { id: 'today', label: 'Today', icon: '📅' },
-            { id: 'overdue', label: 'Overdue', icon: '⚠️' },
-            { id: 'upcoming', label: 'Upcoming', icon: '📆' },
-            { id: 'no-date', label: 'No Date', icon: '❓' }
+            { id: 'all', label: 'All', icon: icons.clipboardList({ size: 14 }) },
+            { id: 'today', label: 'Today', icon: icons.calendar({ size: 14 }) },
+            { id: 'overdue', label: 'Overdue', icon: icons.alertTriangle({ size: 14 }) },
+            { id: 'upcoming', label: 'Upcoming', icon: icons.calendarDays({ size: 14 }) },
+            { id: 'no-date', label: 'No Date', icon: icons.helpCircle({ size: 14 }) }
         ];
-        
+
         filters.forEach(filter => {
             const tab = document.createElement('button');
             tab.className = 'task-filter-tab';
             tab.dataset.filter = filter.id;
-            tab.innerHTML = `${filter.icon} ${filter.label}`;
+            tab.innerHTML = `<span class="filter-icon">${filter.icon}</span> ${filter.label}`;
             
             if (filter.id === this.selectedFilter) {
                 tab.classList.add('active');
@@ -320,7 +321,7 @@ export class TaskWidget {
         
         const icon = document.createElement('div');
         icon.className = 'task-empty-icon';
-        icon.textContent = '✓';
+        icon.innerHTML = icons.check({ size: 24 });
         
         const message = document.createElement('div');
         message.className = 'task-empty-message';
@@ -356,7 +357,7 @@ export class TaskWidget {
         const errorDiv = document.createElement('div');
         errorDiv.className = 'task-error';
         errorDiv.innerHTML = `
-            <div class="task-error-icon">⚠️</div>
+            <div class="task-error-icon">${icons.alertTriangle({ size: 24 })}</div>
             <div class="task-error-message">Error loading tasks</div>
             <div class="task-error-detail">${error.message || error}</div>
             <button class="task-retry-btn">Retry</button>

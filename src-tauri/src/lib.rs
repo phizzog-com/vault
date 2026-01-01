@@ -17,6 +17,7 @@ pub mod plugin_runtime;
 pub mod identity;
 pub mod tasks;
 pub mod license;
+pub mod vault_agent_commands;
 
 pub use app_state::AppState;
 pub use window_state::{WindowState, WindowRegistry};

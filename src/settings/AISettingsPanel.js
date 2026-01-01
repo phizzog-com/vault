@@ -17,7 +17,21 @@ export class AISettingsPanel {
             showApiKey: false,
             testing: false,
             testStatus: null,
-            showAdvanced: false
+            showAdvanced: false,
+            // Claude specific settings
+            maxTurns: 10,
+            // Tool permissions for Claude
+            toolPermissions: {
+                search_notes: true,
+                get_note: true,
+                get_current_note: true,
+                list_tags: true,
+                notes_by_tag: true,
+                semantic_search: true,
+                write_note: true,
+                update_note: true,
+                append_to_note: true
+            }
         };
         
         this.container = null;
@@ -57,8 +71,8 @@ export class AISettingsPanel {
             if (settings) {
                 console.log('Loaded AI settings:', { ...settings, api_key: '***' });
                 // Convert snake_case to camelCase for frontend use
-                this.state = { 
-                    ...this.state, 
+                this.state = {
+                    ...this.state,
                     provider: settings.provider || this.state.provider,
                     endpoint: settings.endpoint,
                     apiKey: settings.api_key || '',
@@ -68,7 +82,10 @@ export class AISettingsPanel {
                     streamingEnabled: settings.streaming_enabled !== undefined ? settings.streaming_enabled : true,
                     systemPrompt: settings.system_prompt || null,
                     headerName: (settings.headers && settings.headers[0] && settings.headers[0].name) || '',
-                    headerValue: (settings.headers && settings.headers[0] && settings.headers[0].value) || ''
+                    headerValue: (settings.headers && settings.headers[0] && settings.headers[0].value) || '',
+                    // Claude specific settings
+                    maxTurns: settings.max_turns || 10,
+                    toolPermissions: settings.tool_permissions || this.state.toolPermissions
                 };
             }
         } catch (error) {
@@ -89,7 +106,10 @@ export class AISettingsPanel {
                 system_prompt: this.state.systemPrompt || null,  // Save custom system prompt
                 headers: (this.state.headerName || this.state.headerValue) ? [
                     { name: this.state.headerName || '', value: this.state.headerValue || '' }
-                ] : []
+                ] : [],
+                // Claude specific settings
+                max_turns: this.state.maxTurns,
+                tool_permissions: this.state.toolPermissions
             };
             
             console.log('Saving AI settings...');
@@ -169,7 +189,10 @@ export class AISettingsPanel {
                 streamingEnabled: settings.streaming_enabled !== undefined ? settings.streaming_enabled : true,
                 systemPrompt: settings.system_prompt || null,
                 headerName: (settings.headers && settings.headers[0] && settings.headers[0].name) || '',
-                headerValue: (settings.headers && settings.headers[0] && settings.headers[0].value) || ''
+                headerValue: (settings.headers && settings.headers[0] && settings.headers[0].value) || '',
+                // Claude specific settings
+                maxTurns: settings.max_turns || 10,
+                toolPermissions: settings.tool_permissions || this.state.toolPermissions
             };
         } catch (error) {
             console.error(`Failed to load settings for ${provider}:`, error);
@@ -223,6 +246,8 @@ export class AISettingsPanel {
                 this.state.apiKey = '';
                 this.state.temperature = 0.7;
                 this.state.maxTokens = 8192;
+                // Claude specific defaults
+                this.state.maxTurns = 10;
                 break;
         }
     }
@@ -258,7 +283,39 @@ export class AISettingsPanel {
     updateHeaderValue(value) {
         this.state.headerValue = value;
     }
-    
+
+    // Claude Agent specific update methods
+    updateMaxTurns(value) {
+        this.state.maxTurns = parseInt(value);
+    }
+
+    toggleToolPermission(toolName) {
+        this.state.toolPermissions[toolName] = !this.state.toolPermissions[toolName];
+        this.render();
+    }
+
+    setAllToolPermissions(enabled) {
+        Object.keys(this.state.toolPermissions).forEach(tool => {
+            this.state.toolPermissions[tool] = enabled;
+        });
+        this.render();
+    }
+
+    getToolLabel(toolName) {
+        const labels = {
+            search_notes: 'Search Notes',
+            get_note: 'Read Note',
+            get_current_note: 'Read Current Note',
+            list_tags: 'List Tags',
+            notes_by_tag: 'Notes by Tag',
+            semantic_search: 'Semantic Search (Premium)',
+            write_note: 'Write Note',
+            update_note: 'Update Note',
+            append_to_note: 'Append to Note'
+        };
+        return labels[toolName] || toolName;
+    }
+
     toggleApiKeyVisibility() {
         this.state.showApiKey = !this.state.showApiKey;
         this.render();
@@ -351,7 +408,7 @@ export class AISettingsPanel {
                         <button onclick="aiSettingsPanel.quickSetup('claudeAgent')"
                                 class="quick-setup-btn ${this.state.provider === 'claudeAgent' ? 'selected' : ''} ${this.activeProvider === 'claudeAgent' ? 'active' : ''}">
                             <span class="provider-icon">${icons.sparkles({ size: 16 })}</span>
-                            Claude Agent
+                            Claude
                             ${this.activeProvider === 'claudeAgent' ? `<span class="active-badge">${icons.check({ size: 12 })}</span>` : ''}
                         </button>
                     </div>
@@ -426,16 +483,62 @@ export class AISettingsPanel {
                         />
                         <small>${this.getModelExamples(this.state.endpoint)}</small>
                     </div>
-                    
+
+                    ${this.state.provider === 'claudeAgent' ? `
+                    <div class="claude-agent-settings" style="background: var(--bg-secondary); padding: 16px; border-radius: 8px; margin-bottom: 16px; border: 1px solid var(--border-color);">
+                        <h4 style="margin: 0 0 12px 0; font-size: 13px; font-weight: 600; display: flex; align-items: center; gap: 6px;">
+                            ${icons.sparkles({ size: 14 })} Claude Settings
+                        </h4>
+
+                        <div class="form-group" style="margin-bottom: 12px;">
+                            <label>Max Turns: ${this.state.maxTurns}</label>
+                            <input
+                                type="range"
+                                min="1"
+                                max="20"
+                                step="1"
+                                value="${this.state.maxTurns}"
+                                oninput="aiSettingsPanel.updateMaxTurns(this.value); this.previousElementSibling.textContent = 'Max Turns: ' + this.value"
+                                class="form-slider"
+                            />
+                            <small>Maximum number of agent turns (tool uses) per conversation</small>
+                        </div>
+
+                        <div class="form-group" style="margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--border-color);">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                                <label style="font-weight: 600;">Tool Permissions</label>
+                                <div style="display: flex; gap: 8px;">
+                                    <button onclick="aiSettingsPanel.setAllToolPermissions(true)" class="small-btn" style="font-size: 11px; padding: 4px 8px;">Select All</button>
+                                    <button onclick="aiSettingsPanel.setAllToolPermissions(false)" class="small-btn" style="font-size: 11px; padding: 4px 8px;">Clear All</button>
+                                </div>
+                            </div>
+                            <div class="tool-permissions-grid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px;">
+                                ${Object.entries(this.state.toolPermissions).map(([tool, enabled]) => `
+                                    <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; font-size: 12px;">
+                                        <input
+                                            type="checkbox"
+                                            ${enabled ? 'checked' : ''}
+                                            onchange="aiSettingsPanel.toggleToolPermission('${tool}')"
+                                            style="width: 14px; height: 14px;"
+                                        />
+                                        ${this.getToolLabel(tool)}
+                                    </label>
+                                `).join('')}
+                            </div>
+                            <small style="margin-top: 8px; display: block;">Only enabled tools will be available to Claude</small>
+                        </div>
+                    </div>
+                    ` : ''}
+
                     <div class="form-group">
                         <label>System Prompt:</label>
                         <textarea 
-                            value="${this.state.systemPrompt || 'You are a helpful AI assistant integrated into a note-taking app called gaimplan. You help users with their notes, writing, research, and questions. Always provide helpful, accurate, and relevant responses.'}"
+                            value="${this.state.systemPrompt || 'You are a helpful AI assistant integrated into a note-taking app called Vault. You help users with their notes, writing, research, and questions. Always provide helpful, accurate, and relevant responses.'}"
                             onchange="aiSettingsPanel.updateSystemPrompt(this.value)"
                             placeholder="Enter custom system prompt..."
                             class="form-input"
                             rows="6"
-                        >${this.state.systemPrompt || 'You are a helpful AI assistant integrated into a note-taking app called gaimplan. You help users with their notes, writing, research, and questions. Always provide helpful, accurate, and relevant responses.'}</textarea>
+                        >${this.state.systemPrompt || 'You are a helpful AI assistant integrated into a note-taking app called Vault. You help users with their notes, writing, research, and questions. Always provide helpful, accurate, and relevant responses.'}</textarea>
                         <small>This prompt will be used for all AI conversations. Dynamic content like MCP tools and tag context will be appended automatically.</small>
                     </div>
                     

@@ -3,6 +3,32 @@ import pluginAPI from './api/pluginApi.js';
 import toastManager from './components/Toast.js';
 import { Modal, PermissionDialog, PluginSettingsModal } from './components/Modal.js';
 import { fuzzySearchPlugins } from './utils/fuzzySearch.js';
+import EntitlementManager from '../services/entitlement-manager.js';
+
+/**
+ * Bundled/Native plugins that are built into the app
+ * These cannot be uninstalled and have special handling
+ */
+const BUNDLED_PLUGINS = {
+  'pacasdb': {
+    id: 'pacasdb',
+    name: 'PACASDB Premium',
+    version: '1.0.0',
+    author: 'Vault Team',
+    description: 'Semantic search and cognitive memory for your vault. Enables AI-powered note discovery, related notes, and intelligent context tracking.',
+    enabled: false,
+    installed: true,
+    permissions: ['vault:read', 'vault:write', 'network:request'],
+    settings: [],
+    status: 'inactive',
+    icon: null,
+    homepage: null,
+    category: 'Premium',
+    tags: ['semantic-search', 'ai', 'premium', 'cognitive-memory'],
+    isBundled: true,  // Mark as bundled - cannot be uninstalled
+    requiresLicense: true,  // Requires premium license to enable
+  }
+};
 
 /**
  * Plugin Context - Manages plugin state and operations
@@ -21,12 +47,69 @@ export class PluginContext {
       systemStatus: null,
       categories: []
     };
-    
+
     this.listeners = [];
     this.toastManager = toastManager;
     this.api = pluginAPI;
     this.eventHandlers = null;
     this.isInitialized = false;
+    this.entitlementManager = null;
+  }
+
+  /**
+   * Get the entitlement manager, initializing if needed
+   */
+  async getEntitlementManager() {
+    if (!this.entitlementManager) {
+      this.entitlementManager = new EntitlementManager();
+      await this.entitlementManager.initialize();
+    }
+    return this.entitlementManager;
+  }
+
+  /**
+   * Check if user has premium access
+   */
+  async isPremiumEnabled() {
+    const manager = await this.getEntitlementManager();
+    return manager.isPremiumEnabled();
+  }
+
+  /**
+   * Get bundled plugins with current enabled state from storage
+   */
+  async getBundledPlugins() {
+    const bundledPlugins = [];
+
+    for (const [id, plugin] of Object.entries(BUNDLED_PLUGINS)) {
+      // Clone the plugin definition
+      const pluginData = { ...plugin };
+
+      // Load enabled state from storage
+      try {
+        const savedSettings = await invoke('plugin_get_settings', { pluginId: id });
+        if (savedSettings && savedSettings.enabled !== undefined) {
+          pluginData.enabled = savedSettings.enabled;
+          pluginData.status = savedSettings.enabled ? 'active' : 'inactive';
+        }
+      } catch (e) {
+        // Settings not saved yet, use defaults
+      }
+
+      // For license-required plugins, check if license is active
+      if (plugin.requiresLicense) {
+        const isPremium = await this.isPremiumEnabled();
+        // If enabled but no license, disable it
+        if (pluginData.enabled && !isPremium) {
+          pluginData.enabled = false;
+          pluginData.status = 'inactive';
+        }
+      }
+
+      bundledPlugins.push(pluginData);
+    }
+
+    return bundledPlugins;
   }
 
   /**
@@ -66,12 +149,10 @@ export class PluginContext {
       
       // Subscribe to events
       await this.api.subscribeToEvents(this.eventHandlers);
-      
-      // Start resource monitoring
-      this.api.startResourceMonitoring((resources) => {
-        this.setState({ resources });
-      });
-      
+
+      // Note: Resource monitoring is handled by ResourcesView when active
+      // to avoid unnecessary re-renders on other views
+
       // Load initial data
       await this.loadAllData();
       
@@ -144,13 +225,19 @@ export class PluginContext {
   async loadAllData() {
     try {
       this.setState({ loading: true, error: null });
-      
+
       const data = await this.api.refreshAllData();
       const categories = await this.api.getCategories();
       const systemStatus = await this.api.getSystemStatus();
-      
+
+      // Add bundled plugins (like PACASDB)
+      const bundledPlugins = await this.getBundledPlugins();
+      const bundledIds = new Set(bundledPlugins.map(p => p.id));
+      const filteredPlugins = (data.installed || []).filter(p => !bundledIds.has(p.id));
+      const allPlugins = [...bundledPlugins, ...filteredPlugins];
+
       this.setState({
-        installedPlugins: data.installed,
+        installedPlugins: allPlugins,
         permissions: data.permissions,
         resources: data.resources,
         categories,
@@ -172,7 +259,16 @@ export class PluginContext {
   async loadInstalledPlugins() {
     try {
       const plugins = await this.api.listInstalledPlugins();
-      this.setState({ installedPlugins: plugins });
+
+      // Add bundled plugins (like PACASDB)
+      const bundledPlugins = await this.getBundledPlugins();
+
+      // Merge, ensuring bundled plugins come first and aren't duplicated
+      const bundledIds = new Set(bundledPlugins.map(p => p.id));
+      const filteredPlugins = plugins.filter(p => !bundledIds.has(p.id));
+      const allPlugins = [...bundledPlugins, ...filteredPlugins];
+
+      this.setState({ installedPlugins: allPlugins });
     } catch (error) {
       console.error('Failed to load installed plugins:', error);
       this.showToast('Failed to load plugins', 'error');
@@ -221,8 +317,19 @@ export class PluginContext {
    */
   async enablePlugin(pluginId) {
     try {
-      await this.api.enablePlugin(pluginId);
-      this.updatePluginState(pluginId, { enabled: true });
+      // For bundled plugins, save enabled state to settings instead of calling API
+      if (BUNDLED_PLUGINS[pluginId]) {
+        await invoke('plugin_update_settings', {
+          settings: {
+            plugin_id: pluginId,
+            enabled: true,
+            settings: {}
+          }
+        });
+      } else {
+        await this.api.enablePlugin(pluginId);
+      }
+      this.updatePluginState(pluginId, { enabled: true, status: 'active' });
     } catch (error) {
       console.error('Failed to enable plugin:', error);
       this.showToast('Failed to enable plugin', 'error');
@@ -235,8 +342,19 @@ export class PluginContext {
    */
   async disablePlugin(pluginId) {
     try {
-      await this.api.disablePlugin(pluginId);
-      this.updatePluginState(pluginId, { enabled: false });
+      // For bundled plugins, save enabled state to settings instead of calling API
+      if (BUNDLED_PLUGINS[pluginId]) {
+        await invoke('plugin_update_settings', {
+          settings: {
+            plugin_id: pluginId,
+            enabled: false,
+            settings: {}
+          }
+        });
+      } else {
+        await this.api.disablePlugin(pluginId);
+      }
+      this.updatePluginState(pluginId, { enabled: false, status: 'inactive' });
     } catch (error) {
       console.error('Failed to disable plugin:', error);
       this.showToast('Failed to disable plugin', 'error');

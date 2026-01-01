@@ -1,5 +1,6 @@
 import { invoke } from '@tauri-apps/api/core';
 import { mcpManager } from '../mcp/MCPManager.js';
+import { icons } from '../icons/icon-utils.js';
 
 export class GlobalSearch {
   constructor() {
@@ -139,10 +140,7 @@ export class GlobalSearch {
             align-items: center;
             gap: 6px;
           ">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
-              <circle cx="12" cy="12" r="3"></circle>
-            </svg>
+            ${icons.eye({ size: 14 })}
             Sync
           </button>
         </div>
@@ -516,9 +514,10 @@ export class GlobalSearch {
         text-align: center;
       ">
         <div style="
-          font-size: 32px;
           margin-bottom: 16px;
-        ">🔒</div>
+          display: flex;
+          justify-content: center;
+        ">${icons.lock({ size: 32 })}</div>
         <div style="
           color: var(--text-primary);
           font-weight: 500;
@@ -1008,10 +1007,7 @@ export class GlobalSearch {
       syncBtn.disabled = false;
       syncBtn.style.opacity = '1';
       syncBtn.innerHTML = `
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
-          <circle cx="12" cy="12" r="3"></circle>
-        </svg>
+        ${icons.eye({ size: 14 })}
         Sync
       `;
 
@@ -1028,9 +1024,7 @@ export class GlobalSearch {
     syncBtn.disabled = true;
     syncBtn.style.opacity = '0.5';
     syncBtn.innerHTML = `
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="spin">
-        <path d="M21 12a9 9 0 11-6.219-8.56"></path>
-      </svg>
+      ${icons.loader({ size: 14 })}
       Syncing...
     `;
 
@@ -1070,10 +1064,7 @@ export class GlobalSearch {
         syncBtn.disabled = false;
         syncBtn.style.opacity = '1';
         syncBtn.innerHTML = `
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
-            <circle cx="12" cy="12" r="3"></circle>
-          </svg>
+          ${icons.eye({ size: 14 })}
           Sync
         `;
         style.remove();
@@ -1161,13 +1152,10 @@ export class GlobalSearch {
       syncBtn.disabled = false;
       syncBtn.style.opacity = '1';
       syncBtn.innerHTML = `
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
-          <circle cx="12" cy="12" r="3"></circle>
-        </svg>
+        ${icons.eye({ size: 14 })}
         Sync
       `;
-      
+
       // Clean up style
       style.remove();
     }

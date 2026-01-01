@@ -1,9 +1,12 @@
 // ChatInterface.js - Message display and input system
-console.log('💬 ChatInterface loading...');
+import { icons } from '../icons/icon-utils.js';
+import { ToolUseCard } from '../components/ToolUseCard.js';
+
+console.log('[ChatInterface] loading...');
 
 export class ChatInterface {
   constructor() {
-    console.log('🔧 Initializing ChatInterface');
+    console.log('[ChatInterface] Initializing');
     this.messages = [];
     this.container = null;
     this.messagesContainer = null;
@@ -12,13 +15,14 @@ export class ChatInterface {
     this.isTyping = false;
     this.currentContext = [];
     this.contextDialogOverlay = null;
-    
+    this.activeToolCards = new Map(); // Track tool cards by ID
+
     // Load saved messages
     this.loadMessages();
   }
   
   mount(container) {
-    console.log('📌 Mounting ChatInterface');
+    console.log('[ChatInterface] Mounting');
     this.container = container;
     container.innerHTML = '';
     
@@ -56,19 +60,19 @@ export class ChatInterface {
       <p>I can help you understand and work with your notes.</p>
       <div class="chat-tips">
         <div class="chat-tip">
-          <span class="tip-icon">📝</span>
+          <span class="tip-icon">${icons.fileText({ size: 16 })}</span>
           <span>Your current note is automatically included as context</span>
         </div>
         <div class="chat-tip">
-          <span class="tip-icon">➕</span>
+          <span class="tip-icon">${icons.plus({ size: 16 })}</span>
           <span>Click "Add Context" to include more notes in the conversation</span>
         </div>
         <div class="chat-tip">
-          <span class="tip-icon">⬇️</span>
+          <span class="tip-icon">${icons.download({ size: 16 })}</span>
           <span>Export chats to save them permanently in "Chat History" folder</span>
         </div>
         <div class="chat-tip">
-          <span class="tip-icon">📋</span>
+          <span class="tip-icon">${icons.copy({ size: 16 })}</span>
           <span>Copy any AI response with the copy button</span>
         </div>
       </div>
@@ -138,12 +142,7 @@ export class ChatInterface {
     const sendBtn = document.createElement('button');
     sendBtn.className = 'chat-send-btn';
     sendBtn.title = 'Send message';
-    sendBtn.innerHTML = `
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <line x1="22" y1="2" x2="11" y2="13"></line>
-        <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
-      </svg>
-    `;
+    sendBtn.innerHTML = icons.send({ size: 18 });
     sendBtn.onclick = () => this.sendMessage();
     
     // Assemble controls bar
@@ -229,13 +228,13 @@ export class ChatInterface {
   }
   
   updateContext(context) {
-    console.log('📎 Updating context:', context);
+    console.log('[ChatInterface] Updating context:', context);
     this.currentContext = context;
     this.updateContextIndicator();
   }
   
   removeFromContext(path) {
-    console.log('🗑️ Removing from context:', path);
+    console.log('[ChatInterface] Removing from context:', path);
     this.currentContext = this.currentContext.filter(note => note.path !== path);
     this.updateContextIndicator();
     
@@ -246,7 +245,7 @@ export class ChatInterface {
   }
   
   showContextDialog() {
-    console.log('📋 Showing context dialog');
+    console.log('[ChatInterface] Showing context dialog');
     
     // Create modal overlay
     const overlay = document.createElement('div');
@@ -346,7 +345,7 @@ export class ChatInterface {
   }
   
   addNoteToContext(note) {
-    console.log('📎 Adding note to context:', note);
+    console.log('[ChatInterface] Adding note to context:', note);
     
     // Check if already in context
     const exists = this.currentContext.find(n => n.path === note.path);
@@ -372,7 +371,7 @@ export class ChatInterface {
     
     if (!message) return;
     
-    console.log('📤 Sending message:', message);
+    console.log('[ChatInterface] Sending message:', message);
     
     // Clear input
     textarea.value = '';
@@ -392,7 +391,7 @@ export class ChatInterface {
   }
   
   addMessage(message) {
-    console.log('➕ Adding message:', message.type);
+    console.log('[ChatInterface] Adding message:', message.type);
     
     // Hide typing indicator if this is an assistant message
     if (message.type === 'assistant') {
@@ -414,11 +413,51 @@ export class ChatInterface {
   }
   
   addElement(element) {
-    console.log('➕ Adding custom element to chat');
-    
+    console.log('[ChatInterface] Adding custom element to chat');
+
     // Insert the element at the top (newest first)
     this.messagesContainer.insertBefore(element, this.messagesContainer.firstChild);
     this.scrollToTop();
+  }
+
+  // Tool Use Card Management
+  addToolUse(toolId, toolName, toolInput) {
+    console.log('[ChatInterface] Adding tool use:', toolName);
+
+    const card = new ToolUseCard({
+      id: toolId,
+      toolName: toolName,
+      toolInput: toolInput,
+      status: 'running'
+    });
+
+    this.activeToolCards.set(toolId, card);
+
+    // Insert tool card at top (newest first)
+    this.messagesContainer.insertBefore(card.getElement(), this.messagesContainer.firstChild);
+    this.scrollToTop();
+
+    return card;
+  }
+
+  updateToolResult(toolId, result) {
+    console.log('[ChatInterface] Updating tool result:', toolId);
+
+    const card = this.activeToolCards.get(toolId);
+    if (card) {
+      card.setResult(result);
+    }
+  }
+
+  setToolStatus(toolId, status) {
+    const card = this.activeToolCards.get(toolId);
+    if (card) {
+      card.setStatus(status);
+    }
+  }
+
+  clearToolCards() {
+    this.activeToolCards.clear();
   }
   
   updateMessage(messageId, newContent) {
@@ -508,13 +547,7 @@ export class ChatInterface {
       const copyBtn = document.createElement('button');
       copyBtn.className = 'message-copy-btn';
       copyBtn.title = 'Copy response';
-      copyBtn.innerHTML = `
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
-          <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
-        </svg>
-        <span>Copy</span>
-      `;
+      copyBtn.innerHTML = `${icons.copy({ size: 14 })}<span>Copy</span>`;
       
       copyBtn.onclick = async () => {
         try {
@@ -523,12 +556,7 @@ export class ChatInterface {
           
           // Visual feedback
           const originalHTML = copyBtn.innerHTML;
-          copyBtn.innerHTML = `
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <polyline points="20 6 9 17 4 12"></polyline>
-            </svg>
-            <span>Copied!</span>
-          `;
+          copyBtn.innerHTML = `${icons.check({ size: 14 })}<span>Copied!</span>`;
           copyBtn.classList.add('copied');
           
           setTimeout(() => {
@@ -550,7 +578,7 @@ export class ChatInterface {
   renderMessage(message) {
     // Safety check - ensure container exists
     if (!this.messagesContainer) {
-      console.warn('⚠️ Messages container not ready, skipping render');
+      console.warn('[ChatInterface] Messages container not ready, skipping render');
       return;
     }
     
@@ -612,7 +640,7 @@ export class ChatInterface {
   showTyping(isOllama = false) {
     if (this.isTyping) return;
     
-    console.log('⌨️ Showing typing indicator');
+    console.log('[ChatInterface] Showing typing indicator');
     this.isTyping = true;
     this.typingStartTime = Date.now();
     
@@ -654,7 +682,7 @@ export class ChatInterface {
   }
   
   hideTyping() {
-    console.log('✋ Hiding typing indicator');
+    console.log('[ChatInterface] Hiding typing indicator');
     this.isTyping = false;
     
     // Clear the interval if it exists
@@ -670,7 +698,7 @@ export class ChatInterface {
   }
   
   clearMessages() {
-    console.log('🗑️ Clearing all messages');
+    console.log('[ChatInterface] Clearing all messages');
     this.messages = [];
     this.renderMessages();
     this.showWelcomeMessage();
@@ -709,9 +737,9 @@ export class ChatInterface {
       })).filter(msg => msg.type);
       
       localStorage.setItem('gaimplan-chat-messages', JSON.stringify(toSave));
-      console.log('💾 Saved', toSave.length, 'messages');
+      console.log('[ChatInterface] Saved', toSave.length, 'messages');
     } catch (error) {
-      console.error('❌ Failed to save messages:', error);
+      console.error('[ChatInterface] Failed to save messages:', error);
     }
   }
   
@@ -720,10 +748,10 @@ export class ChatInterface {
       const saved = localStorage.getItem('gaimplan-chat-messages');
       if (saved) {
         this.messages = JSON.parse(saved);
-        console.log('📚 Loaded', this.messages.length, 'messages');
+        console.log('[ChatInterface] Loaded', this.messages.length, 'messages');
       }
     } catch (error) {
-      console.error('❌ Failed to load messages:', error);
+      console.error('[ChatInterface] Failed to load messages:', error);
       this.messages = [];
     }
   }
