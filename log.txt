@@ -1,0 +1,597 @@
+in:/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/node/bin:/opt/local/bin:/Users/ksnyder/code/aura-dev/mcp-servers/filesystem-server-rust/target/release:/Users/ksnyder/code/aura-dev/mcp-servers/search-server-rust/target/release:/Users/ksnyder/code/aura-dev/mcp-servers/git-server-rust/target/release
+✅ Found Node.js at: /Users/ksnyder/.nvm/versions/node/v20.19.4/bin/node
+✅ Found Node.js at: /Users/ksnyder/.nvm/versions/node/v20.19.4/bin/node
+🔧 Using specified working directory: "/Users/ksnyder/Library/Mobile Documents/com~apple~CloudDocs/cloud/test-vault"
+🔧 Using specified working directory: "/Users/ksnyder/Library/Mobile Documents/com~apple~CloudDocs/cloud/test-vault"
+🚀 Executing command: /Users/ksnyder/code/vault/src-tauri/target/debug/mcp-filesystem-server ["--line-transport", "--allowed-paths", "/Users/ksnyder/Library/Mobile Documents/com~apple~CloudDocs/cloud/test-vault"]
+🔧 Final working directory: "/Users/ksnyder/Library/Mobile Documents/com~apple~CloudDocs/cloud/test-vault"
+🔍 Checking if script exists: --line-transport
+🚀 Executing command: /Users/ksnyder/code/vault/src-tauri/target/debug/mcp-filesystem-server ["--line-transport", "--allowed-paths", "/Users/ksnyder/Library/Mobile Documents/com~apple~CloudDocs/cloud/test-vault"]
+🔧 Final working directory: "/Users/ksnyder/Library/Mobile Documents/com~apple~CloudDocs/cloud/test-vault"
+🔍 Checking if script exists: --line-transport
+❌ Script file NOT FOUND at: --line-transport
+🚀 Spawning process: /Users/ksnyder/code/vault/src-tauri/target/debug/mcp-filesystem-server ["--line-transport", "--allowed-paths", "/Users/ksnyder/Library/Mobile Documents/com~apple~CloudDocs/cloud/test-vault"]
+❌ Script file NOT FOUND at: --line-transport
+🚀 Spawning process: /Users/ksnyder/code/vault/src-tauri/target/debug/mcp-filesystem-server ["--line-transport", "--allowed-paths", "/Users/ksnyder/Library/Mobile Documents/com~apple~CloudDocs/cloud/test-vault"]
+✅ Process spawned with PID: Some(60174)
+✅ Process spawned
+🔧 Creating stdio transport wrapper...
+🔧 Creating StdioTransport instance
+🔧 Starting transport readers...
+🔧 Starting stdout reader...
+⏳ Waiting for readers to be ready...
+🔧 Starting stderr reader task for vault-filesystem
+📕 Stderr reader active, attempting first read...
+🔧 Starting stdout reader task for vault-filesystem
+✅ Both readers are ready
+✅ Transport readers started
+✅ Transport created
+⏳ Waiting for MCP server to start...
+✅ Process spawned with PID: Some(60175)
+✅ Process spawned
+🔧 Creating stdio transport wrapper...
+🔧 Creating StdioTransport instance
+🔧 Starting transport readers...
+🔧 Starting stdout reader...
+⏳ Waiting for readers to be ready...
+🔧 Starting stderr reader task for vault-filesystem
+📕 Stderr reader active, attempting first read...
+🔧 Starting stdout reader task for vault-filesystem
+✅ Both readers are ready
+✅ Transport readers started
+✅ Transport created
+⏳ Waiting for MCP server to start...
+📥 EOF on stdout for vault-filesystem
+📕 EOF on stderr for vault-filesystem
+🔧 Stderr reader exiting for vault-filesystem
+🤝 Starting MCP handshake for server: vault-filesystem
+📤 Sending initialize request: JsonRpcMessage { jsonrpc: "2.0", id: Some(Number(1)), method: "initialize", params: Some(Object {"capabilities": Object {"experimental": Object {}}, "clientInfo": Object {"name": String("vault"), "version": String("0.1.0")}, "protocolVersion": String("2025-06-18")}) }
+📤 StdioTransport sending message: JsonRpcMessage { jsonrpc: "2.0", id: Some(Number(1)), method: "initialize", params: Some(Object {"capabilities": Object {"experimental": Object {}}, "clientInfo": Object {"name": String("vault"), "version": String("0.1.0")}, "protocolVersion": String("2025-06-18")}) }
+📤 Serialized message: {"jsonrpc":"2.0","id":1,"method":"initialize","params":{"capabilities":{"experimental":{}},"clientInfo":{"name":"vault","version":"0.1.0"},"protocolVersion":"2025-06-18"}}
+📥 Creating response channel for ID: Number(1)
+📥 Channel inserted, waiting for response with ID: Number(1)
+📤 Getting process handle lock...
+📤 Got lock, writing to stdin...
+📝 Writing to stdin: {"jsonrpc":"2.0","id":1,"method":"initialize","params":{"capabilities":{"experimental":{}},"clientInfo":{"name":"vault","version":"0.1.0"},"protocolVersion":"2025-06-18"}}
+✅ Successfully wrote to stdin and flushed
+📤 Write completed, releasing lock
+✅ Message sent successfully
+📥 Waiting for response...
+🤝 Starting MCP handshake for server: vault-filesystem
+📤 Sending initialize request: JsonRpcMessage { jsonrpc: "2.0", id: Some(Number(1)), method: "initialize", params: Some(Object {"capabilities": Object {"experimental": Object {}}, "clientInfo": Object {"name": String("vault"), "version": String("0.1.0")}, "protocolVersion": String("2025-06-18")}) }
+📤 StdioTransport sending message: JsonRpcMessage { jsonrpc: "2.0", id: Some(Number(1)), method: "initialize", params: Some(Object {"capabilities": Object {"experimental": Object {}}, "clientInfo": Object {"name": String("vault"), "version": String("0.1.0")}, "protocolVersion": String("2025-06-18")}) }
+📤 Serialized message: {"jsonrpc":"2.0","id":1,"method":"initialize","params":{"capabilities":{"experimental":{}},"clientInfo":{"name":"vault","version":"0.1.0"},"protocolVersion":"2025-06-18"}}
+📥 Creating response channel for ID: Number(1)
+📥 Channel inserted, waiting for response with ID: Number(1)
+📤 Getting process handle lock...
+📤 Got lock, writing to stdin...
+📝 Writing to stdin: {"jsonrpc":"2.0","id":1,"method":"initialize","params":{"capabilities":{"experimental":{}},"clientInfo":{"name":"vault","version":"0.1.0"},"protocolVersion":"2025-06-18"}}
+✅ Successfully wrote to stdin and flushed
+📤 Write completed, releasing lock
+✅ Message sent successfully
+📥 Waiting for response...
+❌ Response channel closed
+❌ Initialize request failed: Response channel closed
+📥 Received stdout line from vault-filesystem: {"jsonrpc":"2.0","id":1,"result":{"capabilities":{"resources":{},"tools":{}},"protocolVersion":"2025-06-18","serverInfo":{"name":"gaimplan-filesystem-rust","version":"1.0.0"}}}
+📥 Parsed JSON from vault-filesystem: Object {"id": Number(1), "jsonrpc": String("2.0"), "result": Object {"capabilities": Object {"resources": Object {}, "tools": Object {}}, "protocolVersion": String("2025-06-18"), "serverInfo": Object {"name": String("gaimplan-filesystem-rust"), "version": String("1.0.0")}}}
+📥 Found response with ID: Number(1)
+📥 Parsed as JsonRpcResponse successfully
+📥 Current waiting channels: [Number(1)]
+📥 Found channel for ID Number(1), sending response
+📥 Received stdout line from vault-filesystem: {"jsonrpc":"2.0","id":1,"result":{"capabilities":{"resources":{},"tools":{}},"protocolVersion":"2025-06-18","serverInfo":{"name":"gaimplan-filesystem-rust","version":"1.0.0"}}}
+📥 Parsed JSON from vault-filesystem: Object {"id": Number(1), "jsonrpc": String("2.0"), "result": Object {"capabilities": Object {"resources": Object {}, "tools": Object {}}, "protocolVersion": String("2025-06-18"), "serverInfo": Object {"name": String("gaimplan-filesystem-rust"), "version": String("1.0.0")}}}
+📥 Found response with ID: Number(1)
+📥 Parsed as JsonRpcResponse successfully
+📥 Current waiting channels: []
+❌ No waiting channel for ID: Number(1)
+❌ Available channels: []
+📥 Received response: JsonRpcResponse { jsonrpc: "2.0", id: Number(1), result: Some(Object {"capabilities": Object {"resources": Object {}, "tools": Object {}}, "protocolVersion": String("2025-06-18"), "serverInfo": Object {"name": String("gaimplan-filesystem-rust"), "version": String("1.0.0")}}), error: None }
+📥 Received initialize response: JsonRpcResponse { jsonrpc: "2.0", id: Number(1), result: Some(Object {"capabilities": Object {"resources": Object {}, "tools": Object {}}, "protocolVersion": String("2025-06-18"), "serverInfo": Object {"name": String("gaimplan-filesystem-rust"), "version": String("1.0.0")}}), error: None }
+Loading MCP settings...
+Command 'claude' found in PATH
+Command 'claude' found in PATH
+PTY: Creating pty with size 24x80
+PTY: Building command: /bin/bash ["-l"]
+PTY: Using PATH: /Users/ksnyder/code/vault/node_modules/.bin:/Users/ksnyder/code/node_modules/.bin:/Users/ksnyder/node_modules/.bin:/Users/node_modules/.bin:/node_modules/.bin:/Users/ksnyder/.nvm/versions/node/v22.15.0/lib/node_modules/npm/node_modules/@npmcli/run-script/lib/node-gyp-bin:/Users/ksnyder/.antigravity/antigravity/bin:/opt/homebrew/opt/postgresql@15/bin:/Users/ksnyder/code/google-doc-highlights-addon/code/google-cloud-sdk/bin:/Users/ksnyder/.local/bin:/Users/ksnyder/.nvm/versions/node/v22.15.0/bin:/Users/ksnyder/.codeium/windsurf/bin:/opt/anaconda3/bin:/opt/anaconda3/bin:/opt/anaconda3/condabin:/opt/homebrew/bin:/usr/local/bin:/System/Cryptexes/App/usr/bin:/usr/bin:/bin:/usr/sbin:/sbin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/local/bin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/bin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/appleinternal/bin:/opt/pmk/env/global/bin://Applications/Topaz Photo.app/Contents/Resources/bin:/Library/Apple/usr/bin:/Users/ksnyder/.cargo/bin:/Applications/iTerm.app/Contents/Resources/utilities:/Users/ksnyder/.cache/lm-studio/bin:/usr/local/bin:/opt/homebrew/bin:/opt/homebrew/sbin:/usr/bin:/bin:/usr/sbin:/sbin:/Users/ksnyder/.local/bin:/Users/ksnyder/bin:/Users/ksnyder/.claude/bin:/Users/ksnyder/.nvm/versions/node/v20.19.4/bin:/Users/ksnyder/.nvm/versions/node/v20.11.1/bin:/Users/ksnyder/.nvm/versions/node/v20.19.1/bin:/Users/ksnyder/.nvm/versions/node/v22.15.0/bin
+PTY: Spawning command...
+PTY: Command spawned successfully
+        Info File src-tauri/undefined/.gemini/settings.json changed. Rebuilding application...
+     Running DevCommand (`cargo  run --no-default-features --color always --`)
+        Info File src-tauri/undefined/.gemini/settings.json changed. Rebuilding application...
+     Running DevCommand (`cargo  run --no-default-features --color always --`)
+        Info File src-tauri/undefined/.codex/config.toml changed. Rebuilding application...
+     Running DevCommand (`cargo  run --no-default-features --color always --`)
+        Info File src-tauri/undefined/.codex/config.toml changed. Rebuilding application...
+     Running DevCommand (`cargo  run --no-default-features --color always --`)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.20s
+     Running `target/debug/vault`
+🔄 IdentityManager::new called with vault_root: "/Users/ksnyder/Library/Application Support/com.vault.app/vault"
+  ⏭️ Skipping vault scan during initialization (avoiding runtime deadlock)
+✅ IdentityManager::new complete
+🔄 IdentityManager::new called with vault_root: "/Users/ksnyder/Library/Application Support/com.vault.app/vault"
+  ⏭️ Skipping vault scan during initialization (avoiding runtime deadlock)
+✅ IdentityManager::new complete
+Loaded editor preferences from file: font_size=16
+Checking for AI settings migration...
+No old settings to migrate
+🪟 Restoring window: 2560x1440 at (0, 120) [screen: 2560x1440]
+Loading AI settings for provider: gemini
+Loading AI settings for provider: openai
+No settings found for provider openai, returning defaults
+Loading AI settings for provider: gemini
+Loading AI settings for provider: bedrock
+No settings found for provider bedrock, returning defaults
+Loading AI settings for provider: claudeAgent
+Loading MCP settings...
+Loading MCP settings...
+Loading MCP settings...
+Command 'claude' found in PATH
+Command 'claude' found in PATH
+PTY: Creating pty with size 24x80
+PTY: Building command: /bin/bash ["-l"]
+PTY: Using PATH: /Users/ksnyder/code/vault/node_modules/.bin:/Users/ksnyder/code/node_modules/.bin:/Users/ksnyder/node_modules/.bin:/Users/node_modules/.bin:/node_modules/.bin:/Users/ksnyder/.nvm/versions/node/v22.15.0/lib/node_modules/npm/node_modules/@npmcli/run-script/lib/node-gyp-bin:/Users/ksnyder/.antigravity/antigravity/bin:/opt/homebrew/opt/postgresql@15/bin:/Users/ksnyder/code/google-doc-highlights-addon/code/google-cloud-sdk/bin:/Users/ksnyder/.local/bin:/Users/ksnyder/.nvm/versions/node/v22.15.0/bin:/Users/ksnyder/.codeium/windsurf/bin:/opt/anaconda3/bin:/opt/anaconda3/bin:/opt/anaconda3/condabin:/opt/homebrew/bin:/usr/local/bin:/System/Cryptexes/App/usr/bin:/usr/bin:/bin:/usr/sbin:/sbin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/local/bin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/bin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/appleinternal/bin:/opt/pmk/env/global/bin://Applications/Topaz Photo.app/Contents/Resources/bin:/Library/Apple/usr/bin:/Users/ksnyder/.cargo/bin:/Applications/iTerm.app/Contents/Resources/utilities:/Users/ksnyder/.cache/lm-studio/bin:/usr/local/bin:/opt/homebrew/bin:/opt/homebrew/sbin:/usr/bin:/bin:/usr/sbin:/sbin:/Users/ksnyder/.local/bin:/Users/ksnyder/bin:/Users/ksnyder/.claude/bin:/Users/ksnyder/.nvm/versions/node/v20.19.4/bin:/Users/ksnyder/.nvm/versions/node/v20.11.1/bin:/Users/ksnyder/.nvm/versions/node/v20.19.1/bin:/Users/ksnyder/.nvm/versions/node/v22.15.0/bin
+PTY: Spawning command...
+PTY: Command spawned successfully
+🔓 open_vault called with path: /Users/ksnyder/Library/Mobile Documents/com~apple~CloudDocs/cloud/test-vault
+📁 Vault info: VaultInfo { path: "/Users/ksnyder/Library/Mobile Documents/com~apple~CloudDocs/cloud/test-vault", name: "test-vault" }
+🪟 Window ID: main
+📝 Registering window with ID: main
+Loaded editor preferences from file: font_size=16
+🔗 Registering window with vault...
+Creating new watcher for vault: /Users/ksnyder/Library/Mobile Documents/com~apple~CloudDocs/cloud/test-vault
+New watcher created for window main on vault /Users/ksnyder/Library/Mobile Documents/com~apple~CloudDocs/cloud/test-vault
+Started watching vault: /Users/ksnyder/Library/Mobile Documents/com~apple~CloudDocs/cloud/test-vault
+Registered window main with vault /Users/ksnyder/Library/Mobile Documents/com~apple~CloudDocs/cloud/test-vault
+✅ Window registered with vault
+🔄 Starting IdentityManager reinitialization...
+  📝 Found RwLock IdentityManager state
+🔄 IdentityManager::new called with vault_root: "/Users/ksnyder/Library/Mobile Documents/com~apple~CloudDocs/cloud/test-vault"
+  ⏭️ Skipping vault scan during initialization (avoiding runtime deadlock)
+✅ IdentityManager::new complete
+  ✅ IdentityManager (RwLock) reinitialized for vault: /Users/ksnyder/Library/Mobile Documents/com~apple~CloudDocs/cloud/test-vault
+  📝 Found Mutex IdentityManager state
+🔄 IdentityManager::new called with vault_root: "/Users/ksnyder/Library/Mobile Documents/com~apple~CloudDocs/cloud/test-vault"
+  ⏭️ Skipping vault scan during initialization (avoiding runtime deadlock)
+✅ IdentityManager::new complete
+  ✅ IdentityManager (Mutex) reinitialized for vault: /Users/ksnyder/Library/Mobile Documents/com~apple~CloudDocs/cloud/test-vault
+✅ IdentityManager reinitialization complete
+📚 Triggering manual task index population...
+📝 Updating recent vaults...
+🎉 open_vault completed successfully, returning vault_info
+Reusing existing watcher for vault /Users/ksnyder/Library/Mobile Documents/com~apple~CloudDocs/cloud/test-vault (ref count: 2)
+Registered window main with vault /Users/ksnyder/Library/Mobile Documents/com~apple~CloudDocs/cloud/test-vault
+✅ File watcher started for: /Users/ksnyder/Library/Mobile Documents/com~apple~CloudDocs/cloud/test-vault
+Loading MCP settings...
+Loading vault settings for: /Users/ksnyder/Library/Mobile Documents/com~apple~CloudDocs/cloud/test-vault
+No settings found for vault, returning defaults
+Reusing existing watcher for vault /Users/ksnyder/Library/Mobile Documents/com~apple~CloudDocs/cloud/test-vault (ref count: 3)
+Registered window main with vault /Users/ksnyder/Library/Mobile Documents/com~apple~CloudDocs/cloud/test-vault
+✅ File watcher started for: /Users/ksnyder/Library/Mobile Documents/com~apple~CloudDocs/cloud/test-vault
+🔍 Starting background task scan for vault: "/Users/ksnyder/Library/Mobile Documents/com~apple~CloudDocs/cloud/test-vault"
+    🔍 Scanning vault for tasks: "/Users/ksnyder/Library/Mobile Documents/com~apple~CloudDocs/cloud/test-vault"
+[sync_file_tasks_to_index_async] Processing file path: "/Users/ksnyder/Library/Mobile Documents/com~apple~CloudDocs/cloud/test-vault/strikethrough-basic.md"
+[sync_file_tasks_to_index_async] Path exists: true
+[sync_file_tasks_to_index_async] Path is absolute: true
+[sync_file_tasks_to_index_async] Processing file path: "/Users/ksnyder/Library/Mobile Documents/com~apple~CloudDocs/cloud/test-vault/task-uuid-basic.md"
+[sync_file_tasks_to_index_async] Path exists: true
+[sync_file_tasks_to_index_async] Path is absolute: true
+[sync_file_tasks_to_index_async] Processing file path: "/Users/ksnyder/Library/Mobile Documents/com~apple~CloudDocs/cloud/test-vault/highlights-basic.md"
+[sync_file_tasks_to_index_async] Path exists: true
+[sync_file_tasks_to_index_async] Path is absolute: true
+[sync_file_tasks_to_index_async] Processing file path: "/Users/ksnyder/Library/Mobile Documents/com~apple~CloudDocs/cloud/test-vault/example.md"
+[sync_file_tasks_to_index_async] Path exists: true
+[sync_file_tasks_to_index_async] Path is absolute: true
+[sync_file_tasks_to_index_async] Processing file path: "/Users/ksnyder/Library/Mobile Documents/com~apple~CloudDocs/cloud/test-vault/syntax-test.md"
+[sync_file_tasks_to_index_async] Path exists: true
+[sync_file_tasks_to_index_async] Path is absolute: true
+[sync_file_tasks_to_index_async] Processing file path: "/Users/ksnyder/Library/Mobile Documents/com~apple~CloudDocs/cloud/test-vault/ai-transparency-ai-codec-technical-note - Highlights.md"
+[sync_file_tasks_to_index_async] Path exists: true
+[sync_file_tasks_to_index_async] Path is absolute: true
+[sync_file_tasks_to_index_async] Processing file path: "/Users/ksnyder/Library/Mobile Documents/com~apple~CloudDocs/cloud/test-vault/Link Test.md"
+[sync_file_tasks_to_index_async] Path exists: true
+[sync_file_tasks_to_index_async] Path is absolute: true
+[sync_file_tasks_to_index_async] Processing file path: "/Users/ksnyder/Library/Mobile Documents/com~apple~CloudDocs/cloud/test-vault/Image Paste.md"
+[sync_file_tasks_to_index_async] Path exists: true
+[sync_file_tasks_to_index_async] Path is absolute: true
+[sync_file_tasks_to_index_async] Processing file path: "/Users/ksnyder/Library/Mobile Documents/com~apple~CloudDocs/cloud/test-vault/headers-all.md"
+[sync_file_tasks_to_index_async] Path exists: true
+[sync_file_tasks_to_index_async] Path is absolute: true
+      📄 Processed 10 files...
+[sync_file_tasks_to_index_async] Processing file path: "/Users/ksnyder/Library/Mobile Documents/com~apple~CloudDocs/cloud/test-vault/test.md"
+[sync_file_tasks_to_index_async] Path exists: true
+[sync_file_tasks_to_index_async] Path is absolute: true
+    ✅ Scanned 10 markdown files: found tasks in 10 files
+✅ Background task scan completed
+Loading MCP settings...
+🚀 Starting MCP server: vault-search
+✅ Configuration validated
+✅ Server ID available
+🔧 Creating transport...
+🔧 Creating stdio transport
+🔧 Spawning process...
+🔧 ProcessPool::spawn called
+✅ Process limits checked
+✅ Extracted stdio config: /Users/ksnyder/code/vault/src-tauri/target/debug/mcp-search-server ["--line-transport", "--index-path", "/Users/ksnyder/Library/Mobile Documents/com~apple~CloudDocs/cloud/test-vault/.vault/search"]
+🚀 Spawning command: /Users/ksnyder/code/vault/src-tauri/target/debug/mcp-search-server with args: ["--line-transport", "--index-path", "/Users/ksnyder/Library/Mobile Documents/com~apple~CloudDocs/cloud/test-vault/.vault/search"]
+🔧 MCP Process using PATH: /Users/ksnyder/code/vault/node_modules/.bin:/Users/ksnyder/code/node_modules/.bin:/Users/ksnyder/node_modules/.bin:/Users/node_modules/.bin:/node_modules/.bin:/Users/ksnyder/.nvm/versions/node/v22.15.0/lib/node_modules/npm/node_modules/@npmcli/run-script/lib/node-gyp-bin:/Users/ksnyder/.antigravity/antigravity/bin:/opt/homebrew/opt/postgresql@15/bin:/Users/ksnyder/code/google-doc-highlights-addon/code/google-cloud-sdk/bin:/Users/ksnyder/.local/bin:/Users/ksnyder/.nvm/versions/node/v22.15.0/bin:/Users/ksnyder/.codeium/windsurf/bin:/opt/anaconda3/bin:/opt/anaconda3/bin:/opt/anaconda3/condabin:/opt/homebrew/bin:/usr/local/bin:/System/Cryptexes/App/usr/bin:/usr/bin:/bin:/usr/sbin:/sbin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/local/bin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/bin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/appleinternal/bin:/opt/pmk/env/global/bin://Applications/Topaz Photo.app/Contents/Resources/bin:/Library/Apple/usr/bin:/Users/ksnyder/.cargo/bin:/Applications/iTerm.app/Contents/Resources/utilities:/Users/ksnyder/.cache/lm-studio/bin:/Users/ksnyder/.local/bin:/Users/ksnyder/bin:/Users/ksnyder/.nvm/versions/node/v20.19.4/bin:/Users/ksnyder/.nvm/versions/node/v20.11.1/bin:/Users/ksnyder/.nvm/versions/node/v20.19.1/bin:/Users/ksnyder/.nvm/versions/node/v22.15.0/bin:/opt/homebrew/bin:/usr/local/bin:/opt/homebrew/sbin:/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/node/bin:/opt/local/bin:/Users/ksnyder/code/aura-dev/mcp-servers/filesystem-server-rust/target/release:/Users/ksnyder/code/aura-dev/mcp-servers/search-server-rust/target/release:/Users/ksnyder/code/aura-dev/mcp-servers/git-server-rust/target/release
+✅ Found Node.js at: /Users/ksnyder/.nvm/versions/node/v20.19.4/bin/node
+🔧 Using specified working directory: "/Users/ksnyder/Library/Mobile Documents/com~apple~CloudDocs/cloud/test-vault"
+🚀 Executing command: /Users/ksnyder/code/vault/src-tauri/target/debug/mcp-search-server ["--line-transport", "--index-path", "/Users/ksnyder/Library/Mobile Documents/com~apple~CloudDocs/cloud/test-vault/.vault/search"]
+🔧 Final working directory: "/Users/ksnyder/Library/Mobile Documents/com~apple~CloudDocs/cloud/test-vault"
+🔍 Checking if script exists: --line-transport
+❌ Script file NOT FOUND at: --line-transport
+🚀 Spawning process: /Users/ksnyder/code/vault/src-tauri/target/debug/mcp-search-server ["--line-transport", "--index-path", "/Users/ksnyder/Library/Mobile Documents/com~apple~CloudDocs/cloud/test-vault/.vault/search"]
+✅ Process spawned with PID: Some(60339)
+✅ Process spawned
+🔧 Creating stdio transport wrapper...
+🔧 Creating StdioTransport instance
+🔧 Starting transport readers...
+🔧 Starting stdout reader...
+⏳ Waiting for readers to be ready...
+🔧 Starting stderr reader task for vault-search
+🔧 Starting stdout reader task for vault-search
+📕 Stderr reader active, attempting first read...
+✅ Both readers are ready
+✅ Transport readers started
+✅ Transport created
+⏳ Waiting for MCP server to start...
+🤝 Starting MCP handshake for server: vault-search
+📤 Sending initialize request: JsonRpcMessage { jsonrpc: "2.0", id: Some(Number(1)), method: "initialize", params: Some(Object {"capabilities": Object {"experimental": Object {}}, "clientInfo": Object {"name": String("vault"), "version": String("0.1.0")}, "protocolVersion": String("2025-06-18")}) }
+📤 StdioTransport sending message: JsonRpcMessage { jsonrpc: "2.0", id: Some(Number(1)), method: "initialize", params: Some(Object {"capabilities": Object {"experimental": Object {}}, "clientInfo": Object {"name": String("vault"), "version": String("0.1.0")}, "protocolVersion": String("2025-06-18")}) }
+📤 Serialized message: {"jsonrpc":"2.0","id":1,"method":"initialize","params":{"capabilities":{"experimental":{}},"clientInfo":{"name":"vault","version":"0.1.0"},"protocolVersion":"2025-06-18"}}
+📥 Creating response channel for ID: Number(1)
+📥 Channel inserted, waiting for response with ID: Number(1)
+📤 Getting process handle lock...
+📤 Got lock, writing to stdin...
+📝 Writing to stdin: {"jsonrpc":"2.0","id":1,"method":"initialize","params":{"capabilities":{"experimental":{}},"clientInfo":{"name":"vault","version":"0.1.0"},"protocolVersion":"2025-06-18"}}
+✅ Successfully wrote to stdin and flushed
+📤 Write completed, releasing lock
+✅ Message sent successfully
+📥 Waiting for response...
+📥 Received stdout line from vault-search: {"jsonrpc":"2.0","id":1,"result":{"capabilities":{"tools":{}},"protocolVersion":"2025-06-18","serverInfo":{"name":"gaimplan-search-rust","version":"1.0.0"}}}
+📥 Parsed JSON from vault-search: Object {"id": Number(1), "jsonrpc": String("2.0"), "result": Object {"capabilities": Object {"tools": Object {}}, "protocolVersion": String("2025-06-18"), "serverInfo": Object {"name": String("gaimplan-search-rust"), "version": String("1.0.0")}}}
+📥 Found response with ID: Number(1)
+📥 Parsed as JsonRpcResponse successfully
+📥 Current waiting channels: [Number(1)]
+📥 Found channel for ID Number(1), sending response
+📥 Received response: JsonRpcResponse { jsonrpc: "2.0", id: Number(1), result: Some(Object {"capabilities": Object {"tools": Object {}}, "protocolVersion": String("2025-06-18"), "serverInfo": Object {"name": String("gaimplan-search-rust"), "version": String("1.0.0")}}), error: None }
+📥 Received initialize response: JsonRpcResponse { jsonrpc: "2.0", id: Number(1), result: Some(Object {"capabilities": Object {"tools": Object {}}, "protocolVersion": String("2025-06-18"), "serverInfo": Object {"name": String("gaimplan-search-rust"), "version": String("1.0.0")}}), error: None }
+🚀 Starting MCP server: vault-filesystem
+✅ Configuration validated
+✅ Server ID available
+🔧 Creating transport...
+🔧 Creating stdio transport
+🔧 Spawning process...
+🔧 ProcessPool::spawn called
+✅ Process limits checked
+✅ Extracted stdio config: /Users/ksnyder/code/vault/src-tauri/target/debug/mcp-filesystem-server ["--line-transport", "--allowed-paths", "/Users/ksnyder/Library/Mobile Documents/com~apple~CloudDocs/cloud/test-vault"]
+🚀 Spawning command: /Users/ksnyder/code/vault/src-tauri/target/debug/mcp-filesystem-server with args: ["--line-transport", "--allowed-paths", "/Users/ksnyder/Library/Mobile Documents/com~apple~CloudDocs/cloud/test-vault"]
+🔧 MCP Process using PATH: /Users/ksnyder/code/vault/node_modules/.bin:/Users/ksnyder/code/node_modules/.bin:/Users/ksnyder/node_modules/.bin:/Users/node_modules/.bin:/node_modules/.bin:/Users/ksnyder/.nvm/versions/node/v22.15.0/lib/node_modules/npm/node_modules/@npmcli/run-script/lib/node-gyp-bin:/Users/ksnyder/.antigravity/antigravity/bin:/opt/homebrew/opt/postgresql@15/bin:/Users/ksnyder/code/google-doc-highlights-addon/code/google-cloud-sdk/bin:/Users/ksnyder/.local/bin:/Users/ksnyder/.nvm/versions/node/v22.15.0/bin:/Users/ksnyder/.codeium/windsurf/bin:/opt/anaconda3/bin:/opt/anaconda3/bin:/opt/anaconda3/condabin:/opt/homebrew/bin:/usr/local/bin:/System/Cryptexes/App/usr/bin:/usr/bin:/bin:/usr/sbin:/sbin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/local/bin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/bin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/appleinternal/bin:/opt/pmk/env/global/bin://Applications/Topaz Photo.app/Contents/Resources/bin:/Library/Apple/usr/bin:/Users/ksnyder/.cargo/bin:/Applications/iTerm.app/Contents/Resources/utilities:/Users/ksnyder/.cache/lm-studio/bin:/Users/ksnyder/.local/bin:/Users/ksnyder/bin:/Users/ksnyder/.nvm/versions/node/v20.19.4/bin:/Users/ksnyder/.nvm/versions/node/v20.11.1/bin:/Users/ksnyder/.nvm/versions/node/v20.19.1/bin:/Users/ksnyder/.nvm/versions/node/v22.15.0/bin:/opt/homebrew/bin:/usr/local/bin:/opt/homebrew/sbin:/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/node/bin:/opt/local/bin:/Users/ksnyder/code/aura-dev/mcp-servers/filesystem-server-rust/target/release:/Users/ksnyder/code/aura-dev/mcp-servers/search-server-rust/target/release:/Users/ksnyder/code/aura-dev/mcp-servers/git-server-rust/target/release
+✅ Found Node.js at: /Users/ksnyder/.nvm/versions/node/v20.19.4/bin/node
+🔧 Using specified working directory: "/Users/ksnyder/Library/Mobile Documents/com~apple~CloudDocs/cloud/test-vault"
+🚀 Executing command: /Users/ksnyder/code/vault/src-tauri/target/debug/mcp-filesystem-server ["--line-transport", "--allowed-paths", "/Users/ksnyder/Library/Mobile Documents/com~apple~CloudDocs/cloud/test-vault"]
+🔧 Final working directory: "/Users/ksnyder/Library/Mobile Documents/com~apple~CloudDocs/cloud/test-vault"
+🔍 Checking if script exists: --line-transport
+❌ Script file NOT FOUND at: --line-transport
+🚀 Spawning process: /Users/ksnyder/code/vault/src-tauri/target/debug/mcp-filesystem-server ["--line-transport", "--allowed-paths", "/Users/ksnyder/Library/Mobile Documents/com~apple~CloudDocs/cloud/test-vault"]
+✅ Process spawned with PID: Some(60340)
+✅ Process spawned
+🔧 Creating stdio transport wrapper...
+🔧 Creating StdioTransport instance
+🔧 Starting transport readers...
+🔧 Starting stdout reader...
+⏳ Waiting for readers to be ready...
+🔧 Starting stderr reader task for vault-filesystem
+📕 Stderr reader active, attempting first read...
+🔧 Starting stdout reader task for vault-filesystem
+✅ Both readers are ready
+✅ Transport readers started
+✅ Transport created
+⏳ Waiting for MCP server to start...
+🤝 Starting MCP handshake for server: vault-filesystem
+📤 Sending initialize request: JsonRpcMessage { jsonrpc: "2.0", id: Some(Number(1)), method: "initialize", params: Some(Object {"capabilities": Object {"experimental": Object {}}, "clientInfo": Object {"name": String("vault"), "version": String("0.1.0")}, "protocolVersion": String("2025-06-18")}) }
+📤 StdioTransport sending message: JsonRpcMessage { jsonrpc: "2.0", id: Some(Number(1)), method: "initialize", params: Some(Object {"capabilities": Object {"experimental": Object {}}, "clientInfo": Object {"name": String("vault"), "version": String("0.1.0")}, "protocolVersion": String("2025-06-18")}) }
+📤 Serialized message: {"jsonrpc":"2.0","id":1,"method":"initialize","params":{"capabilities":{"experimental":{}},"clientInfo":{"name":"vault","version":"0.1.0"},"protocolVersion":"2025-06-18"}}
+📥 Creating response channel for ID: Number(1)
+📥 Channel inserted, waiting for response with ID: Number(1)
+📤 Getting process handle lock...
+📤 Got lock, writing to stdin...
+📝 Writing to stdin: {"jsonrpc":"2.0","id":1,"method":"initialize","params":{"capabilities":{"experimental":{}},"clientInfo":{"name":"vault","version":"0.1.0"},"protocolVersion":"2025-06-18"}}
+✅ Successfully wrote to stdin and flushed
+📤 Write completed, releasing lock
+✅ Message sent successfully
+📥 Waiting for response...
+📥 Received stdout line from vault-filesystem: {"jsonrpc":"2.0","id":1,"result":{"capabilities":{"resources":{},"tools":{}},"protocolVersion":"2025-06-18","serverInfo":{"name":"gaimplan-filesystem-rust","version":"1.0.0"}}}
+📥 Parsed JSON from vault-filesystem: Object {"id": Number(1), "jsonrpc": String("2.0"), "result": Object {"capabilities": Object {"resources": Object {}, "tools": Object {}}, "protocolVersion": String("2025-06-18"), "serverInfo": Object {"name": String("gaimplan-filesystem-rust"), "version": String("1.0.0")}}}
+📥 Found response with ID: Number(1)
+📥 Parsed as JsonRpcResponse successfully
+📥 Current waiting channels: [Number(1)]
+📥 Found channel for ID Number(1), sending response
+📥 Received response: JsonRpcResponse { jsonrpc: "2.0", id: Number(1), result: Some(Object {"capabilities": Object {"resources": Object {}, "tools": Object {}}, "protocolVersion": String("2025-06-18"), "serverInfo": Object {"name": String("gaimplan-filesystem-rust"), "version": String("1.0.0")}}), error: None }
+📥 Received initialize response: JsonRpcResponse { jsonrpc: "2.0", id: Number(1), result: Some(Object {"capabilities": Object {"resources": Object {}, "tools": Object {}}, "protocolVersion": String("2025-06-18"), "serverInfo": Object {"name": String("gaimplan-filesystem-rust"), "version": String("1.0.0")}}), error: None }
+Loading MCP settings...
+Command 'claude' found in PATH
+Command 'claude' found in PATH
+PTY: Creating pty with size 63x86
+PTY: Building command: /bin/bash ["-l"]
+PTY: Using PATH: /Users/ksnyder/code/vault/node_modules/.bin:/Users/ksnyder/code/node_modules/.bin:/Users/ksnyder/node_modules/.bin:/Users/node_modules/.bin:/node_modules/.bin:/Users/ksnyder/.nvm/versions/node/v22.15.0/lib/node_modules/npm/node_modules/@npmcli/run-script/lib/node-gyp-bin:/Users/ksnyder/.antigravity/antigravity/bin:/opt/homebrew/opt/postgresql@15/bin:/Users/ksnyder/code/google-doc-highlights-addon/code/google-cloud-sdk/bin:/Users/ksnyder/.local/bin:/Users/ksnyder/.nvm/versions/node/v22.15.0/bin:/Users/ksnyder/.codeium/windsurf/bin:/opt/anaconda3/bin:/opt/anaconda3/bin:/opt/anaconda3/condabin:/opt/homebrew/bin:/usr/local/bin:/System/Cryptexes/App/usr/bin:/usr/bin:/bin:/usr/sbin:/sbin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/local/bin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/bin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/appleinternal/bin:/opt/pmk/env/global/bin://Applications/Topaz Photo.app/Contents/Resources/bin:/Library/Apple/usr/bin:/Users/ksnyder/.cargo/bin:/Applications/iTerm.app/Contents/Resources/utilities:/Users/ksnyder/.cache/lm-studio/bin:/usr/local/bin:/opt/homebrew/bin:/opt/homebrew/sbin:/usr/bin:/bin:/usr/sbin:/sbin:/Users/ksnyder/.local/bin:/Users/ksnyder/bin:/Users/ksnyder/.claude/bin:/Users/ksnyder/.nvm/versions/node/v20.19.4/bin:/Users/ksnyder/.nvm/versions/node/v20.11.1/bin:/Users/ksnyder/.nvm/versions/node/v20.19.1/bin:/Users/ksnyder/.nvm/versions/node/v22.15.0/bin
+PTY: Spawning command...
+PTY: Command spawned successfully
+        Info File src-tauri/undefined/.gemini/settings.json changed. Rebuilding application...
+     Running DevCommand (`cargo  run --no-default-features --color always --`)
+        Info File src-tauri/undefined/.gemini/settings.json changed. Rebuilding application...
+     Running DevCommand (`cargo  run --no-default-features --color always --`)
+        Info File src-tauri/undefined/.codex/config.toml changed. Rebuilding application...
+     Running DevCommand (`cargo  run --no-default-features --color always --`)
+        Info File src-tauri/undefined/.codex/config.toml changed. Rebuilding application...
+     Running DevCommand (`cargo  run --no-default-features --color always --`)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.20s
+     Running `target/debug/vault`
+🔄 IdentityManager::new called with vault_root: "/Users/ksnyder/Library/Application Support/com.vault.app/vault"
+  ⏭️ Skipping vault scan during initialization (avoiding runtime deadlock)
+✅ IdentityManager::new complete
+🔄 IdentityManager::new called with vault_root: "/Users/ksnyder/Library/Application Support/com.vault.app/vault"
+  ⏭️ Skipping vault scan during initialization (avoiding runtime deadlock)
+✅ IdentityManager::new complete
+Loaded editor preferences from file: font_size=16
+Checking for AI settings migration...
+No old settings to migrate
+🪟 Restoring window: 2560x1440 at (0, 240) [screen: 2560x1440]
+Loading AI settings for provider: gemini
+Loading AI settings for provider: openai
+No settings found for provider openai, returning defaults
+Loading AI settings for provider: gemini
+Loading AI settings for provider: bedrock
+No settings found for provider bedrock, returning defaults
+Loading AI settings for provider: claudeAgent
+Loading MCP settings...
+Loading MCP settings...
+Loading MCP settings...
+Command 'claude' found in PATH
+Command 'claude' found in PATH
+PTY: Creating pty with size 24x80
+PTY: Building command: /bin/bash ["-l"]
+PTY: Using PATH: /Users/ksnyder/code/vault/node_modules/.bin:/Users/ksnyder/code/node_modules/.bin:/Users/ksnyder/node_modules/.bin:/Users/node_modules/.bin:/node_modules/.bin:/Users/ksnyder/.nvm/versions/node/v22.15.0/lib/node_modules/npm/node_modules/@npmcli/run-script/lib/node-gyp-bin:/Users/ksnyder/.antigravity/antigravity/bin:/opt/homebrew/opt/postgresql@15/bin:/Users/ksnyder/code/google-doc-highlights-addon/code/google-cloud-sdk/bin:/Users/ksnyder/.local/bin:/Users/ksnyder/.nvm/versions/node/v22.15.0/bin:/Users/ksnyder/.codeium/windsurf/bin:/opt/anaconda3/bin:/opt/anaconda3/bin:/opt/anaconda3/condabin:/opt/homebrew/bin:/usr/local/bin:/System/Cryptexes/App/usr/bin:/usr/bin:/bin:/usr/sbin:/sbin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/local/bin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/bin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/appleinternal/bin:/opt/pmk/env/global/bin://Applications/Topaz Photo.app/Contents/Resources/bin:/Library/Apple/usr/bin:/Users/ksnyder/.cargo/bin:/Applications/iTerm.app/Contents/Resources/utilities:/Users/ksnyder/.cache/lm-studio/bin:/usr/local/bin:/opt/homebrew/bin:/opt/homebrew/sbin:/usr/bin:/bin:/usr/sbin:/sbin:/Users/ksnyder/.local/bin:/Users/ksnyder/bin:/Users/ksnyder/.claude/bin:/Users/ksnyder/.nvm/versions/node/v20.19.4/bin:/Users/ksnyder/.nvm/versions/node/v20.11.1/bin:/Users/ksnyder/.nvm/versions/node/v20.19.1/bin:/Users/ksnyder/.nvm/versions/node/v22.15.0/bin
+PTY: Spawning command...
+PTY: Command spawned successfully
+🔓 open_vault called with path: /Users/ksnyder/Library/Mobile Documents/com~apple~CloudDocs/cloud/test-vault
+📁 Vault info: VaultInfo { path: "/Users/ksnyder/Library/Mobile Documents/com~apple~CloudDocs/cloud/test-vault", name: "test-vault" }
+🪟 Window ID: main
+📝 Registering window with ID: main
+Loaded editor preferences from file: font_size=16
+🔗 Registering window with vault...
+Creating new watcher for vault: /Users/ksnyder/Library/Mobile Documents/com~apple~CloudDocs/cloud/test-vault
+New watcher created for window main on vault /Users/ksnyder/Library/Mobile Documents/com~apple~CloudDocs/cloud/test-vault
+Started watching vault: /Users/ksnyder/Library/Mobile Documents/com~apple~CloudDocs/cloud/test-vault
+Registered window main with vault /Users/ksnyder/Library/Mobile Documents/com~apple~CloudDocs/cloud/test-vault
+✅ Window registered with vault
+🔄 Starting IdentityManager reinitialization...
+  📝 Found RwLock IdentityManager state
+🔄 IdentityManager::new called with vault_root: "/Users/ksnyder/Library/Mobile Documents/com~apple~CloudDocs/cloud/test-vault"
+  ⏭️ Skipping vault scan during initialization (avoiding runtime deadlock)
+✅ IdentityManager::new complete
+  ✅ IdentityManager (RwLock) reinitialized for vault: /Users/ksnyder/Library/Mobile Documents/com~apple~CloudDocs/cloud/test-vault
+  📝 Found Mutex IdentityManager state
+🔄 IdentityManager::new called with vault_root: "/Users/ksnyder/Library/Mobile Documents/com~apple~CloudDocs/cloud/test-vault"
+  ⏭️ Skipping vault scan during initialization (avoiding runtime deadlock)
+✅ IdentityManager::new complete
+  ✅ IdentityManager (Mutex) reinitialized for vault: /Users/ksnyder/Library/Mobile Documents/com~apple~CloudDocs/cloud/test-vault
+✅ IdentityManager reinitialization complete
+📚 Triggering manual task index population...
+📝 Updating recent vaults...
+🎉 open_vault completed successfully, returning vault_info
+🔓 open_vault called with path: /Users/ksnyder/Library/Mobile Documents/com~apple~CloudDocs/cloud/test-vault
+📁 Vault info: VaultInfo { path: "/Users/ksnyder/Library/Mobile Documents/com~apple~CloudDocs/cloud/test-vault", name: "test-vault" }
+🪟 Window ID: main
+🔗 Registering window with vault...
+Reusing existing watcher for vault /Users/ksnyder/Library/Mobile Documents/com~apple~CloudDocs/cloud/test-vault (ref count: 2)
+Registered window main with vault /Users/ksnyder/Library/Mobile Documents/com~apple~CloudDocs/cloud/test-vault
+✅ Window registered with vault
+🔄 Starting IdentityManager reinitialization...
+  📝 Found RwLock IdentityManager state
+🔄 IdentityManager::new called with vault_root: "/Users/ksnyder/Library/Mobile Documents/com~apple~CloudDocs/cloud/test-vault"
+  ⏭️ Skipping vault scan during initialization (avoiding runtime deadlock)
+✅ IdentityManager::new complete
+  ✅ IdentityManager (RwLock) reinitialized for vault: /Users/ksnyder/Library/Mobile Documents/com~apple~CloudDocs/cloud/test-vault
+  📝 Found Mutex IdentityManager state
+🔄 IdentityManager::new called with vault_root: "/Users/ksnyder/Library/Mobile Documents/com~apple~CloudDocs/cloud/test-vault"
+  ⏭️ Skipping vault scan during initialization (avoiding runtime deadlock)
+✅ IdentityManager::new complete
+  ✅ IdentityManager (Mutex) reinitialized for vault: /Users/ksnyder/Library/Mobile Documents/com~apple~CloudDocs/cloud/test-vault
+✅ IdentityManager reinitialization complete
+📚 Triggering manual task index population...
+📝 Updating recent vaults...
+🎉 open_vault completed successfully, returning vault_info
+Reusing existing watcher for vault /Users/ksnyder/Library/Mobile Documents/com~apple~CloudDocs/cloud/test-vault (ref count: 3)
+Registered window main with vault /Users/ksnyder/Library/Mobile Documents/com~apple~CloudDocs/cloud/test-vault
+✅ File watcher started for: /Users/ksnyder/Library/Mobile Documents/com~apple~CloudDocs/cloud/test-vault
+Loading MCP settings...
+Loading vault settings for: /Users/ksnyder/Library/Mobile Documents/com~apple~CloudDocs/cloud/test-vault
+No settings found for vault, returning defaults
+Reusing existing watcher for vault /Users/ksnyder/Library/Mobile Documents/com~apple~CloudDocs/cloud/test-vault (ref count: 4)
+Registered window main with vault /Users/ksnyder/Library/Mobile Documents/com~apple~CloudDocs/cloud/test-vault
+✅ File watcher started for: /Users/ksnyder/Library/Mobile Documents/com~apple~CloudDocs/cloud/test-vault
+🔍 Starting background task scan for vault: "/Users/ksnyder/Library/Mobile Documents/com~apple~CloudDocs/cloud/test-vault"
+    🔍 Scanning vault for tasks: "/Users/ksnyder/Library/Mobile Documents/com~apple~CloudDocs/cloud/test-vault"
+[sync_file_tasks_to_index_async] Processing file path: "/Users/ksnyder/Library/Mobile Documents/com~apple~CloudDocs/cloud/test-vault/strikethrough-basic.md"
+[sync_file_tasks_to_index_async] Path exists: true
+[sync_file_tasks_to_index_async] Path is absolute: true
+[sync_file_tasks_to_index_async] Processing file path: "/Users/ksnyder/Library/Mobile Documents/com~apple~CloudDocs/cloud/test-vault/task-uuid-basic.md"
+[sync_file_tasks_to_index_async] Path exists: true
+[sync_file_tasks_to_index_async] Path is absolute: true
+[sync_file_tasks_to_index_async] Processing file path: "/Users/ksnyder/Library/Mobile Documents/com~apple~CloudDocs/cloud/test-vault/highlights-basic.md"
+[sync_file_tasks_to_index_async] Path exists: true
+[sync_file_tasks_to_index_async] Path is absolute: true
+[sync_file_tasks_to_index_async] Processing file path: "/Users/ksnyder/Library/Mobile Documents/com~apple~CloudDocs/cloud/test-vault/example.md"
+[sync_file_tasks_to_index_async] Path exists: true
+[sync_file_tasks_to_index_async] Path is absolute: true
+[sync_file_tasks_to_index_async] Processing file path: "/Users/ksnyder/Library/Mobile Documents/com~apple~CloudDocs/cloud/test-vault/syntax-test.md"
+[sync_file_tasks_to_index_async] Path exists: true
+[sync_file_tasks_to_index_async] Path is absolute: true
+[sync_file_tasks_to_index_async] Processing file path: "/Users/ksnyder/Library/Mobile Documents/com~apple~CloudDocs/cloud/test-vault/ai-transparency-ai-codec-technical-note - Highlights.md"
+[sync_file_tasks_to_index_async] Path exists: true
+[sync_file_tasks_to_index_async] Path is absolute: true
+[sync_file_tasks_to_index_async] Processing file path: "/Users/ksnyder/Library/Mobile Documents/com~apple~CloudDocs/cloud/test-vault/Link Test.md"
+[sync_file_tasks_to_index_async] Path exists: true
+[sync_file_tasks_to_index_async] Path is absolute: true
+[sync_file_tasks_to_index_async] Processing file path: "/Users/ksnyder/Library/Mobile Documents/com~apple~CloudDocs/cloud/test-vault/Image Paste.md"
+[sync_file_tasks_to_index_async] Path exists: true
+[sync_file_tasks_to_index_async] Path is absolute: true
+[sync_file_tasks_to_index_async] Processing file path: "/Users/ksnyder/Library/Mobile Documents/com~apple~CloudDocs/cloud/test-vault/headers-all.md"
+[sync_file_tasks_to_index_async] Path exists: true
+[sync_file_tasks_to_index_async] Path is absolute: true
+      📄 Processed 10 files...
+[sync_file_tasks_to_index_async] Processing file path: "/Users/ksnyder/Library/Mobile Documents/com~apple~CloudDocs/cloud/test-vault/test.md"
+[sync_file_tasks_to_index_async] Path exists: true
+[sync_file_tasks_to_index_async] Path is absolute: true
+    ✅ Scanned 10 markdown files: found tasks in 10 files
+✅ Background task scan completed
+🔍 Starting background task scan for vault: "/Users/ksnyder/Library/Mobile Documents/com~apple~CloudDocs/cloud/test-vault"
+    🔍 Scanning vault for tasks: "/Users/ksnyder/Library/Mobile Documents/com~apple~CloudDocs/cloud/test-vault"
+[sync_file_tasks_to_index_async] Processing file path: "/Users/ksnyder/Library/Mobile Documents/com~apple~CloudDocs/cloud/test-vault/strikethrough-basic.md"
+[sync_file_tasks_to_index_async] Path exists: true
+[sync_file_tasks_to_index_async] Path is absolute: true
+[sync_file_tasks_to_index_async] Processing file path: "/Users/ksnyder/Library/Mobile Documents/com~apple~CloudDocs/cloud/test-vault/task-uuid-basic.md"
+[sync_file_tasks_to_index_async] Path exists: true
+[sync_file_tasks_to_index_async] Path is absolute: true
+[sync_file_tasks_to_index_async] Processing file path: "/Users/ksnyder/Library/Mobile Documents/com~apple~CloudDocs/cloud/test-vault/highlights-basic.md"
+[sync_file_tasks_to_index_async] Path exists: true
+[sync_file_tasks_to_index_async] Path is absolute: true
+[sync_file_tasks_to_index_async] Processing file path: "/Users/ksnyder/Library/Mobile Documents/com~apple~CloudDocs/cloud/test-vault/example.md"
+[sync_file_tasks_to_index_async] Path exists: true
+[sync_file_tasks_to_index_async] Path is absolute: true
+[sync_file_tasks_to_index_async] Processing file path: "/Users/ksnyder/Library/Mobile Documents/com~apple~CloudDocs/cloud/test-vault/syntax-test.md"
+[sync_file_tasks_to_index_async] Path exists: true
+[sync_file_tasks_to_index_async] Path is absolute: true
+[sync_file_tasks_to_index_async] Processing file path: "/Users/ksnyder/Library/Mobile Documents/com~apple~CloudDocs/cloud/test-vault/ai-transparency-ai-codec-technical-note - Highlights.md"
+[sync_file_tasks_to_index_async] Path exists: true
+[sync_file_tasks_to_index_async] Path is absolute: true
+[sync_file_tasks_to_index_async] Processing file path: "/Users/ksnyder/Library/Mobile Documents/com~apple~CloudDocs/cloud/test-vault/Link Test.md"
+[sync_file_tasks_to_index_async] Path exists: true
+[sync_file_tasks_to_index_async] Path is absolute: true
+[sync_file_tasks_to_index_async] Processing file path: "/Users/ksnyder/Library/Mobile Documents/com~apple~CloudDocs/cloud/test-vault/Image Paste.md"
+[sync_file_tasks_to_index_async] Path exists: true
+[sync_file_tasks_to_index_async] Path is absolute: true
+[sync_file_tasks_to_index_async] Processing file path: "/Users/ksnyder/Library/Mobile Documents/com~apple~CloudDocs/cloud/test-vault/headers-all.md"
+[sync_file_tasks_to_index_async] Path exists: true
+[sync_file_tasks_to_index_async] Path is absolute: true
+      📄 Processed 10 files...
+[sync_file_tasks_to_index_async] Processing file path: "/Users/ksnyder/Library/Mobile Documents/com~apple~CloudDocs/cloud/test-vault/test.md"
+[sync_file_tasks_to_index_async] Path exists: true
+[sync_file_tasks_to_index_async] Path is absolute: true
+    ✅ Scanned 10 markdown files: found tasks in 10 files
+✅ Background task scan completed
+Loading MCP settings...
+Loading MCP settings...
+🚀 Starting MCP server: vault-search
+✅ Configuration validated
+✅ Server ID available
+🔧 Creating transport...
+🔧 Creating stdio transport
+🔧 Spawning process...
+🔧 ProcessPool::spawn called
+✅ Process limits checked
+✅ Extracted stdio config: /Users/ksnyder/code/vault/src-tauri/target/debug/mcp-search-server ["--line-transport", "--index-path", "/Users/ksnyder/Library/Mobile Documents/com~apple~CloudDocs/cloud/test-vault/.vault/search"]
+🚀 Spawning command: /Users/ksnyder/code/vault/src-tauri/target/debug/mcp-search-server with args: ["--line-transport", "--index-path", "/Users/ksnyder/Library/Mobile Documents/com~apple~CloudDocs/cloud/test-vault/.vault/search"]
+🔧 MCP Process using PATH: /Users/ksnyder/code/vault/node_modules/.bin:/Users/ksnyder/code/node_modules/.bin:/Users/ksnyder/node_modules/.bin:/Users/node_modules/.bin:/node_modules/.bin:/Users/ksnyder/.nvm/versions/node/v22.15.0/lib/node_modules/npm/node_modules/@npmcli/run-script/lib/node-gyp-bin:/Users/ksnyder/.antigravity/antigravity/bin:/opt/homebrew/opt/postgresql@15/bin:/Users/ksnyder/code/google-doc-highlights-addon/code/google-cloud-sdk/bin:/Users/ksnyder/.local/bin:/Users/ksnyder/.nvm/versions/node/v22.15.0/bin:/Users/ksnyder/.codeium/windsurf/bin:/opt/anaconda3/bin:/opt/anaconda3/bin:/opt/anaconda3/condabin:/opt/homebrew/bin:/usr/local/bin:/System/Cryptexes/App/usr/bin:/usr/bin:/bin:/usr/sbin:/sbin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/local/bin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/bin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/appleinternal/bin:/opt/pmk/env/global/bin://Applications/Topaz Photo.app/Contents/Resources/bin:/Library/Apple/usr/bin:/Users/ksnyder/.cargo/bin:/Applications/iTerm.app/Contents/Resources/utilities:/Users/ksnyder/.cache/lm-studio/bin:/Users/ksnyder/.local/bin:/Users/ksnyder/bin:/Users/ksnyder/.nvm/versions/node/v20.19.4/bin:/Users/ksnyder/.nvm/versions/node/v20.11.1/bin:/Users/ksnyder/.nvm/versions/node/v20.19.1/bin:/Users/ksnyder/.nvm/versions/node/v22.15.0/bin:/opt/homebrew/bin:/usr/local/bin:/opt/homebrew/sbin:/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/node/bin:/opt/local/bin:/Users/ksnyder/code/aura-dev/mcp-servers/filesystem-server-rust/target/release:/Users/ksnyder/code/aura-dev/mcp-servers/search-server-rust/target/release:/Users/ksnyder/code/aura-dev/mcp-servers/git-server-rust/target/release
+✅ Found Node.js at: /Users/ksnyder/.nvm/versions/node/v20.19.4/bin/node
+🔧 Using specified working directory: "/Users/ksnyder/Library/Mobile Documents/com~apple~CloudDocs/cloud/test-vault"
+🚀 Executing command: /Users/ksnyder/code/vault/src-tauri/target/debug/mcp-search-server ["--line-transport", "--index-path", "/Users/ksnyder/Library/Mobile Documents/com~apple~CloudDocs/cloud/test-vault/.vault/search"]
+🔧 Final working directory: "/Users/ksnyder/Library/Mobile Documents/com~apple~CloudDocs/cloud/test-vault"
+🔍 Checking if script exists: --line-transport
+❌ Script file NOT FOUND at: --line-transport
+🚀 Spawning process: /Users/ksnyder/code/vault/src-tauri/target/debug/mcp-search-server ["--line-transport", "--index-path", "/Users/ksnyder/Library/Mobile Documents/com~apple~CloudDocs/cloud/test-vault/.vault/search"]
+✅ Process spawned with PID: Some(60517)
+✅ Process spawned
+🔧 Creating stdio transport wrapper...
+🔧 Creating StdioTransport instance
+🔧 Starting transport readers...
+🔧 Starting stdout reader...
+⏳ Waiting for readers to be ready...
+🔧 Starting stdout reader task for vault-search
+🔧 Starting stderr reader task for vault-search
+📕 Stderr reader active, attempting first read...
+✅ Both readers are ready
+✅ Transport readers started
+✅ Transport created
+⏳ Waiting for MCP server to start...
+🚀 Starting MCP server: vault-search
+✅ Configuration validated
+❌ Server vault-search already exists
+🚀 Starting MCP server: vault-filesystem
+✅ Configuration validated
+✅ Server ID available
+🔧 Creating transport...
+🔧 Creating stdio transport
+🔧 Spawning process...
+🔧 ProcessPool::spawn called
+✅ Process limits checked
+✅ Extracted stdio config: /Users/ksnyder/code/vault/src-tauri/target/debug/mcp-filesystem-server ["--line-transport", "--allowed-paths", "/Users/ksnyder/Library/Mobile Documents/com~apple~CloudDocs/cloud/test-vault"]
+🚀 Spawning command: /Users/ksnyder/code/vault/src-tauri/target/debug/mcp-filesystem-server with args: ["--line-transport", "--allowed-paths", "/Users/ksnyder/Library/Mobile Documents/com~apple~CloudDocs/cloud/test-vault"]
+🔧 MCP Process using PATH: /Users/ksnyder/code/vault/node_modules/.bin:/Users/ksnyder/code/node_modules/.bin:/Users/ksnyder/node_modules/.bin:/Users/node_modules/.bin:/node_modules/.bin:/Users/ksnyder/.nvm/versions/node/v22.15.0/lib/node_modules/npm/node_modules/@npmcli/run-script/lib/node-gyp-bin:/Users/ksnyder/.antigravity/antigravity/bin:/opt/homebrew/opt/postgresql@15/bin:/Users/ksnyder/code/google-doc-highlights-addon/code/google-cloud-sdk/bin:/Users/ksnyder/.local/bin:/Users/ksnyder/.nvm/versions/node/v22.15.0/bin:/Users/ksnyder/.codeium/windsurf/bin:/opt/anaconda3/bin:/opt/anaconda3/bin:/opt/anaconda3/condabin:/opt/homebrew/bin:/usr/local/bin:/System/Cryptexes/App/usr/bin:/usr/bin:/bin:/usr/sbin:/sbin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/local/bin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/bin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/appleinternal/bin:/opt/pmk/env/global/bin://Applications/Topaz Photo.app/Contents/Resources/bin:/Library/Apple/usr/bin:/Users/ksnyder/.cargo/bin:/Applications/iTerm.app/Contents/Resources/utilities:/Users/ksnyder/.cache/lm-studio/bin:/Users/ksnyder/.local/bin:/Users/ksnyder/bin:/Users/ksnyder/.nvm/versions/node/v20.19.4/bin:/Users/ksnyder/.nvm/versions/node/v20.11.1/bin:/Users/ksnyder/.nvm/versions/node/v20.19.1/bin:/Users/ksnyder/.nvm/versions/node/v22.15.0/bin:/opt/homebrew/bin:/usr/local/bin:/opt/homebrew/sbin:/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/node/bin:/opt/local/bin:/Users/ksnyder/code/aura-dev/mcp-servers/filesystem-server-rust/target/release:/Users/ksnyder/code/aura-dev/mcp-servers/search-server-rust/target/release:/Users/ksnyder/code/aura-dev/mcp-servers/git-server-rust/target/release
+✅ Found Node.js at: /Users/ksnyder/.nvm/versions/node/v20.19.4/bin/node
+🔧 Using specified working directory: "/Users/ksnyder/Library/Mobile Documents/com~apple~CloudDocs/cloud/test-vault"
+🚀 Executing command: /Users/ksnyder/code/vault/src-tauri/target/debug/mcp-filesystem-server ["--line-transport", "--allowed-paths", "/Users/ksnyder/Library/Mobile Documents/com~apple~CloudDocs/cloud/test-vault"]
+🔧 Final working directory: "/Users/ksnyder/Library/Mobile Documents/com~apple~CloudDocs/cloud/test-vault"
+🔍 Checking if script exists: --line-transport
+❌ Script file NOT FOUND at: --line-transport
+🚀 Spawning process: /Users/ksnyder/code/vault/src-tauri/target/debug/mcp-filesystem-server ["--line-transport", "--allowed-paths", "/Users/ksnyder/Library/Mobile Documents/com~apple~CloudDocs/cloud/test-vault"]
+✅ Process spawned with PID: Some(60518)
+✅ Process spawned
+🔧 Creating stdio transport wrapper...
+🔧 Creating StdioTransport instance
+🔧 Starting transport readers...
+🔧 Starting stdout reader...
+⏳ Waiting for readers to be ready...
+🔧 Starting stderr reader task for vault-filesystem
+📕 Stderr reader active, attempting first read...
+🔧 Starting stdout reader task for vault-filesystem
+✅ Both readers are ready
+✅ Transport readers started
+✅ Transport created
+⏳ Waiting for MCP server to start...
+🤝 Starting MCP handshake for server: vault-search
+📤 Sending initialize request: JsonRpcMessage { jsonrpc: "2.0", id: Some(Number(1)), method: "initialize", params: Some(Object {"capabilities": Object {"experimental": Object {}}, "clientInfo": Object {"name": String("vault"), "version": String("0.1.0")}, "protocolVersion": String("2025-06-18")}) }
+📤 StdioTransport sending message: JsonRpcMessage { jsonrpc: "2.0", id: Some(Number(1)), method: "initialize", params: Some(Object {"capabilities": Object {"experimental": Object {}}, "clientInfo": Object {"name": String("vault"), "version": String("0.1.0")}, "protocolVersion": String("2025-06-18")}) }
+📤 Serialized message: {"jsonrpc":"2.0","id":1,"method":"initialize","params":{"capabilities":{"experimental":{}},"clientInfo":{"name":"vault","version":"0.1.0"},"protocolVersion":"2025-06-18"}}
+📥 Creating response channel for ID: Number(1)
+📥 Channel inserted, waiting for response with ID: Number(1)
+📤 Getting process handle lock...
+📤 Got lock, writing to stdin...
+📝 Writing to stdin: {"jsonrpc":"2.0","id":1,"method":"initialize","params":{"capabilities":{"experimental":{}},"clientInfo":{"name":"vault","version":"0.1.0"},"protocolVersion":"2025-06-18"}}
+✅ Successfully wrote to stdin and flushed
+📤 Write completed, releasing lock
+✅ Message sent successfully
+📥 Waiting for response...
+📥 Received stdout line from vault-search: {"jsonrpc":"2.0","id":1,"result":{"capabilities":{"tools":{}},"protocolVersion":"2025-06-18","serverInfo":{"name":"gaimplan-search-rust","version":"1.0.0"}}}
+📥 Parsed JSON from vault-search: Object {"id": Number(1), "jsonrpc": String("2.0"), "result": Object {"capabilities": Object {"tools": Object {}}, "protocolVersion": String("2025-06-18"), "serverInfo": Object {"name": String("gaimplan-search-rust"), "version": String("1.0.0")}}}
+📥 Found response with ID: Number(1)
+📥 Parsed as JsonRpcResponse successfully
+📥 Current waiting channels: [Number(1)]
+📥 Found channel for ID Number(1), sending response
+📥 Received response: JsonRpcResponse { jsonrpc: "2.0", id: Number(1), result: Some(Object {"capabilities": Object {"tools": Object {}}, "protocolVersion": String("2025-06-18"), "serverInfo": Object {"name": String("gaimplan-search-rust"), "version": String("1.0.0")}}), error: None }
+📥 Received initialize response: JsonRpcResponse { jsonrpc: "2.0", id: Number(1), result: Some(Object {"capabilities": Object {"tools": Object {}}, "protocolVersion": String("2025-06-18"), "serverInfo": Object {"name": String("gaimplan-search-rust"), "version": String("1.0.0")}}), error: None }
+Loading MCP settings...
+🤝 Starting MCP handshake for server: vault-filesystem
+📤 Sending initialize request: JsonRpcMessage { jsonrpc: "2.0", id: Some(Number(1)), method: "initialize", params: Some(Object {"capabilities": Object {"experimental": Object {}}, "clientInfo": Object {"name": String("vault"), "version": String("0.1.0")}, "protocolVersion": String("2025-06-18")}) }
+📤 StdioTransport sending message: JsonRpcMessage { jsonrpc: "2.0", id: Some(Number(1)), method: "initialize", params: Some(Object {"capabilities": Object {"experimental": Object {}}, "clientInfo": Object {"name": String("vault"), "version": String("0.1.0")}, "protocolVersion": String("2025-06-18")}) }
+📤 Serialized message: {"jsonrpc":"2.0","id":1,"method":"initialize","params":{"capabilities":{"experimental":{}},"clientInfo":{"name":"vault","version":"0.1.0"},"protocolVersion":"2025-06-18"}}
+📥 Creating response channel for ID: Number(1)
+📥 Channel inserted, waiting for response with ID: Number(1)
+📤 Getting process handle lock...
+📤 Got lock, writing to stdin...
+📝 Writing to stdin: {"jsonrpc":"2.0","id":1,"method":"initialize","params":{"capabilities":{"experimental":{}},"clientInfo":{"name":"vault","version":"0.1.0"},"protocolVersion":"2025-06-18"}}
+✅ Successfully wrote to stdin and flushed
+📤 Write completed, releasing lock
+✅ Message sent successfully
+📥 Waiting for response...
+📥 Received stdout line from vault-filesystem: {"jsonrpc":"2.0","id":1,"result":{"capabilities":{"resources":{},"tools":{}},"protocolVersion":"2025-06-18","serverInfo":{"name":"gaimplan-filesystem-rust","version":"1.0.0"}}}
+📥 Parsed JSON from vault-filesystem: Object {"id": Number(1), "jsonrpc": String("2.0"), "result": Object {"capabilities": Object {"resources": Object {}, "tools": Object {}}, "protocolVersion": String("2025-06-18"), "serverInfo": Object {"name": String("gaimplan-filesystem-rust"), "version": String("1.0.0")}}}
+📥 Found response with ID: Number(1)
+📥 Parsed as JsonRpcResponse successfully
+📥 Current waiting channels: [Number(1)]
+📥 Found channel for ID Number(1), sending response
+📥 Received response: JsonRpcResponse { jsonrpc: "2.0", id: Number(1), result: Some(Object {"capabilities": Object {"resources": Object {}, "tools": Object {}}, "protocolVersion": String("2025-06-18"), "serverInfo": Object {"name": String("gaimplan-filesystem-rust"), "version": String("1.0.0")}}), error: None }
+📥 Received initialize response: JsonRpcResponse { jsonrpc: "2.0", id: Number(1), result: Some(Object {"capabilities": Object {"resources": Object {}, "tools": Object {}}, "protocolVersion": String("2025-06-18"), "serverInfo": Object {"name": String("gaimplan-filesystem-rust"), "version": String("1.0.0")}}), error: None }
+Command 'claude' found in PATH
+Command 'claude' found in PATH
