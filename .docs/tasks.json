@@ -4768,7 +4768,7 @@
       "phase": "Phase 3: Plugin Hub Integration",
       "task": "Plugin Card Updates",
       "name": "Update PluginCard for freemium badge",
-      "passes": false,
+      "passes": true,
       "instructions": [
         "Open src/plugin-hub/components/PluginCard.js",
         "Update renderBadges() to check hasPremiumFeatures",
@@ -4790,7 +4790,7 @@
       "phase": "Phase 3: Plugin Hub Integration",
       "task": "Settings Modal",
       "name": "Create CsvSupportSettings component",
-      "passes": false,
+      "passes": true,
       "instructions": [
         "Create src/plugin-hub/components/CsvSupportSettings.js",
         "Implement modal with Statistics section (file count, schemas count)",
@@ -4815,7 +4815,7 @@
       "phase": "Phase 3: Plugin Hub Integration",
       "task": "Settings Modal",
       "name": "Wire up settings in PluginCard",
-      "passes": false,
+      "passes": true,
       "instructions": [
         "Import CsvSupportSettings in PluginCard.js",
         "Add handler for csv-support plugin settings click",
@@ -4835,7 +4835,7 @@
       "phase": "Phase 4: Frontend Editor",
       "task": "CsvEditor Component",
       "name": "Create CsvEditor base component",
-      "passes": false,
+      "passes": true,
       "instructions": [
         "Create src/csv/CsvEditor.js",
         "Implement constructor with filePath, container, state initialization",

@@ -1,5 +1,9 @@
 import { MarkdownEditor } from './editor/markdown-editor.js';
 import { PDFTab } from './pdf/PDFTab.js';
+import { CsvEditor } from './csv/CsvEditor.js';
+
+// Import CSV editor styles
+import './csv/csv-editor.css';
 
 /**
  * TabManager handles multiple editor tabs with support for future split views
@@ -44,16 +48,17 @@ export class TabManager {
         if (this.tabs.size >= this.maxTabs) {
             throw new Error(`Maximum ${this.maxTabs} tabs allowed`);
         }
-        
+
         const tabId = `tab-${this.nextTabId++}`;
         const editorContainer = document.createElement('div');
         editorContainer.className = 'tab-editor-container';
         editorContainer.style.display = 'none';
         editorContainer.dataset.tabId = tabId;
-        
+
         let editor = null;
         let pdfTab = null;
-        
+        let csvEditor = null;
+
         // Check if this is a PDF file
         if (isPDF || (filePath && filePath.toLowerCase().endsWith('.pdf'))) {
             console.log('Creating PDF tab for:', filePath);
@@ -61,7 +66,7 @@ export class TabManager {
             pdfTab = new PDFTab(filePath, this, this.panes[0].id);
             // Store reference for cleanup
             editorContainer.__pdfTabInstance = pdfTab;
-            
+
             // Create PDF content asynchronously
             pdfTab.createContent().then(pdfContainer => {
                 editorContainer.appendChild(pdfContainer);
@@ -69,33 +74,56 @@ export class TabManager {
                 console.error('Error creating PDF tab:', error);
                 editorContainer.innerHTML = `<div class="error-state">Error loading PDF: ${error.message}</div>`;
             });
+        } else if (filePath && filePath.toLowerCase().endsWith('.csv')) {
+            console.log('Creating CSV tab for:', filePath);
+            // For CSV files, create a CsvEditor instance
+            csvEditor = new CsvEditor(filePath, this, this.panes[0].id);
+            // Store reference for cleanup
+            editorContainer.__csvEditorInstance = csvEditor;
+
+            // Mount CSV editor asynchronously
+            csvEditor.mount().then(csvContainer => {
+                editorContainer.appendChild(csvContainer);
+            }).catch(error => {
+                console.error('Error creating CSV tab:', error);
+                editorContainer.innerHTML = `<div class="error-state">Error loading CSV: ${error.message}</div>`;
+            });
         } else {
             // For regular files, create markdown editor
             editor = new MarkdownEditor(editorContainer);
         }
-        
+
+        // Determine tab type
+        let tabType = 'markdown';
+        if (isPDF || (filePath && filePath.toLowerCase().endsWith('.pdf'))) {
+            tabType = 'pdf';
+        } else if (filePath && filePath.toLowerCase().endsWith('.csv')) {
+            tabType = 'csv';
+        }
+
         const tab = {
             id: tabId,
             filePath,
             title: filePath ? filePath.split('/').pop() : 'Untitled',
             editor,
             pdfTab,
+            csvEditor,
             editorContainer,
             isDirty: false,
             content: content,
-            type: isPDF ? 'pdf' : 'markdown',
+            type: tabType,
             navigationHistory: {
                 history: filePath ? [filePath] : [],
                 currentIndex: 0
             }
         };
-        
+
         this.tabs.set(tabId, tab);
         this.tabOrder.push(tabId);
         this.panes[0].tabIds.push(tabId);
-        
+
         // Only set content for markdown tabs
-        if (!isPDF) {
+        if (tabType === 'markdown') {
             if (content) {
                 // Initial open: allow default cursor init
                 editor.setContent(content, false, filePath, false);
@@ -107,7 +135,7 @@ export class TabManager {
                 });
             }
         }
-        
+
         this.emit('tab-created', { tabId, tab });
         return tabId;
     }
@@ -136,10 +164,12 @@ export class TabManager {
         this.activeTabId = tabId;
         this.panes[0].activeTabId = tabId;
         
-        // Focus the editor or PDF viewer
+        // Focus the editor, PDF viewer, or CSV editor
         setTimeout(() => {
             if (tab.type === 'pdf' && tab.pdfTab) {
                 tab.pdfTab.focus();
+            } else if (tab.type === 'csv' && tab.csvEditor) {
+                tab.csvEditor.focus();
             } else if (tab.editor) {
                 tab.editor.focus();
             }
@@ -173,10 +203,16 @@ export class TabManager {
         if (tab.type === 'pdf' && tab.pdfTab) {
             tab.pdfTab.destroy();
         }
-        
+
+        // Clean up CSV editor if needed
+        if (tab.type === 'csv' && tab.csvEditor) {
+            console.log('Destroying CSV editor for tab:', tabId);
+            tab.csvEditor.unmount();
+        }
+
         // Clean up markdown editor if needed
         if (tab.type === 'markdown' && tab.editor) {
-            console.log('🧹 Destroying markdown editor for tab:', tabId);
+            console.log('Destroying markdown editor for tab:', tabId);
             tab.editor.destroy();
         }
         
