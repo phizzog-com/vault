@@ -55,6 +55,7 @@ export class CsvEditor {
       // Working copy for edits
       workingRows: [],      // Copy of data.rows for editing
       savedRows: [],        // Snapshot for dirty comparison
+      savedHeaders: [],     // Snapshot of headers for dirty comparison
 
       // Loading state
       isLoading: true,
@@ -140,6 +141,7 @@ export class CsvEditor {
       this.state.data = data;
       this.state.workingRows = data.rows.map(row => [...row]); // Deep copy
       this.state.savedRows = data.rows.map(row => [...row]);   // Snapshot
+      this.state.savedHeaders = [...data.headers];             // Snapshot of headers
 
       // Try to load schema (premium feature)
       try {
@@ -1225,27 +1227,174 @@ export class CsvEditor {
   }
 
   /**
-   * Add a new row (placeholder - full implementation in csv-4.5)
+   * Add a new empty row at the end of the table
    */
   addRow() {
     console.log('Add row triggered');
-    // Full implementation in csv-4.5
+
+    // Save state for undo
+    this.saveUndoState();
+
+    // Get the number of columns from headers
+    const numCols = this.state.data?.headers?.length || 0;
+    if (numCols === 0) {
+      console.warn('Cannot add row: no headers defined');
+      return;
+    }
+
+    // Create empty row with same number of columns
+    const newRow = Array(numCols).fill('');
+
+    // Add to working rows
+    this.state.workingRows.push(newRow);
+
+    // Update total row count in data
+    if (this.state.data) {
+      this.state.data.totalRows = this.state.workingRows.length;
+    }
+
+    // Re-render table to show new row
+    this.refreshTable();
+
+    // Update toolbar row count display
+    this.updateRowCountDisplay();
+
+    // Mark as dirty
+    this.checkDirty();
+
+    // Select the first cell of the new row
+    const newRowIndex = this.state.workingRows.length - 1;
+    this.selectCell(newRowIndex, 0);
+
+    console.log('Row added at index:', newRowIndex);
   }
 
   /**
-   * Add a new column (placeholder - full implementation in csv-4.5)
+   * Add a new column with a prompted name
    */
   addColumn() {
     console.log('Add column triggered');
-    // Full implementation in csv-4.5
+
+    // Prompt user for column name
+    const columnName = prompt('Enter column name:');
+
+    // User cancelled or empty name
+    if (columnName === null) {
+      console.log('Add column cancelled by user');
+      return;
+    }
+
+    const trimmedName = columnName.trim();
+    if (trimmedName === '') {
+      console.warn('Column name cannot be empty');
+      alert('Column name cannot be empty');
+      return;
+    }
+
+    // Check for duplicate column names
+    if (this.state.data?.headers?.includes(trimmedName)) {
+      console.warn('Column name already exists:', trimmedName);
+      alert('A column with this name already exists');
+      return;
+    }
+
+    // Save state for undo
+    this.saveUndoState();
+
+    // Add header
+    if (this.state.data) {
+      this.state.data.headers.push(trimmedName);
+    }
+
+    // Add empty value to each row
+    this.state.workingRows.forEach(row => {
+      row.push('');
+    });
+
+    // Note: Do NOT update savedRows or savedHeaders - they should remain as the
+    // original saved state so checkDirty() can detect the column was added
+
+    // Re-render table to show new column
+    this.refreshTable();
+
+    // Mark as dirty (new column is a change)
+    this.checkDirty();
+
+    // Select the header cell of the new column (first row, new column)
+    if (this.state.workingRows.length > 0) {
+      const newColIndex = this.state.data.headers.length - 1;
+      this.selectCell(0, newColIndex);
+    }
+
+    console.log('Column added:', trimmedName);
   }
 
   /**
-   * Delete the selected row (placeholder - full implementation in csv-4.5)
+   * Delete the currently selected row
    */
   deleteRow() {
     console.log('Delete row triggered');
-    // Full implementation in csv-4.5
+
+    // Check if a row is selected
+    if (!this.state.selectedCell) {
+      console.warn('Cannot delete row: no row selected');
+      return;
+    }
+
+    const rowIndex = this.state.selectedCell.row;
+
+    // Validate row index
+    if (rowIndex < 0 || rowIndex >= this.state.workingRows.length) {
+      console.warn('Invalid row index:', rowIndex);
+      return;
+    }
+
+    // Save state for undo
+    this.saveUndoState();
+
+    // Remove the row
+    this.state.workingRows.splice(rowIndex, 1);
+
+    // Update total row count in data
+    if (this.state.data) {
+      this.state.data.totalRows = this.state.workingRows.length;
+    }
+
+    // Re-render table
+    this.refreshTable();
+
+    // Update toolbar row count display
+    this.updateRowCountDisplay();
+
+    // Mark as dirty
+    this.checkDirty();
+
+    // Update selection: select same row index if it exists, otherwise previous row
+    if (this.state.workingRows.length > 0) {
+      const newRowIndex = Math.min(rowIndex, this.state.workingRows.length - 1);
+      this.selectCell(newRowIndex, this.state.selectedCell.col);
+    } else {
+      // No rows left, clear selection
+      this.state.selectedCell = null;
+      this.updateDeleteButtonState();
+    }
+
+    console.log('Row deleted at index:', rowIndex);
+  }
+
+  /**
+   * Update the row count display in the toolbar
+   */
+  updateRowCountDisplay() {
+    const rowCountEl = this.toolbar?.querySelector('.csv-row-count');
+    if (rowCountEl) {
+      const rowCount = this.state.workingRows.length;
+      const totalRows = this.state.data?.totalRows || rowCount;
+      const displayCount = rowCount === totalRows
+        ? `${rowCount} rows`
+        : `${rowCount} of ${totalRows} rows`;
+      rowCountEl.textContent = displayCount;
+    }
   }
 
   /**
@@ -1280,8 +1429,16 @@ export class CsvEditor {
    * Check if there are unsaved changes
    */
   checkDirty() {
-    // Compare working rows to saved rows
-    if (this.state.workingRows.length !== this.state.savedRows.length) {
+    // Check header changes first
+    const currentHeaders = this.state.data?.headers || [];
+    const savedHeaders = this.state.savedHeaders || [];
+
+    if (currentHeaders.length !== savedHeaders.length) {
+      this.state.isDirty = true;
+    } else if (currentHeaders.some((h, i) => h !== savedHeaders[i])) {
+      this.state.isDirty = true;
+    } else if (this.state.workingRows.length !== this.state.savedRows.length) {
+      // Compare working rows to saved rows
       this.state.isDirty = true;
     } else {
       this.state.isDirty = this.state.workingRows.some((row, rowIndex) => {

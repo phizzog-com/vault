@@ -4926,7 +4926,7 @@
       "phase": "Phase 4: Frontend Editor",
       "task": "CsvEditor Component",
       "name": "Implement row/column operations",
-      "passes": false,
+      "passes": true,
       "instructions": [
         "Implement addRow() adding empty row at end",
         "Implement addColumn() with prompt for name",
