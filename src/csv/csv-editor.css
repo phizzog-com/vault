@@ -74,10 +74,126 @@
   font-weight: var(--font-weight-semibold, 600);
 }
 
-.csv-error-state p {
+.csv-error-state p.csv-error-message {
   margin: 0;
   max-width: 400px;
   line-height: var(--line-height-normal, 1.5);
+  color: var(--text-secondary);
+}
+
+/* Error suggestions list */
+.csv-error-suggestions {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-secondary);
+  border-radius: 8px;
+  padding: 12px 16px;
+  text-align: left;
+  max-width: 400px;
+}
+
+.csv-error-suggestions-title {
+  margin: 0 0 8px 0;
+  font-size: var(--type-footnote, 13px);
+  font-weight: var(--font-weight-medium, 500);
+  color: var(--text-secondary);
+}
+
+.csv-error-suggestions ul {
+  margin: 0;
+  padding-left: 20px;
+  list-style-type: disc;
+}
+
+.csv-error-suggestions li {
+  font-size: var(--type-footnote, 13px);
+  color: var(--text-tertiary);
+  line-height: 1.5;
+  margin-bottom: 4px;
+}
+
+.csv-error-suggestions li:last-child {
+  margin-bottom: 0;
+}
+
+/* Error actions */
+.csv-error-actions {
+  display: flex;
+  gap: 12px;
+  margin-top: 8px;
+}
+
+/* Technical details collapsible */
+.csv-error-technical {
+  margin-top: 16px;
+  max-width: 500px;
+  text-align: left;
+}
+
+.csv-error-technical summary {
+  cursor: pointer;
+  font-size: var(--type-footnote, 13px);
+  color: var(--text-tertiary);
+  user-select: none;
+}
+
+.csv-error-technical summary:hover {
+  color: var(--text-secondary);
+}
+
+.csv-error-technical pre {
+  margin: 8px 0 0;
+  padding: 12px;
+  background: var(--bg-tertiary);
+  border-radius: 6px;
+  font-family: var(--font-mono, monospace);
+  font-size: 11px;
+  color: var(--text-secondary);
+  overflow-x: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* Primary button style */
+.csv-btn-primary {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  background: var(--accent-primary);
+  color: var(--text-inverse);
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: var(--type-callout, 16px);
+  font-weight: var(--font-weight-medium, 500);
+  transition: var(--transition-colors);
+}
+
+.csv-btn-primary:hover {
+  background: var(--accent-hover);
+}
+
+.csv-btn-primary:active {
+  background: var(--accent-active);
+}
+
+.csv-btn-primary:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* Button spinner animation */
+.csv-btn-spinner {
+  animation: csv-spin 1s linear infinite;
+}
+
+@keyframes csv-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .csv-retry-btn {
@@ -166,6 +282,15 @@
 .csv-toolbar .editor-control-btn svg {
   width: 14px;
   height: 14px;
+  flex-shrink: 0;
+}
+
+/* Toolbar Divider */
+.csv-toolbar-divider {
+  width: 1px;
+  height: 20px;
+  background: var(--border-section);
+  margin: 0 4px;
   flex-shrink: 0;
 }
 
@@ -420,8 +545,18 @@
   z-index: 1;
 }
 
+/* Multi-cell selection - cells within the selection range */
+.csv-cell-in-selection {
+  background: var(--accent-bg) !important;
+  box-shadow: inset 0 0 0 1px var(--accent-primary);
+}
+
 /* Ensure selection is visible even on alternating rows */
 .csv-data-row:nth-child(even) .csv-cell-selected {
+  background: var(--accent-bg) !important;
+}
+
+.csv-data-row:nth-child(even) .csv-cell-in-selection {
   background: var(--accent-bg) !important;
 }
 
@@ -2035,6 +2170,52 @@
   max-width: 300px;
 }
 
+/* Error suggestions in AI context modal */
+.csv-ai-context-error-suggestions {
+  margin: 8px 0;
+  padding-left: 20px;
+  text-align: left;
+  list-style-type: disc;
+}
+
+.csv-ai-context-error-suggestions li {
+  font-size: var(--type-footnote, 13px);
+  color: var(--text-tertiary);
+  line-height: 1.5;
+  margin-bottom: 4px;
+}
+
+/* Technical details in AI context modal */
+.csv-ai-context-error-details {
+  margin-top: 12px;
+  text-align: left;
+  max-width: 400px;
+}
+
+.csv-ai-context-error-details summary {
+  cursor: pointer;
+  font-size: var(--type-footnote, 13px);
+  color: var(--text-tertiary);
+  user-select: none;
+}
+
+.csv-ai-context-error-details summary:hover {
+  color: var(--text-secondary);
+}
+
+.csv-ai-context-error-details pre {
+  margin: 8px 0 0;
+  padding: 12px;
+  background: var(--bg-tertiary);
+  border-radius: 6px;
+  font-family: var(--font-mono, monospace);
+  font-size: 11px;
+  color: var(--text-secondary);
+  overflow-x: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
 .csv-ai-context-retry-btn {
   display: flex;
   align-items: center;
@@ -2055,6 +2236,18 @@
   background: var(--bg-hover);
   color: var(--text-primary);
   border-color: var(--accent-primary);
+}
+
+/* Primary button style for AI context retry */
+.csv-ai-context-retry-btn.csv-btn-primary {
+  background: var(--accent-primary);
+  color: var(--text-inverse);
+  border-color: var(--accent-primary);
+}
+
+.csv-ai-context-retry-btn.csv-btn-primary:hover {
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
 }
 
 /* Premium alert content */
@@ -2270,7 +2463,14 @@
   z-index: 1;
 }
 
-.csv-virtual-row:has(.csv-cell-selected) .csv-row-number {
+/* Multi-cell selection in virtual rows */
+.csv-virtual-row .csv-cell-in-selection {
+  background: var(--accent-bg) !important;
+  box-shadow: inset 0 0 0 1px var(--accent-primary);
+}
+
+.csv-virtual-row:has(.csv-cell-selected) .csv-row-number,
+.csv-virtual-row:has(.csv-cell-in-selection) .csv-row-number {
   color: var(--accent-primary);
   background: var(--accent-bg);
   font-weight: var(--font-weight-semibold, 600);

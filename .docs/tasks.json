@@ -5196,7 +5196,7 @@
       "phase": "Phase 7: Polish and Performance",
       "task": "Undo/Redo",
       "name": "Implement undo/redo functionality",
-      "passes": false,
+      "passes": true,
       "instructions": [
         "Track edit history as patches (cell changes, row/col adds/deletes)",
         "Implement undo stack and redo stack",
@@ -5219,7 +5219,7 @@
       "phase": "Phase 7: Polish and Performance",
       "task": "Copy/Paste",
       "name": "Implement copy/paste functionality",
-      "passes": false,
+      "passes": true,
       "instructions": [
         "Cmd+C copies selected cell(s)",
         "Cmd+V pastes from clipboard",

@@ -13,6 +13,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { EditorView, keymap } from '@codemirror/view';
 import { EditorState } from '@codemirror/state';
 import { defaultKeymap, history, historyKeymap } from '@codemirror/commands';
+import { csvErrorHandler, CsvErrorType, getUserFriendlyMessage } from './CsvErrorHandler.js';
 
 /**
  * CsvEditor class - Main CSV editing component
@@ -48,6 +49,8 @@ export class CsvEditor {
 
       // UI state
       selectedCell: null,   // { row: number, col: number }
+      selectionStart: null, // { row: number, col: number } - anchor for multi-cell selection
+      selectionEnd: null,   // { row: number, col: number } - end of multi-cell selection
       editingCell: null,    // { row: number, col: number }
       isDirty: false,
       isPremium: false,
@@ -130,8 +133,15 @@ export class CsvEditor {
 
       console.log('CSV editor mounted successfully');
     } catch (error) {
-      console.error('Error mounting CSV editor:', error);
-      this.state.error = error.message || 'Failed to load CSV file';
+      // Get user-friendly error info
+      const errorInfo = csvErrorHandler.handleError(error, {
+        operation: 'Load CSV file',
+        showToast: false, // We'll show inline error instead
+        context: { filePath: this.filePath }
+      });
+
+      this.state.error = errorInfo.message;
+      this.state.errorInfo = errorInfo; // Store full error info for detailed view
       this.renderError();
     }
 
@@ -139,7 +149,7 @@ export class CsvEditor {
   }
 
   /**
-   * Load data from Rust backend
+   * Load data from Rust backend with retry logic for transient errors
    */
   async loadData() {
     console.log('Loading CSV data from:', this.filePath);
@@ -147,12 +157,15 @@ export class CsvEditor {
     this.state.error = null;
 
     try {
-      // Load CSV data via Tauri command
+      // Load CSV data via Tauri command with retry for transient errors
       // Note: Tauri v2 auto-converts camelCase JS to snake_case Rust
-      const data = await invoke('read_csv_data', {
-        path: this.filePath,
-        maxRows: null // Let backend determine limit based on premium status
-      });
+      const data = await csvErrorHandler.withRetry(
+        () => invoke('read_csv_data', {
+          path: this.filePath,
+          maxRows: null // Let backend determine limit based on premium status
+        }),
+        { operationName: 'Load CSV data', maxRetries: 2 }
+      );
 
       console.log('CSV data loaded:', {
         headers: data.headers.length,
@@ -166,25 +179,34 @@ export class CsvEditor {
       this.state.savedRows = data.rows.map(row => [...row]);   // Snapshot
       this.state.savedHeaders = [...data.headers];             // Snapshot of headers
 
-      // Try to load schema (premium feature)
-      try {
-        const schema = await invoke('get_csv_schema', {
+      // Try to load schema (premium feature) - graceful degradation
+      const schema = await csvErrorHandler.withGracefulDegradation(
+        () => invoke('get_csv_schema', {
           path: this.filePath,
           createIfMissing: false
-        });
+        }),
+        null, // Fallback to null schema
+        { operationName: 'Load CSV schema', logError: false }
+      );
+
+      if (schema) {
         this.state.schema = schema;
         this.state.isPremium = !schema.readOnly;
         console.log('CSV schema loaded, premium:', this.state.isPremium);
-      } catch (schemaError) {
+      } else {
         // Schema not found or not premium - this is expected for free users
-        console.log('No schema loaded (expected for free users):', schemaError.message || schemaError);
+        console.log('No schema loaded (expected for free users)');
         this.state.schema = null;
         this.state.isPremium = false;
       }
 
       this.state.isLoading = false;
     } catch (error) {
-      console.error('Error loading CSV data:', error);
+      // Log the error with context
+      csvErrorHandler.logError(error, {
+        operation: 'loadData',
+        filePath: this.filePath
+      });
       this.state.isLoading = false;
       throw error;
     }
@@ -252,6 +274,21 @@ export class CsvEditor {
 
     toolbar.innerHTML = `
       <div class="editor-header-left">
+        <button class="editor-control-btn csv-undo-btn" title="Undo (Cmd+Z)" disabled>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M3 7v6h6"></path>
+            <path d="M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13"></path>
+          </svg>
+          <span>Undo</span>
+        </button>
+        <button class="editor-control-btn csv-redo-btn" title="Redo (Cmd+Shift+Z)" disabled>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M21 7v6h-6"></path>
+            <path d="M3 17a9 9 0 0 1 9-9 9 9 0 0 1 6 2.3L21 13"></path>
+          </svg>
+          <span>Redo</span>
+        </button>
+        <div class="csv-toolbar-divider"></div>
         <button class="editor-control-btn csv-add-row-btn" title="Add Row">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <line x1="12" y1="5" x2="12" y2="19"></line>
@@ -1124,13 +1161,24 @@ export class CsvEditor {
       this.refreshToolbar();
 
     } catch (error) {
-      console.error('Error inferring schema:', error);
-
       // Check if it's a premium required error
-      if (error.code === 'premiumRequired' || (error.message && error.message.includes('Premium'))) {
-        alert('Schema inference requires a premium license.');
+      const isPremiumError = error.code === 'premiumRequired' ||
+        (error.message && error.message.includes('Premium'));
+
+      if (isPremiumError) {
+        // Handle premium-gated feature gracefully
+        csvErrorHandler.handleError(error, {
+          operation: 'Infer schema',
+          showToast: true,
+          context: { filePath: this.filePath, isPremiumError: true }
+        });
       } else {
-        alert(`Error inferring schema: ${error.message || error}`);
+        // Handle other errors
+        csvErrorHandler.handleError(error, {
+          operation: 'Infer schema',
+          showToast: true,
+          context: { filePath: this.filePath }
+        });
       }
     }
   }
@@ -1168,6 +1216,8 @@ export class CsvEditor {
     this.toolbar = newToolbar;
 
     // Re-attach toolbar event handlers
+    const undoBtn = this.toolbar.querySelector('.csv-undo-btn');
+    const redoBtn = this.toolbar.querySelector('.csv-redo-btn');
     const addRowBtn = this.toolbar.querySelector('.csv-add-row-btn');
     const addColBtn = this.toolbar.querySelector('.csv-add-col-btn');
     const deleteRowBtn = this.toolbar.querySelector('.csv-delete-row-btn');
@@ -1175,12 +1225,17 @@ export class CsvEditor {
     const schemaBtn = this.toolbar.querySelector('.csv-schema-btn');
     const aiContextBtn = this.toolbar.querySelector('.csv-ai-context-btn');
 
+    if (undoBtn) undoBtn.addEventListener('click', () => this.undo());
+    if (redoBtn) redoBtn.addEventListener('click', () => this.redo());
     if (addRowBtn) addRowBtn.addEventListener('click', () => this.addRow());
     if (addColBtn) addColBtn.addEventListener('click', () => this.addColumn());
     if (deleteRowBtn) deleteRowBtn.addEventListener('click', () => this.deleteRow());
     if (saveBtn) saveBtn.addEventListener('click', () => this.save());
     if (schemaBtn) schemaBtn.addEventListener('click', () => this.toggleSchemaSidebar());
     if (aiContextBtn) aiContextBtn.addEventListener('click', () => this.openAiContextModal());
+
+    // Update undo/redo button states
+    this.updateUndoRedoButtons();
   }
 
   /**
@@ -1342,9 +1397,39 @@ export class CsvEditor {
   }
 
   /**
-   * Render error state
+   * Render error state with user-friendly message and suggestions
    */
   renderError() {
+    const errorInfo = this.state.errorInfo || {
+      message: this.state.error,
+      suggestions: [],
+      technicalDetails: null
+    };
+
+    // Build suggestions HTML
+    let suggestionsHtml = '';
+    if (errorInfo.suggestions && errorInfo.suggestions.length > 0) {
+      suggestionsHtml = `
+        <div class="csv-error-suggestions">
+          <p class="csv-error-suggestions-title">Try the following:</p>
+          <ul>
+            ${errorInfo.suggestions.map(s => `<li>${this.escapeHtml(s)}</li>`).join('')}
+          </ul>
+        </div>
+      `;
+    }
+
+    // Build technical details HTML (collapsed by default)
+    let technicalHtml = '';
+    if (errorInfo.technicalDetails) {
+      technicalHtml = `
+        <details class="csv-error-technical">
+          <summary>Technical details</summary>
+          <pre>${this.escapeHtml(errorInfo.technicalDetails)}</pre>
+        </details>
+      `;
+    }
+
     this.container.innerHTML = `
       <div class="csv-error-state">
         <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -1352,16 +1437,39 @@ export class CsvEditor {
           <line x1="12" y1="8" x2="12" y2="12"></line>
           <line x1="12" y1="16" x2="12.01" y2="16"></line>
         </svg>
-        <h3>Error loading CSV</h3>
-        <p>${this.escapeHtml(this.state.error)}</p>
-        <button class="csv-retry-btn">Retry</button>
+        <h3>Unable to Load CSV File</h3>
+        <p class="csv-error-message">${this.escapeHtml(errorInfo.message)}</p>
+        ${suggestionsHtml}
+        <div class="csv-error-actions">
+          <button class="csv-retry-btn csv-btn-primary">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M21 2v6h-6"></path>
+              <path d="M3 12a9 9 0 0 1 15-6.7L21 8"></path>
+              <path d="M3 22v-6h6"></path>
+              <path d="M21 12a9 9 0 0 1-15 6.7L3 16"></path>
+            </svg>
+            Try Again
+          </button>
+        </div>
+        ${technicalHtml}
       </div>
     `;
 
     // Add retry handler
     const retryBtn = this.container.querySelector('.csv-retry-btn');
     if (retryBtn) {
-      retryBtn.addEventListener('click', () => this.mount());
+      retryBtn.addEventListener('click', async () => {
+        // Show loading state on button
+        retryBtn.disabled = true;
+        retryBtn.innerHTML = `
+          <svg class="csv-btn-spinner" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="10" opacity="0.25"></circle>
+            <path d="M12 2a10 10 0 0 1 10 10" stroke-linecap="round"></path>
+          </svg>
+          Retrying...
+        `;
+        await this.mount();
+      });
     }
   }
 
@@ -1380,7 +1488,13 @@ export class CsvEditor {
         if (cell) {
           const row = parseInt(cell.dataset.row, 10);
           const col = parseInt(cell.dataset.col, 10);
-          this.selectCell(row, col);
+
+          // Shift+click for multi-cell selection
+          if (e.shiftKey && this.state.selectedCell) {
+            this.extendSelection(row, col);
+          } else {
+            this.selectCell(row, col);
+          }
         }
       });
 
@@ -1402,6 +1516,8 @@ export class CsvEditor {
 
     // Toolbar button handlers
     if (this.toolbar) {
+      const undoBtn = this.toolbar.querySelector('.csv-undo-btn');
+      const redoBtn = this.toolbar.querySelector('.csv-redo-btn');
       const addRowBtn = this.toolbar.querySelector('.csv-add-row-btn');
       const addColBtn = this.toolbar.querySelector('.csv-add-col-btn');
       const deleteRowBtn = this.toolbar.querySelector('.csv-delete-row-btn');
@@ -1409,6 +1525,8 @@ export class CsvEditor {
       const schemaBtn = this.toolbar.querySelector('.csv-schema-btn');
       const aiContextBtn = this.toolbar.querySelector('.csv-ai-context-btn');
 
+      if (undoBtn) undoBtn.addEventListener('click', () => this.undo());
+      if (redoBtn) redoBtn.addEventListener('click', () => this.redo());
       if (addRowBtn) addRowBtn.addEventListener('click', () => this.addRow());
       if (addColBtn) addColBtn.addEventListener('click', () => this.addColumn());
       if (deleteRowBtn) deleteRowBtn.addEventListener('click', () => this.deleteRow());
@@ -1440,14 +1558,13 @@ export class CsvEditor {
     // Determine the container to search for cells
     const cellContainer = this.virtualScroll.enabled ? this.virtualBodyTable : this.tableElement;
 
-    // Clear previous selection
-    const prevSelected = cellContainer?.querySelector('.csv-cell-selected');
-    if (prevSelected) {
-      prevSelected.classList.remove('csv-cell-selected');
-    }
+    // Clear previous selection (single and multi)
+    this.clearSelectionHighlight();
 
-    // Update state (always persist selection state, even if cell not in DOM)
+    // Update state - single cell selection also sets as anchor for potential multi-select
     this.state.selectedCell = { row, col };
+    this.state.selectionStart = { row, col };
+    this.state.selectionEnd = null;
 
     // For virtual scrolling, ensure the row is visible
     if (this.virtualScroll.enabled) {
@@ -1470,6 +1587,113 @@ export class CsvEditor {
     this.updateDeleteButtonState();
 
     console.log('Cell selected:', { row, col });
+  }
+
+  /**
+   * Extend selection from anchor cell to specified cell (for shift+click)
+   * @param {number} row - End row index
+   * @param {number} col - End column index
+   */
+  extendSelection(row, col) {
+    if (!this.state.selectionStart) {
+      // No anchor set, just do normal select
+      this.selectCell(row, col);
+      return;
+    }
+
+    // If editing, finish first
+    if (this.state.editingCell) {
+      this.finishEditing();
+    }
+
+    // Clear previous selection highlight
+    this.clearSelectionHighlight();
+
+    // Set the selection end
+    this.state.selectionEnd = { row, col };
+    this.state.selectedCell = { row, col };
+
+    // Highlight all cells in selection range
+    this.highlightSelectionRange();
+
+    console.log('Selection extended:', {
+      start: this.state.selectionStart,
+      end: this.state.selectionEnd
+    });
+  }
+
+  /**
+   * Get the normalized selection range (start <= end)
+   * @returns {Object|null} { startRow, startCol, endRow, endCol } or null if no selection
+   */
+  getSelectionRange() {
+    if (!this.state.selectionStart) {
+      return null;
+    }
+
+    const start = this.state.selectionStart;
+    const end = this.state.selectionEnd || start;
+
+    return {
+      startRow: Math.min(start.row, end.row),
+      startCol: Math.min(start.col, end.col),
+      endRow: Math.max(start.row, end.row),
+      endCol: Math.max(start.col, end.col)
+    };
+  }
+
+  /**
+   * Check if selection includes multiple cells
+   * @returns {boolean}
+   */
+  hasMultiCellSelection() {
+    if (!this.state.selectionStart || !this.state.selectionEnd) {
+      return false;
+    }
+    return this.state.selectionStart.row !== this.state.selectionEnd.row ||
+           this.state.selectionStart.col !== this.state.selectionEnd.col;
+  }
+
+  /**
+   * Clear all selection highlights from cells
+   */
+  clearSelectionHighlight() {
+    const cellContainer = this.virtualScroll.enabled ? this.virtualBodyTable : this.tableElement;
+    if (!cellContainer) return;
+
+    const selectedCells = cellContainer.querySelectorAll('.csv-cell-selected, .csv-cell-in-selection');
+    selectedCells.forEach(cell => {
+      cell.classList.remove('csv-cell-selected', 'csv-cell-in-selection');
+    });
+  }
+
+  /**
+   * Highlight all cells within the current selection range
+   */
+  highlightSelectionRange() {
+    const range = this.getSelectionRange();
+    if (!range) return;
+
+    const cellContainer = this.virtualScroll.enabled ? this.virtualBodyTable : this.tableElement;
+    if (!cellContainer) return;
+
+    const { startRow, startCol, endRow, endCol } = range;
+
+    // For virtual scrolling, we may not have all rows in DOM
+    // Highlight what's visible
+    for (let r = startRow; r <= endRow; r++) {
+      for (let c = startCol; c <= endCol; c++) {
+        const cell = cellContainer.querySelector(`td[data-row="${r}"][data-col="${c}"]`);
+        if (cell) {
+          // Mark cells in selection
+          if (r === this.state.selectedCell?.row && c === this.state.selectedCell?.col) {
+            cell.classList.add('csv-cell-selected');
+          } else {
+            cell.classList.add('csv-cell-in-selection');
+          }
+        }
+      }
+    }
   }
 
   /**
@@ -1823,6 +2047,24 @@ export class CsvEditor {
       return;
     }
 
+    // Copy: Cmd/Ctrl + C (when not editing)
+    if ((e.metaKey || e.ctrlKey) && e.key === 'c') {
+      if (!this.state.editingCell && this.state.selectedCell) {
+        e.preventDefault();
+        this.copySelection();
+      }
+      return;
+    }
+
+    // Paste: Cmd/Ctrl + V (when not editing)
+    if ((e.metaKey || e.ctrlKey) && e.key === 'v') {
+      if (!this.state.editingCell && this.state.selectedCell) {
+        e.preventDefault();
+        this.pasteFromClipboard();
+      }
+      return;
+    }
+
     // If currently editing, let CodeMirror handle all other keys
     // (CodeMirror already handles Enter, Escape, Tab, Shift+Tab via its keymap)
     if (this.state.editingCell) {
@@ -2012,6 +2254,159 @@ export class CsvEditor {
   }
 
   /**
+   * Copy selected cells to clipboard
+   * Uses tab-separated format for Excel compatibility
+   */
+  async copySelection() {
+    const range = this.getSelectionRange();
+    if (!range) {
+      console.log('No selection to copy');
+      return;
+    }
+
+    const { startRow, startCol, endRow, endCol } = range;
+    const rows = this.state.workingRows;
+
+    // Build tab-separated text for clipboard
+    const lines = [];
+    for (let r = startRow; r <= endRow; r++) {
+      const rowCells = [];
+      for (let c = startCol; c <= endCol; c++) {
+        const value = rows[r]?.[c] ?? '';
+        rowCells.push(value);
+      }
+      lines.push(rowCells.join('\t'));
+    }
+
+    const clipboardText = lines.join('\n');
+
+    try {
+      await navigator.clipboard.writeText(clipboardText);
+      console.log('Copied to clipboard:', {
+        rows: endRow - startRow + 1,
+        cols: endCol - startCol + 1,
+        text: clipboardText.substring(0, 100) + (clipboardText.length > 100 ? '...' : '')
+      });
+    } catch (error) {
+      console.error('Failed to copy to clipboard:', error);
+      // Fallback: use execCommand (deprecated but wider support)
+      try {
+        const textarea = document.createElement('textarea');
+        textarea.value = clipboardText;
+        textarea.style.position = 'fixed';
+        textarea.style.opacity = '0';
+        document.body.appendChild(textarea);
+        textarea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textarea);
+        console.log('Copied to clipboard (fallback)');
+      } catch (fallbackError) {
+        console.error('Fallback copy also failed:', fallbackError);
+      }
+    }
+  }
+
+  /**
+   * Paste from clipboard into cells starting at current selection
+   * Supports tab-separated format (Excel compatibility)
+   */
+  async pasteFromClipboard() {
+    const { selectedCell } = this.state;
+    if (!selectedCell) {
+      console.log('No cell selected for paste');
+      return;
+    }
+
+    let clipboardText;
+    try {
+      clipboardText = await navigator.clipboard.readText();
+    } catch (error) {
+      console.error('Failed to read clipboard:', error);
+      return;
+    }
+
+    if (!clipboardText || clipboardText.length === 0) {
+      console.log('Clipboard is empty');
+      return;
+    }
+
+    // Parse clipboard text - handle both \n and \r\n line endings
+    const lines = clipboardText.split(/\r?\n/);
+
+    // Remove trailing empty line if present (common in copied data)
+    if (lines.length > 0 && lines[lines.length - 1] === '') {
+      lines.pop();
+    }
+
+    if (lines.length === 0) {
+      return;
+    }
+
+    // Parse each line into cells (tab-separated)
+    const pasteData = lines.map(line => line.split('\t'));
+
+    // Get dimensions
+    const pasteRows = pasteData.length;
+    const pasteCols = Math.max(...pasteData.map(row => row.length));
+
+    const startRow = selectedCell.row;
+    const startCol = selectedCell.col;
+    const numRows = this.state.workingRows.length;
+    const numCols = this.state.data?.headers?.length || 0;
+
+    // Calculate end positions (clamp to grid bounds)
+    const endRow = Math.min(startRow + pasteRows - 1, numRows - 1);
+    const endCol = Math.min(startCol + pasteCols - 1, numCols - 1);
+
+    // Save state for undo
+    this.saveUndoState();
+
+    // Determine container for cell updates
+    const cellContainer = this.virtualScroll.enabled ? this.virtualBodyTable : this.tableElement;
+
+    // Apply paste data
+    for (let r = 0; r < pasteRows && startRow + r < numRows; r++) {
+      for (let c = 0; c < (pasteData[r]?.length || 0) && startCol + c < numCols; c++) {
+        const targetRow = startRow + r;
+        const targetCol = startCol + c;
+        const newValue = pasteData[r][c] ?? '';
+
+        // Update data
+        if (this.state.workingRows[targetRow]) {
+          this.state.workingRows[targetRow][targetCol] = newValue;
+        }
+
+        // Update display
+        const cellElement = cellContainer?.querySelector(`td[data-row="${targetRow}"][data-col="${targetCol}"]`);
+        if (cellElement) {
+          const textSpan = cellElement.querySelector('.csv-cell-text');
+          if (textSpan) {
+            textSpan.textContent = newValue;
+          }
+          cellElement.title = newValue;
+        }
+      }
+    }
+
+    // Set selection to cover pasted range
+    this.clearSelectionHighlight();
+    this.state.selectionStart = { row: startRow, col: startCol };
+    this.state.selectionEnd = { row: endRow, col: endCol };
+    this.state.selectedCell = { row: endRow, col: endCol };
+    this.highlightSelectionRange();
+
+    // Check dirty state
+    this.checkDirty();
+
+    console.log('Pasted from clipboard:', {
+      startRow,
+      startCol,
+      pastedRows: Math.min(pasteRows, numRows - startRow),
+      pastedCols: Math.min(pasteCols, numCols - startCol)
+    });
+  }
+
+  /**
    * Start editing with an initial value (for typing to replace)
    * @param {number} row - Row index
    * @param {number} col - Column index
@@ -2057,6 +2452,9 @@ export class CsvEditor {
     if (this.undoStack.length > 50) {
       this.undoStack.shift();
     }
+
+    // Update toolbar button states
+    this.updateUndoRedoButtons();
   }
 
   /**
@@ -2084,6 +2482,9 @@ export class CsvEditor {
 
     // Check dirty state
     this.checkDirty();
+
+    // Update toolbar button states
+    this.updateUndoRedoButtons();
 
     console.log('Undo performed');
   }
@@ -2114,7 +2515,20 @@ export class CsvEditor {
     // Check dirty state
     this.checkDirty();
 
+    // Update toolbar button states
+    this.updateUndoRedoButtons();
+
     console.log('Redo performed');
+  }
+
+  /**
+   * Clear undo/redo history (called after save)
+   */
+  clearHistory() {
+    this.undoStack = [];
+    this.redoStack = [];
+    this.updateUndoRedoButtons();
+    console.log('Undo/redo history cleared');
   }
 
   /**
@@ -2337,7 +2751,7 @@ export class CsvEditor {
 
   /**
    * Save changes to disk
-   * Calls save_csv_data Tauri command and updates state on success
+   * Calls save_csv_data Tauri command with retry for transient errors
    */
   async save() {
     console.log('Save triggered');
@@ -2357,13 +2771,16 @@ export class CsvEditor {
     this.showSaveStatus('saving');
 
     try {
-      // Call Tauri command to save CSV data
+      // Call Tauri command to save CSV data with retry for transient errors
       // Note: Tauri v2 auto-converts camelCase JS to snake_case Rust
-      await invoke('save_csv_data', {
-        path: this.filePath,
-        headers: this.state.data.headers,
-        rows: this.state.workingRows
-      });
+      await csvErrorHandler.withRetry(
+        () => invoke('save_csv_data', {
+          path: this.filePath,
+          headers: this.state.data.headers,
+          rows: this.state.workingRows
+        }),
+        { operationName: 'Save CSV', maxRetries: 2, baseDelay: 500 }
+      );
 
       console.log('CSV data saved successfully');
 
@@ -2376,6 +2793,9 @@ export class CsvEditor {
       this.updateSaveButtonState();
       this.updateDirtyIndicator();
 
+      // Clear undo/redo history on save
+      this.clearHistory();
+
       // Show success feedback
       this.showSaveStatus('success');
 
@@ -2385,10 +2805,15 @@ export class CsvEditor {
       }, 2000);
 
     } catch (error) {
-      console.error('Error saving CSV:', error);
+      // Handle error with user-friendly message
+      const errorInfo = csvErrorHandler.handleError(error, {
+        operation: 'Save CSV file',
+        showToast: true,
+        context: { filePath: this.filePath }
+      });
 
-      // Show error feedback
-      this.showSaveStatus('error', error.message || 'Failed to save file');
+      // Show error feedback in toolbar
+      this.showSaveStatus('error', errorInfo.message);
     }
   }
 
@@ -2424,8 +2849,7 @@ export class CsvEditor {
         saveBtn.classList.add('save-error');
         saveBtn.disabled = false;
         if (textSpan) textSpan.textContent = 'Save Failed';
-        // Show error alert
-        alert(`Error saving file: ${errorMessage}`);
+        // Note: Toast notification is handled by the error handler
         // Reset button text after a moment
         setTimeout(() => {
           if (textSpan) textSpan.textContent = 'Save';
@@ -2519,6 +2943,30 @@ export class CsvEditor {
       } else {
         filenameEl.classList.remove('dirty');
       }
+    }
+  }
+
+  /**
+   * Update undo/redo button states based on stack availability
+   */
+  updateUndoRedoButtons() {
+    const undoBtn = this.toolbar?.querySelector('.csv-undo-btn');
+    const redoBtn = this.toolbar?.querySelector('.csv-redo-btn');
+
+    if (undoBtn) {
+      const canUndo = this.undoStack && this.undoStack.length > 0;
+      undoBtn.disabled = !canUndo;
+      undoBtn.title = canUndo
+        ? `Undo (Cmd+Z) - ${this.undoStack.length} change${this.undoStack.length > 1 ? 's' : ''} available`
+        : 'Undo (Cmd+Z) - No changes to undo';
+    }
+
+    if (redoBtn) {
+      const canRedo = this.redoStack && this.redoStack.length > 0;
+      redoBtn.disabled = !canRedo;
+      redoBtn.title = canRedo
+        ? `Redo (Cmd+Shift+Z) - ${this.redoStack.length} change${this.redoStack.length > 1 ? 's' : ''} available`
+        : 'Redo (Cmd+Shift+Z) - No changes to redo';
     }
   }
 
@@ -3115,19 +3563,26 @@ export class CsvEditor {
     document.addEventListener('keydown', escHandler);
     this.aiContextEscHandler = escHandler;
 
-    // Fetch AI context from backend
+    // Fetch AI context from backend with retry for transient errors
     try {
-      const aiContext = await invoke('get_csv_ai_context', {
-        path: this.filePath,
-        maxSampleRows: 10
-      });
+      const aiContext = await csvErrorHandler.withRetry(
+        () => invoke('get_csv_ai_context', {
+          path: this.filePath,
+          maxSampleRows: 10
+        }),
+        { operationName: 'Generate AI context', maxRetries: 2 }
+      );
 
       console.log('AI context received:', aiContext);
 
       // Update modal with content
       this.renderAiContextContent(modal, aiContext);
     } catch (error) {
-      console.error('Error fetching AI context:', error);
+      // Log with context
+      csvErrorHandler.logError(error, {
+        operation: 'generateAiContext',
+        filePath: this.filePath
+      });
       this.renderAiContextError(modal, error);
     }
   }
@@ -3389,18 +3844,27 @@ export class CsvEditor {
   }
 
   /**
-   * Render an error message in the AI context modal
+   * Render an error message in the AI context modal with user-friendly details
    * @param {HTMLElement} modal - The modal element
    * @param {Error} error - The error that occurred
    */
   renderAiContextError(modal, error) {
     const body = modal.querySelector('.csv-ai-context-modal-body');
 
-    let errorMessage = 'Failed to generate AI context.';
-    if (error.message) {
-      errorMessage = error.message;
-    } else if (typeof error === 'string') {
-      errorMessage = error;
+    // Get user-friendly error info
+    const errorInfo = getUserFriendlyMessage(
+      CsvErrorType.SCHEMA_ERROR,
+      error
+    );
+
+    // Build suggestions HTML
+    let suggestionsHtml = '';
+    if (errorInfo.suggestions && errorInfo.suggestions.length > 0) {
+      suggestionsHtml = `
+        <ul class="csv-ai-context-error-suggestions">
+          ${errorInfo.suggestions.map(s => `<li>${this.escapeHtml(s)}</li>`).join('')}
+        </ul>
+      `;
     }
 
     body.innerHTML = `
@@ -3410,17 +3874,24 @@ export class CsvEditor {
           <line x1="12" y1="8" x2="12" y2="12"></line>
           <line x1="12" y1="16" x2="12.01" y2="16"></line>
         </svg>
-        <h4>Error</h4>
-        <p>${this.escapeHtml(errorMessage)}</p>
-        <button class="csv-ai-context-retry-btn">
+        <h4>Unable to Generate AI Context</h4>
+        <p>${this.escapeHtml(errorInfo.message)}</p>
+        ${suggestionsHtml}
+        <button class="csv-ai-context-retry-btn csv-btn-primary">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M21 2v6h-6"></path>
             <path d="M3 12a9 9 0 0 1 15-6.7L21 8"></path>
             <path d="M3 22v-6h6"></path>
             <path d="M21 12a9 9 0 0 1-15 6.7L3 16"></path>
           </svg>
-          Retry
+          Try Again
         </button>
+        ${errorInfo.technicalDetails ? `
+          <details class="csv-ai-context-error-details">
+            <summary>Technical details</summary>
+            <pre>${this.escapeHtml(errorInfo.technicalDetails)}</pre>
+          </details>
+        ` : ''}
       </div>
     `;
 
