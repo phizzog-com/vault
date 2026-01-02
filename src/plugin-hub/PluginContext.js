@@ -27,6 +27,25 @@ const BUNDLED_PLUGINS = {
     tags: ['semantic-search', 'ai', 'premium', 'cognitive-memory'],
     isBundled: true,  // Mark as bundled - cannot be uninstalled
     requiresLicense: true,  // Requires premium license to enable
+  },
+  'csv-support': {
+    id: 'csv-support',
+    name: 'CSV Editor Pro',
+    version: '1.0.0',
+    author: 'Vault Team',
+    description: 'View and edit CSV files with a powerful tabular interface. Free tier includes editing, row/column operations, and 10K row support. Premium adds schema inference, AI context generation, and unlimited rows.',
+    enabled: true,  // Free tier on by default
+    installed: true,
+    permissions: ['vault:read', 'vault:write'],
+    settings: [],
+    status: 'active',
+    icon: null,
+    homepage: null,
+    category: 'Data',
+    tags: ['csv', 'spreadsheet', 'data', 'editor', 'freemium'],
+    isBundled: true,  // Mark as bundled - cannot be uninstalled
+    requiresLicense: false,  // Free tier available without license
+    hasPremiumFeatures: true,  // Has premium features available for upgrade
   }
 };
 

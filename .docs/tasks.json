@@ -1087,7 +1087,7 @@
       "testing_criteria": [
         "contentBg, contentText, contentTextSecondary, contentSelection, contentCursor defined for both themes",
         "All chrome layer tokens defined for both themes",
-        "Dark theme chrome colors follow progressive lightening (#1C1C1E → #2C2C2E → #3A3A3C)",
+        "Dark theme chrome colors follow progressive lightening (#1C1C1E \u2192 #2C2C2E \u2192 #3A3A3C)",
         "File imports successfully without JavaScript errors",
         "JSDoc comments explain layer hierarchy"
       ]
@@ -1261,11 +1261,11 @@
         "Add comment explaining blue undertone (#1C1C1E vs pure #1C1C1C) creates more alive feeling",
         "Add commented alternative pure neutral scale for brand flexibility: #171717, #1F1F1F, #2A2A2A, #333333",
         "Update existing --bg-secondary references to use the new progressive values if needed",
-        "Document mapping: window background → --bg-primary, sidebars/cards → --bg-secondary, dropdowns → --bg-tertiary, tooltips/overlays → --bg-elevated"
+        "Document mapping: window background \u2192 --bg-primary, sidebars/cards \u2192 --bg-secondary, dropdowns \u2192 --bg-tertiary, tooltips/overlays \u2192 --bg-elevated"
       ],
       "testing_criteria": [
         "All 4 background elevation levels defined in dark theme",
-        "Values follow progressive lightening pattern (#1C1C1E → #2C2C2E → #3A3A3C → #48484A)",
+        "Values follow progressive lightening pattern (#1C1C1E \u2192 #2C2C2E \u2192 #3A3A3C \u2192 #48484A)",
         "Each elevation is approximately 14-16 hex value lighter than previous",
         "Comments explain elevation hierarchy and blue undertone rationale",
         "Alternative pure neutral scale documented in comments",
@@ -1310,7 +1310,7 @@
       "instructions": [
         "Switch to dark theme with [data-theme='dark']",
         "Test that base background uses #1C1C1E (Apple systemBackground)",
-        "Test that elevated surfaces progressively lighten (#2C2C2E → #3A3A3C → #48484A)",
+        "Test that elevated surfaces progressively lighten (#2C2C2E \u2192 #3A3A3C \u2192 #48484A)",
         "Open modal over sidebar - verify 3 distinct elevation levels are perceivable",
         "Test that elevation shadows are more intense in dark mode",
         "Test fill tokens in dark mode - verify white rgba values",
@@ -1505,7 +1505,7 @@
         "Document purpose-driven naming: explain why elevation names describe purpose not number",
         "Add before/after examples showing aesthetic decisions vs functional decisions",
         "Document translucency rationale: how backdrop-filter creates native desktop feel",
-        "Add section on four-variant accessibility: explain light/dark × standard/high-contrast matrix",
+        "Add section on four-variant accessibility: explain light/dark \u00d7 standard/high-contrast matrix",
         "Include physics-based motion explanation: duration tied to distance traveled",
         "Add troubleshooting for backdrop-filter platform differences"
       ],
@@ -1568,7 +1568,7 @@
         "Example 4: Button with motion system - show transition composition",
         "Example 5: High contrast mode handling - show media query integration",
         "Each example should include complete CSS code with comments",
-        "Include both correct usage (✓) and incorrect usage (✗) patterns for clarity"
+        "Include both correct usage (\u2713) and incorrect usage (\u2717) patterns for clarity"
       ],
       "testing_criteria": [
         "Component Integration Examples section exists",
@@ -1578,7 +1578,7 @@
         "Modal example uses semantic elevation naming",
         "Button example shows pre-composed transition usage",
         "High contrast example demonstrates media query integration",
-        "Examples include correct (✓) and incorrect (✗) usage patterns"
+        "Examples include correct (\u2713) and incorrect (\u2717) usage patterns"
       ]
     },
     {
@@ -3477,7 +3477,7 @@
         "Start PACASDB server on Docker: docker run -p 8000:8000 pacasdb",
         "Run Vault: npm run tauri dev",
         "Test: New User Trial Journey",
-        "- Open Settings → PACASDB Premium",
+        "- Open Settings \u2192 PACASDB Premium",
         "- Click 'Start 30-Day Free Trial'",
         "- Verify premium features enabled",
         "- Use global search (Cmd+Shift+F)",
@@ -4591,7 +4591,7 @@
       "phase": "Phase 2: Rust Commands",
       "task": "Free Tauri Commands",
       "name": "Implement list_csv_files command",
-      "passes": false,
+      "passes": true,
       "instructions": [
         "Open src-tauri/src/csv/commands.rs",
         "Implement list_csv_files Tauri command",
@@ -4613,7 +4613,7 @@
       "phase": "Phase 2: Rust Commands",
       "task": "Free Tauri Commands",
       "name": "Implement read_csv_data command",
-      "passes": false,
+      "passes": true,
       "instructions": [
         "Implement read_csv_data command with path and max_rows params",
         "Validate path is within vault boundary",
@@ -4636,7 +4636,7 @@
       "phase": "Phase 2: Rust Commands",
       "task": "Free Tauri Commands",
       "name": "Implement save_csv_data command",
-      "passes": false,
+      "passes": true,
       "instructions": [
         "Implement save_csv_data command with path, headers, rows params",
         "Validate path within vault boundary",
@@ -4659,7 +4659,7 @@
       "phase": "Phase 2: Rust Commands",
       "task": "Premium Tauri Commands",
       "name": "Implement premium gating helpers",
-      "passes": false,
+      "passes": true,
       "instructions": [
         "Implement require_csv_premium(feature) async helper",
         "Load license from storage",
@@ -4680,7 +4680,7 @@
       "phase": "Phase 2: Rust Commands",
       "task": "Premium Tauri Commands",
       "name": "Implement get_csv_schema command",
-      "passes": false,
+      "passes": true,
       "instructions": [
         "Implement get_csv_schema command with path and create_if_missing params",
         "Allow reading existing schemas without premium (mark read_only: true)",
@@ -4723,7 +4723,7 @@
       "phase": "Phase 2: Rust Commands",
       "task": "Premium Tauri Commands",
       "name": "Implement get_csv_ai_context and get_csv_statistics commands",
-      "passes": false,
+      "passes": true,
       "instructions": [
         "Implement get_csv_ai_context with premium check",
         "Load or infer schema, load sample data",
@@ -4745,7 +4745,7 @@
       "phase": "Phase 3: Plugin Hub Integration",
       "task": "Plugin Registration",
       "name": "Add CSV Editor Pro to BUNDLED_PLUGINS",
-      "passes": false,
+      "passes": true,
       "instructions": [
         "Open src/plugin-hub/PluginContext.js",
         "Add csv-support entry to BUNDLED_PLUGINS",
