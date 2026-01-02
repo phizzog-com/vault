@@ -4522,7 +4522,7 @@
       "phase": "Phase 1: Rust Core",
       "task": "CSV Processor",
       "name": "Implement AI context generation",
-      "passes": false,
+      "passes": true,
       "instructions": [
         "Implement generate_ai_context(path, schema, data, max_sample_rows)",
         "Generate schema_summary with file name, row count, column count",
@@ -4544,7 +4544,7 @@
       "phase": "Phase 1: Rust Core",
       "task": "Schema Store",
       "name": "Implement schema persistence",
-      "passes": false,
+      "passes": true,
       "instructions": [
         "Open src-tauri/src/csv/schema_store.rs",
         "Implement schema_path(csv_path) -> {csv_path}.vault.json",
@@ -4569,7 +4569,7 @@
       "phase": "Phase 2: Rust Commands",
       "task": "Premium Feature Constants",
       "name": "Add CSV feature constants to license module",
-      "passes": false,
+      "passes": true,
       "instructions": [
         "Open src-tauri/src/license/mod.rs",
         "Add FEATURE_CSV_SCHEMA constant",

@@ -5,6 +5,7 @@
 use super::types::{LicenseStatus, LicenseInfo};
 use super::storage::{store_license, load_license};
 use super::fingerprint::get_machine_fingerprint;
+use super::TRIAL_FEATURES;
 use chrono::{Utc, Duration};
 
 const TRIAL_DURATION_DAYS: i64 = 30;
@@ -28,7 +29,7 @@ pub fn start_trial() -> Result<LicenseStatus, String> {
     let trial_info = LicenseInfo {
         key: format!("TRIAL-{}", machine_id),
         license_type: "trial".to_string(),
-        features: vec!["pacasdb".to_string()],
+        features: TRIAL_FEATURES.iter().map(|s| s.to_string()).collect(),
         activated_at: now,
         expires_at: Some(expires_at),
     };
@@ -75,6 +76,7 @@ pub fn check_trial() -> Result<LicenseStatus, String> {
 #[cfg(test)]
 mod trial_tests {
     use super::*;
+    use crate::license::storage::delete_license;
 
     // Helper to clean up test data
     fn cleanup_test_trial() {
