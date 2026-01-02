@@ -77,6 +77,25 @@ export class CsvEditor {
 
     // Bound event handlers for cleanup
     this.boundKeydownHandler = null;
+
+    // Virtual scrolling configuration
+    this.VIRTUAL_SCROLL_THRESHOLD = 1000;  // Enable virtual scroll for > 1000 rows
+    this.ROW_HEIGHT = 32;                   // Fixed row height in pixels
+    this.BUFFER_ROWS = 20;                  // Extra rows to render above/below viewport
+
+    // Virtual scrolling state
+    this.virtualScroll = {
+      enabled: false,
+      scrollTop: 0,
+      containerHeight: 0,
+      visibleStart: 0,
+      visibleEnd: 0,
+      totalHeight: 0,
+      rafId: null
+    };
+
+    // Bound scroll handler for cleanup
+    this.boundScrollHandler = null;
   }
 
   /**
@@ -196,8 +215,16 @@ export class CsvEditor {
     this.tableContainer = document.createElement('div');
     this.tableContainer.className = 'csv-table-container';
 
-    // Render table
-    this.tableElement = this.renderTable();
+    // Check if we should use virtual scrolling for large datasets
+    if (this.shouldUseVirtualScroll()) {
+      console.log(`Using virtual scrolling for ${this.state.workingRows.length} rows`);
+      this.tableContainer.classList.add('csv-virtual-scroll-enabled');
+      this.tableElement = this.renderVirtualTable();
+    } else {
+      // Standard table rendering for smaller datasets
+      this.virtualScroll.enabled = false;
+      this.tableElement = this.renderTable();
+    }
     this.tableContainer.appendChild(this.tableElement);
 
     mainContent.appendChild(this.tableContainer);
@@ -254,6 +281,14 @@ export class CsvEditor {
       </div>
 
       <div class="editor-header-right">
+        <button class="editor-control-btn csv-ai-context-btn${this.state.isPremium ? '' : ' locked'}" title="${this.state.isPremium ? 'Get AI Context' : 'AI Context (Premium Feature)'}">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M12 2a2 2 0 0 1 2 2c0 .74-.4 1.39-1 1.73V7h1a7 7 0 0 1 7 7h1a2 2 0 0 1 0 4h-1v1a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-1H2a2 2 0 0 1 0-4h1a7 7 0 0 1 7-7h1V5.73c-.6-.34-1-.99-1-1.73a2 2 0 0 1 2-2z"></path>
+            <circle cx="7.5" cy="14.5" r="1.5"></circle>
+            <circle cx="16.5" cy="14.5" r="1.5"></circle>
+          </svg>
+          <span>AI Context</span>
+        </button>
         <button class="editor-control-btn csv-schema-btn${this.state.isPremium ? '' : ' locked'}" title="${this.state.isPremium ? 'Toggle Schema Sidebar' : 'Schema (Premium Feature)'}">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <rect x="3" y="3" width="7" height="7"></rect>
@@ -438,6 +473,293 @@ export class CsvEditor {
     table.appendChild(tbody);
 
     return table;
+  }
+
+  /**
+   * Check if virtual scrolling should be enabled based on row count
+   * @returns {boolean}
+   */
+  shouldUseVirtualScroll() {
+    return this.state.workingRows.length > this.VIRTUAL_SCROLL_THRESHOLD;
+  }
+
+  /**
+   * Calculate the visible row range based on scroll position
+   * @param {number} scrollTop - Current scroll position
+   * @param {number} containerHeight - Height of the visible container
+   * @returns {Object} { start: number, end: number }
+   */
+  calculateVisibleRange(scrollTop, containerHeight) {
+    const totalRows = this.state.workingRows.length;
+
+    // Calculate which rows are visible
+    const startRow = Math.floor(scrollTop / this.ROW_HEIGHT);
+    const visibleCount = Math.ceil(containerHeight / this.ROW_HEIGHT);
+    const endRow = startRow + visibleCount;
+
+    // Add buffer rows above and below
+    const start = Math.max(0, startRow - this.BUFFER_ROWS);
+    const end = Math.min(totalRows, endRow + this.BUFFER_ROWS);
+
+    return { start, end };
+  }
+
+  /**
+   * Render the virtual scrolling table structure
+   * Uses a fixed-height container with absolutely positioned rows
+   * @returns {HTMLElement}
+   */
+  renderVirtualTable() {
+    const data = this.state.data;
+    const totalRows = this.state.workingRows.length;
+
+    if (!data || data.headers.length === 0) {
+      const emptyDiv = document.createElement('div');
+      emptyDiv.className = 'csv-empty-state';
+      emptyDiv.innerHTML = `
+        <p>No data to display</p>
+        <button class="csv-add-first-row-btn">Add first row</button>
+      `;
+      return emptyDiv;
+    }
+
+    // Calculate total height for scroll
+    this.virtualScroll.totalHeight = totalRows * this.ROW_HEIGHT;
+    this.virtualScroll.enabled = true;
+
+    // Create virtual scroll wrapper
+    const wrapper = document.createElement('div');
+    wrapper.className = 'csv-virtual-wrapper';
+
+    // Calculate column widths
+    const columnWidths = this.calculateColumnWidths();
+
+    // Create sticky header table
+    const headerTable = document.createElement('table');
+    headerTable.className = 'csv-table csv-virtual-header';
+
+    // Colgroup for header
+    const headerColgroup = document.createElement('colgroup');
+    const rowNumCol = document.createElement('col');
+    rowNumCol.style.width = '50px';
+    rowNumCol.style.minWidth = '50px';
+    headerColgroup.appendChild(rowNumCol);
+    columnWidths.forEach(width => {
+      const col = document.createElement('col');
+      col.style.width = `${width}px`;
+      col.style.minWidth = `${Math.min(width, 80)}px`;
+      headerColgroup.appendChild(col);
+    });
+    headerTable.appendChild(headerColgroup);
+
+    // Header row
+    const thead = document.createElement('thead');
+    const headerRow = document.createElement('tr');
+    headerRow.className = 'csv-header-row';
+
+    const rowNumHeader = document.createElement('th');
+    rowNumHeader.className = 'csv-row-number-header';
+    rowNumHeader.textContent = '#';
+    rowNumHeader.title = 'Row number';
+    headerRow.appendChild(rowNumHeader);
+
+    data.headers.forEach((header, colIndex) => {
+      const th = document.createElement('th');
+      th.className = 'csv-header-cell';
+      th.dataset.col = colIndex;
+      const textSpan = document.createElement('span');
+      textSpan.className = 'csv-header-text';
+      textSpan.textContent = header;
+      th.appendChild(textSpan);
+      th.title = header;
+      th.setAttribute('aria-label', header);
+      headerRow.appendChild(th);
+    });
+
+    thead.appendChild(headerRow);
+    headerTable.appendChild(thead);
+    wrapper.appendChild(headerTable);
+
+    // Create scrollable body container
+    const scrollContainer = document.createElement('div');
+    scrollContainer.className = 'csv-virtual-scroll-container';
+    this.virtualScrollContainer = scrollContainer;
+
+    // Create total height spacer
+    const spacer = document.createElement('div');
+    spacer.className = 'csv-virtual-spacer';
+    spacer.style.height = `${this.virtualScroll.totalHeight}px`;
+    scrollContainer.appendChild(spacer);
+
+    // Create body table for visible rows (positioned absolutely)
+    const bodyTable = document.createElement('table');
+    bodyTable.className = 'csv-table csv-virtual-body';
+    this.virtualBodyTable = bodyTable;
+
+    // Colgroup for body
+    const bodyColgroup = document.createElement('colgroup');
+    const bodyRowNumCol = document.createElement('col');
+    bodyRowNumCol.style.width = '50px';
+    bodyRowNumCol.style.minWidth = '50px';
+    bodyColgroup.appendChild(bodyRowNumCol);
+    columnWidths.forEach(width => {
+      const col = document.createElement('col');
+      col.style.width = `${width}px`;
+      col.style.minWidth = `${Math.min(width, 80)}px`;
+      bodyColgroup.appendChild(col);
+    });
+    bodyTable.appendChild(bodyColgroup);
+
+    const tbody = document.createElement('tbody');
+    tbody.className = 'csv-virtual-tbody';
+    this.virtualTbody = tbody;
+    bodyTable.appendChild(tbody);
+
+    scrollContainer.appendChild(bodyTable);
+    wrapper.appendChild(scrollContainer);
+
+    // Initial render of visible rows
+    this.updateVisibleRows();
+
+    return wrapper;
+  }
+
+  /**
+   * Update the visible rows based on current scroll position
+   * Called on scroll and initial render
+   */
+  updateVisibleRows() {
+    if (!this.virtualScroll.enabled || !this.virtualTbody) return;
+
+    const scrollTop = this.virtualScrollContainer?.scrollTop || 0;
+    const containerHeight = this.virtualScrollContainer?.clientHeight || 600;
+
+    const { start, end } = this.calculateVisibleRange(scrollTop, containerHeight);
+
+    // Skip if range hasn't changed
+    if (start === this.virtualScroll.visibleStart && end === this.virtualScroll.visibleEnd) {
+      return;
+    }
+
+    this.virtualScroll.visibleStart = start;
+    this.virtualScroll.visibleEnd = end;
+    this.virtualScroll.scrollTop = scrollTop;
+    this.virtualScroll.containerHeight = containerHeight;
+
+    // Clear existing rows
+    this.virtualTbody.innerHTML = '';
+
+    // Create document fragment for batch DOM update
+    const fragment = document.createDocumentFragment();
+
+    // Render only visible rows
+    for (let rowIndex = start; rowIndex < end; rowIndex++) {
+      const row = this.state.workingRows[rowIndex];
+      if (!row) continue;
+
+      const tr = document.createElement('tr');
+      tr.className = 'csv-data-row csv-virtual-row';
+      tr.dataset.row = rowIndex;
+      // Position row absolutely based on its index
+      tr.style.transform = `translateY(${rowIndex * this.ROW_HEIGHT}px)`;
+
+      // Row number cell
+      const rowNumCell = document.createElement('td');
+      rowNumCell.className = 'csv-row-number';
+      rowNumCell.textContent = rowIndex + 1;
+      rowNumCell.title = `Row ${rowIndex + 1}`;
+      tr.appendChild(rowNumCell);
+
+      // Data cells
+      row.forEach((cellValue, colIndex) => {
+        const td = document.createElement('td');
+        td.className = 'csv-cell';
+        td.dataset.row = rowIndex;
+        td.dataset.col = colIndex;
+
+        const textSpan = document.createElement('span');
+        textSpan.className = 'csv-cell-text';
+        textSpan.textContent = cellValue;
+        td.appendChild(textSpan);
+
+        if (cellValue && cellValue.length > 0) {
+          td.title = cellValue;
+          td.setAttribute('aria-label', cellValue);
+        }
+
+        // Add selection class if selected
+        if (this.state.selectedCell &&
+            this.state.selectedCell.row === rowIndex &&
+            this.state.selectedCell.col === colIndex) {
+          td.classList.add('csv-cell-selected');
+        }
+
+        tr.appendChild(td);
+      });
+
+      fragment.appendChild(tr);
+    }
+
+    this.virtualTbody.appendChild(fragment);
+
+    // Position the body table
+    if (this.virtualBodyTable) {
+      this.virtualBodyTable.style.transform = `translateY(0)`;
+    }
+  }
+
+  /**
+   * Handle scroll events for virtual scrolling
+   * Uses requestAnimationFrame for smooth 60fps updates
+   * @param {Event} e - Scroll event
+   */
+  handleVirtualScroll(e) {
+    // Cancel any pending animation frame
+    if (this.virtualScroll.rafId) {
+      cancelAnimationFrame(this.virtualScroll.rafId);
+    }
+
+    // Schedule update on next animation frame
+    this.virtualScroll.rafId = requestAnimationFrame(() => {
+      this.updateVisibleRows();
+    });
+  }
+
+  /**
+   * Setup virtual scroll event listeners
+   */
+  setupVirtualScrollHandlers() {
+    if (!this.virtualScrollContainer) return;
+
+    this.boundScrollHandler = (e) => this.handleVirtualScroll(e);
+    this.virtualScrollContainer.addEventListener('scroll', this.boundScrollHandler, { passive: true });
+
+    // Initial measurement after DOM is ready
+    requestAnimationFrame(() => {
+      this.updateVisibleRows();
+    });
+  }
+
+  /**
+   * Scroll to ensure a specific row is visible (for virtual scrolling)
+   * @param {number} rowIndex - The row index to scroll to
+   */
+  scrollToRow(rowIndex) {
+    if (!this.virtualScroll.enabled || !this.virtualScrollContainer) return;
+
+    const rowTop = rowIndex * this.ROW_HEIGHT;
+    const rowBottom = rowTop + this.ROW_HEIGHT;
+    const scrollTop = this.virtualScrollContainer.scrollTop;
+    const containerHeight = this.virtualScrollContainer.clientHeight;
+
+    // Check if row is already fully visible
+    if (rowTop >= scrollTop && rowBottom <= scrollTop + containerHeight) {
+      return;
+    }
+
+    // Scroll to show the row (centered if possible)
+    const targetScroll = Math.max(0, rowTop - (containerHeight / 2) + (this.ROW_HEIGHT / 2));
+    this.virtualScrollContainer.scrollTop = targetScroll;
   }
 
   /**
@@ -851,12 +1173,14 @@ export class CsvEditor {
     const deleteRowBtn = this.toolbar.querySelector('.csv-delete-row-btn');
     const saveBtn = this.toolbar.querySelector('.csv-save-btn');
     const schemaBtn = this.toolbar.querySelector('.csv-schema-btn');
+    const aiContextBtn = this.toolbar.querySelector('.csv-ai-context-btn');
 
     if (addRowBtn) addRowBtn.addEventListener('click', () => this.addRow());
     if (addColBtn) addColBtn.addEventListener('click', () => this.addColumn());
     if (deleteRowBtn) deleteRowBtn.addEventListener('click', () => this.deleteRow());
     if (saveBtn) saveBtn.addEventListener('click', () => this.save());
     if (schemaBtn) schemaBtn.addEventListener('click', () => this.toggleSchemaSidebar());
+    if (aiContextBtn) aiContextBtn.addEventListener('click', () => this.openAiContextModal());
   }
 
   /**
@@ -1045,9 +1369,13 @@ export class CsvEditor {
    * Set up event handlers
    */
   setupEventHandlers() {
+    // Determine which element to attach cell event handlers to
+    // For virtual scrolling, use the virtual body table; otherwise use the table element
+    const cellContainer = this.virtualScroll.enabled ? this.virtualBodyTable : this.tableElement;
+
     // Table cell clicks for selection
-    if (this.tableElement && this.tableElement.tagName === 'TABLE') {
-      this.tableElement.addEventListener('click', (e) => {
+    if (cellContainer && cellContainer.tagName === 'TABLE') {
+      cellContainer.addEventListener('click', (e) => {
         const cell = e.target.closest('.csv-cell');
         if (cell) {
           const row = parseInt(cell.dataset.row, 10);
@@ -1057,7 +1385,7 @@ export class CsvEditor {
       });
 
       // Double-click for editing
-      this.tableElement.addEventListener('dblclick', (e) => {
+      cellContainer.addEventListener('dblclick', (e) => {
         const cell = e.target.closest('.csv-cell');
         if (cell) {
           const row = parseInt(cell.dataset.row, 10);
@@ -1067,6 +1395,11 @@ export class CsvEditor {
       });
     }
 
+    // Set up virtual scroll handlers if enabled
+    if (this.virtualScroll.enabled) {
+      this.setupVirtualScrollHandlers();
+    }
+
     // Toolbar button handlers
     if (this.toolbar) {
       const addRowBtn = this.toolbar.querySelector('.csv-add-row-btn');
@@ -1074,12 +1407,14 @@ export class CsvEditor {
       const deleteRowBtn = this.toolbar.querySelector('.csv-delete-row-btn');
       const saveBtn = this.toolbar.querySelector('.csv-save-btn');
       const schemaBtn = this.toolbar.querySelector('.csv-schema-btn');
+      const aiContextBtn = this.toolbar.querySelector('.csv-ai-context-btn');
 
       if (addRowBtn) addRowBtn.addEventListener('click', () => this.addRow());
       if (addColBtn) addColBtn.addEventListener('click', () => this.addColumn());
       if (deleteRowBtn) deleteRowBtn.addEventListener('click', () => this.deleteRow());
       if (saveBtn) saveBtn.addEventListener('click', () => this.save());
       if (schemaBtn) schemaBtn.addEventListener('click', () => this.toggleSchemaSidebar());
+      if (aiContextBtn) aiContextBtn.addEventListener('click', () => this.openAiContextModal());
     }
 
     // Keyboard navigation
@@ -1102,20 +1437,30 @@ export class CsvEditor {
       this.finishEditing();
     }
 
+    // Determine the container to search for cells
+    const cellContainer = this.virtualScroll.enabled ? this.virtualBodyTable : this.tableElement;
+
     // Clear previous selection
-    const prevSelected = this.tableElement?.querySelector('.csv-cell-selected');
+    const prevSelected = cellContainer?.querySelector('.csv-cell-selected');
     if (prevSelected) {
       prevSelected.classList.remove('csv-cell-selected');
     }
 
-    // Update state
+    // Update state (always persist selection state, even if cell not in DOM)
     this.state.selectedCell = { row, col };
+
+    // For virtual scrolling, ensure the row is visible
+    if (this.virtualScroll.enabled) {
+      this.scrollToRow(row);
+      // After scrolling, the visible rows may have changed, so re-render
+      this.updateVisibleRows();
+    }
 
     // Add selection to new cell (unless it's being edited)
     if (!this.state.editingCell ||
         this.state.editingCell.row !== row ||
         this.state.editingCell.col !== col) {
-      const newCell = this.tableElement?.querySelector(`td[data-row="${row}"][data-col="${col}"]`);
+      const newCell = cellContainer?.querySelector(`td[data-row="${row}"][data-col="${col}"]`);
       if (newCell) {
         newCell.classList.add('csv-cell-selected');
       }
@@ -1148,8 +1493,17 @@ export class CsvEditor {
       this.finishEditing();
     }
 
+    // Determine the container to search for cells
+    const cellContainer = this.virtualScroll.enabled ? this.virtualBodyTable : this.tableElement;
+
+    // For virtual scrolling, ensure the row is visible before getting element
+    if (this.virtualScroll.enabled) {
+      this.scrollToRow(row);
+      this.updateVisibleRows();
+    }
+
     // Get the cell element
-    const cellElement = this.tableElement?.querySelector(`td[data-row="${row}"][data-col="${col}"]`);
+    const cellElement = cellContainer?.querySelector(`td[data-row="${row}"][data-col="${col}"]`);
     if (!cellElement) {
       console.error('Cell element not found for editing:', { row, col });
       return;
@@ -2195,6 +2549,9 @@ export class CsvEditor {
     // Close relationship modal if open
     this.closeRelationshipEditor();
 
+    // Close AI context modal if open
+    this.closeAiContextModal();
+
     // Remove keyboard handler
     if (this.boundKeydownHandler) {
       document.removeEventListener('keydown', this.boundKeydownHandler);
@@ -2689,6 +3046,457 @@ export class CsvEditor {
         const index = parseInt(e.currentTarget.dataset.index, 10);
         this.deleteRelationship(index);
       });
+    });
+  }
+
+  // ===========================================================================
+  // AI Context Modal
+  // ===========================================================================
+
+  /**
+   * Open the AI Context modal
+   * Fetches AI-ready context from the backend and displays it with markdown preview
+   */
+  async openAiContextModal() {
+    console.log('Opening AI context modal for:', this.filePath);
+
+    // Check premium status
+    if (!this.state.isPremium) {
+      this.showPremiumRequiredAlert('AI Context');
+      return;
+    }
+
+    // Create modal overlay
+    const overlay = document.createElement('div');
+    overlay.className = 'csv-ai-context-modal-overlay';
+
+    // Create modal content with loading state
+    const modal = document.createElement('div');
+    modal.className = 'csv-ai-context-modal';
+
+    modal.innerHTML = `
+      <div class="csv-ai-context-modal-header">
+        <h3>AI Context</h3>
+        <button class="csv-ai-context-modal-close" title="Close">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+          </svg>
+        </button>
+      </div>
+      <div class="csv-ai-context-modal-body">
+        <div class="csv-ai-context-loading">
+          <div class="csv-loading-spinner"></div>
+          <p>Generating AI context...</p>
+        </div>
+      </div>
+    `;
+
+    overlay.appendChild(modal);
+    document.body.appendChild(overlay);
+
+    // Store reference for cleanup
+    this.aiContextModal = overlay;
+
+    // Set up close handlers
+    const closeBtn = modal.querySelector('.csv-ai-context-modal-close');
+    closeBtn.addEventListener('click', () => this.closeAiContextModal());
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay) this.closeAiContextModal();
+    });
+
+    // Escape key to close
+    const escHandler = (e) => {
+      if (e.key === 'Escape') {
+        this.closeAiContextModal();
+        document.removeEventListener('keydown', escHandler);
+      }
+    };
+    document.addEventListener('keydown', escHandler);
+    this.aiContextEscHandler = escHandler;
+
+    // Fetch AI context from backend
+    try {
+      const aiContext = await invoke('get_csv_ai_context', {
+        path: this.filePath,
+        maxSampleRows: 10
+      });
+
+      console.log('AI context received:', aiContext);
+
+      // Update modal with content
+      this.renderAiContextContent(modal, aiContext);
+    } catch (error) {
+      console.error('Error fetching AI context:', error);
+      this.renderAiContextError(modal, error);
+    }
+  }
+
+  /**
+   * Render the AI context content in the modal
+   * @param {HTMLElement} modal - The modal element
+   * @param {Object} aiContext - The AI context data from backend
+   */
+  renderAiContextContent(modal, aiContext) {
+    const body = modal.querySelector('.csv-ai-context-modal-body');
+
+    // Generate full markdown content
+    const markdownContent = this.generateAiContextMarkdown(aiContext);
+
+    body.innerHTML = `
+      <div class="csv-ai-context-tabs">
+        <button class="csv-ai-context-tab active" data-tab="preview">Preview</button>
+        <button class="csv-ai-context-tab" data-tab="markdown">Markdown</button>
+      </div>
+      <div class="csv-ai-context-content">
+        <div class="csv-ai-context-panel active" data-panel="preview">
+          <div class="csv-ai-context-preview">
+            ${this.renderMarkdownPreview(markdownContent)}
+          </div>
+        </div>
+        <div class="csv-ai-context-panel" data-panel="markdown">
+          <div class="csv-ai-context-markdown-container">
+            <pre class="csv-ai-context-markdown">${this.escapeHtml(markdownContent)}</pre>
+          </div>
+        </div>
+      </div>
+      <div class="csv-ai-context-modal-footer">
+        <button class="csv-ai-context-copy-btn">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+          </svg>
+          Copy to Clipboard
+        </button>
+      </div>
+    `;
+
+    // Set up tab switching
+    const tabs = body.querySelectorAll('.csv-ai-context-tab');
+    const panels = body.querySelectorAll('.csv-ai-context-panel');
+
+    tabs.forEach(tab => {
+      tab.addEventListener('click', () => {
+        const targetTab = tab.dataset.tab;
+
+        tabs.forEach(t => t.classList.remove('active'));
+        panels.forEach(p => p.classList.remove('active'));
+
+        tab.classList.add('active');
+        body.querySelector(`[data-panel="${targetTab}"]`).classList.add('active');
+      });
+    });
+
+    // Set up copy button
+    const copyBtn = body.querySelector('.csv-ai-context-copy-btn');
+    copyBtn.addEventListener('click', async () => {
+      try {
+        await navigator.clipboard.writeText(markdownContent);
+        copyBtn.innerHTML = `
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="20 6 9 17 4 12"></polyline>
+          </svg>
+          Copied!
+        `;
+        copyBtn.classList.add('copied');
+
+        setTimeout(() => {
+          copyBtn.innerHTML = `
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+              <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+            </svg>
+            Copy to Clipboard
+          `;
+          copyBtn.classList.remove('copied');
+        }, 2000);
+      } catch (error) {
+        console.error('Failed to copy:', error);
+        alert('Failed to copy to clipboard');
+      }
+    });
+  }
+
+  /**
+   * Generate markdown content from AI context
+   * @param {Object} aiContext - The AI context data
+   * @returns {string} Formatted markdown string
+   */
+  generateAiContextMarkdown(aiContext) {
+    let markdown = '';
+
+    // File header
+    markdown += `# CSV Context: ${aiContext.filePath}\n\n`;
+
+    // Description
+    if (aiContext.description) {
+      markdown += `## Description\n\n${aiContext.description}\n\n`;
+    }
+
+    // Schema summary
+    if (aiContext.schemaSummary) {
+      markdown += `## Schema Summary\n\n${aiContext.schemaSummary}\n\n`;
+    }
+
+    // Columns
+    if (aiContext.columns && aiContext.columns.length > 0) {
+      markdown += `## Columns\n\n`;
+      markdown += `| Column | Type | Role | Description |\n`;
+      markdown += `|--------|------|------|-------------|\n`;
+
+      for (const col of aiContext.columns) {
+        const desc = col.description || '-';
+        markdown += `| ${col.name} | ${col.dataType} | ${col.role} | ${desc} |\n`;
+      }
+      markdown += '\n';
+    }
+
+    // Sample data
+    if (aiContext.sampleData) {
+      markdown += `## Sample Data\n\n${aiContext.sampleData}\n\n`;
+    }
+
+    // Relationships
+    if (aiContext.relationships && aiContext.relationships.length > 0) {
+      markdown += `## Relationships\n\n`;
+      for (const rel of aiContext.relationships) {
+        markdown += `- **${rel.name}**: ${rel.description}\n`;
+      }
+      markdown += '\n';
+    }
+
+    return markdown;
+  }
+
+  /**
+   * Render markdown as HTML preview
+   * Simple markdown renderer for common elements
+   * @param {string} markdown - The markdown content
+   * @returns {string} HTML string
+   */
+  renderMarkdownPreview(markdown) {
+    let html = this.escapeHtml(markdown);
+
+    // Headers
+    html = html.replace(/^# (.+)$/gm, '<h1>$1</h1>');
+    html = html.replace(/^## (.+)$/gm, '<h2>$1</h2>');
+    html = html.replace(/^### (.+)$/gm, '<h3>$1</h3>');
+
+    // Bold
+    html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+
+    // Code blocks (before inline code)
+    html = html.replace(/```(\w*)\n([\s\S]*?)```/g, '<pre><code>$2</code></pre>');
+
+    // Inline code
+    html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
+
+    // Tables
+    html = this.renderMarkdownTables(html);
+
+    // Lists
+    html = html.replace(/^- (.+)$/gm, '<li>$1</li>');
+    html = html.replace(/(<li>.*<\/li>\n?)+/g, '<ul>$&</ul>');
+
+    // Paragraphs - wrap non-tagged content
+    html = html.replace(/^([^<\n].+)$/gm, (match) => {
+      // Don't wrap if it's already in a tag or is whitespace
+      if (match.trim() === '' || match.startsWith('<')) return match;
+      return `<p>${match}</p>`;
+    });
+
+    // Clean up empty paragraphs
+    html = html.replace(/<p>\s*<\/p>/g, '');
+
+    return html;
+  }
+
+  /**
+   * Render markdown tables to HTML
+   * @param {string} html - HTML content with table markdown
+   * @returns {string} HTML with rendered tables
+   */
+  renderMarkdownTables(html) {
+    const lines = html.split('\n');
+    const result = [];
+    let inTable = false;
+    let tableRows = [];
+
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      const isTableRow = line.startsWith('|') && line.endsWith('|');
+      const isSeparator = /^\|[-:\s|]+\|$/.test(line);
+
+      if (isTableRow && !isSeparator) {
+        if (!inTable) {
+          inTable = true;
+          tableRows = [];
+        }
+        tableRows.push(line);
+      } else if (isSeparator && inTable) {
+        // Skip separator line but stay in table
+        continue;
+      } else {
+        if (inTable) {
+          // End of table, render it
+          result.push(this.renderTable(tableRows));
+          inTable = false;
+          tableRows = [];
+        }
+        result.push(line);
+      }
+    }
+
+    // Handle table at end of content
+    if (inTable && tableRows.length > 0) {
+      result.push(this.renderTable(tableRows));
+    }
+
+    return result.join('\n');
+  }
+
+  /**
+   * Render a markdown table to HTML
+   * @param {string[]} rows - Array of table row strings
+   * @returns {string} HTML table string
+   */
+  renderTable(rows) {
+    if (rows.length === 0) return '';
+
+    let html = '<table class="csv-ai-context-table">\n';
+
+    rows.forEach((row, index) => {
+      const cells = row.split('|').filter(c => c.trim() !== '');
+      const tag = index === 0 ? 'th' : 'td';
+      const wrapper = index === 0 ? 'thead' : 'tbody';
+
+      if (index === 0) html += '<thead>\n';
+      if (index === 1) html += '<tbody>\n';
+
+      html += '<tr>';
+      cells.forEach(cell => {
+        html += `<${tag}>${cell.trim()}</${tag}>`;
+      });
+      html += '</tr>\n';
+
+      if (index === 0) html += '</thead>\n';
+    });
+
+    if (rows.length > 1) html += '</tbody>\n';
+    html += '</table>';
+
+    return html;
+  }
+
+  /**
+   * Render an error message in the AI context modal
+   * @param {HTMLElement} modal - The modal element
+   * @param {Error} error - The error that occurred
+   */
+  renderAiContextError(modal, error) {
+    const body = modal.querySelector('.csv-ai-context-modal-body');
+
+    let errorMessage = 'Failed to generate AI context.';
+    if (error.message) {
+      errorMessage = error.message;
+    } else if (typeof error === 'string') {
+      errorMessage = error;
+    }
+
+    body.innerHTML = `
+      <div class="csv-ai-context-error">
+        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+          <circle cx="12" cy="12" r="10"></circle>
+          <line x1="12" y1="8" x2="12" y2="12"></line>
+          <line x1="12" y1="16" x2="12.01" y2="16"></line>
+        </svg>
+        <h4>Error</h4>
+        <p>${this.escapeHtml(errorMessage)}</p>
+        <button class="csv-ai-context-retry-btn">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M21 2v6h-6"></path>
+            <path d="M3 12a9 9 0 0 1 15-6.7L21 8"></path>
+            <path d="M3 22v-6h6"></path>
+            <path d="M21 12a9 9 0 0 1-15 6.7L3 16"></path>
+          </svg>
+          Retry
+        </button>
+      </div>
+    `;
+
+    // Set up retry button
+    const retryBtn = body.querySelector('.csv-ai-context-retry-btn');
+    retryBtn.addEventListener('click', () => {
+      this.closeAiContextModal();
+      this.openAiContextModal();
+    });
+  }
+
+  /**
+   * Close the AI context modal
+   */
+  closeAiContextModal() {
+    if (this.aiContextModal) {
+      this.aiContextModal.remove();
+      this.aiContextModal = null;
+    }
+    if (this.aiContextEscHandler) {
+      document.removeEventListener('keydown', this.aiContextEscHandler);
+      this.aiContextEscHandler = null;
+    }
+  }
+
+  /**
+   * Show a premium required alert for a feature
+   * @param {string} featureName - Name of the premium feature
+   */
+  showPremiumRequiredAlert(featureName) {
+    // Create a simple alert modal
+    const overlay = document.createElement('div');
+    overlay.className = 'csv-ai-context-modal-overlay';
+
+    const modal = document.createElement('div');
+    modal.className = 'csv-ai-context-modal csv-premium-alert';
+
+    modal.innerHTML = `
+      <div class="csv-ai-context-modal-header">
+        <h3>Premium Feature</h3>
+        <button class="csv-ai-context-modal-close" title="Close">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+          </svg>
+        </button>
+      </div>
+      <div class="csv-ai-context-modal-body">
+        <div class="csv-premium-alert-content">
+          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <path d="M12 2L2 7l10 5 10-5-10-5z"></path>
+            <path d="M2 17l10 5 10-5"></path>
+            <path d="M2 12l10 5 10-5"></path>
+          </svg>
+          <h4>${featureName}</h4>
+          <p>${featureName} is a premium feature. Upgrade to CSV Editor Pro to unlock this and other advanced features.</p>
+        </div>
+      </div>
+      <div class="csv-ai-context-modal-footer">
+        <button class="csv-ai-context-close-btn">Close</button>
+      </div>
+    `;
+
+    overlay.appendChild(modal);
+    document.body.appendChild(overlay);
+
+    // Set up close handlers
+    const closeBtn = modal.querySelector('.csv-ai-context-modal-close');
+    const footerCloseBtn = modal.querySelector('.csv-ai-context-close-btn');
+
+    const close = () => overlay.remove();
+
+    closeBtn.addEventListener('click', close);
+    footerCloseBtn.addEventListener('click', close);
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay) close();
     });
   }
 }

@@ -1697,3 +1697,598 @@
     animation: none;
   }
 }
+
+/* ============================================================================
+   AI Context Modal
+   ============================================================================ */
+
+.csv-ai-context-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10000;
+  padding: 20px;
+  animation: csv-modal-fade-in var(--motion-small) var(--ease-emphasized);
+}
+
+.csv-ai-context-modal {
+  background: var(--bg-primary);
+  border-radius: 12px;
+  box-shadow: var(--elevation-modal);
+  width: 100%;
+  max-width: 700px;
+  max-height: 85vh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  animation: csv-modal-slide-up var(--motion-small) var(--ease-emphasized);
+}
+
+.csv-ai-context-modal.csv-premium-alert {
+  max-width: 400px;
+}
+
+.csv-ai-context-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border-section);
+}
+
+.csv-ai-context-modal-header h3 {
+  margin: 0;
+  font-size: var(--type-title3, 20px);
+  font-weight: var(--font-weight-semibold, 600);
+  color: var(--text-primary);
+}
+
+.csv-ai-context-modal-close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: var(--transition-colors);
+}
+
+.csv-ai-context-modal-close:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.csv-ai-context-modal-body {
+  flex: 1;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Tabs */
+.csv-ai-context-tabs {
+  display: flex;
+  gap: 4px;
+  padding: 12px 20px;
+  border-bottom: 1px solid var(--border-section);
+  background: var(--bg-secondary);
+}
+
+.csv-ai-context-tab {
+  padding: 8px 16px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: var(--type-footnote, 13px);
+  font-weight: var(--font-weight-medium, 500);
+  cursor: pointer;
+  transition: var(--transition-colors);
+}
+
+.csv-ai-context-tab:hover {
+  color: var(--text-primary);
+  background: var(--bg-hover);
+}
+
+.csv-ai-context-tab.active {
+  color: var(--text-primary);
+  background: var(--bg-primary);
+  box-shadow: var(--elevation-low);
+}
+
+/* Content panels */
+.csv-ai-context-content {
+  flex: 1;
+  overflow: hidden;
+  position: relative;
+}
+
+.csv-ai-context-panel {
+  display: none;
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  overflow-y: auto;
+}
+
+.csv-ai-context-panel.active {
+  display: block;
+}
+
+/* Preview panel */
+.csv-ai-context-preview {
+  padding: 20px;
+  line-height: 1.6;
+  color: var(--text-primary);
+}
+
+.csv-ai-context-preview h1 {
+  font-size: var(--type-title2, 22px);
+  font-weight: var(--font-weight-bold, 700);
+  margin: 0 0 16px 0;
+  color: var(--text-primary);
+}
+
+.csv-ai-context-preview h2 {
+  font-size: var(--type-title3, 18px);
+  font-weight: var(--font-weight-semibold, 600);
+  margin: 24px 0 12px 0;
+  color: var(--text-primary);
+}
+
+.csv-ai-context-preview h3 {
+  font-size: var(--type-headline, 16px);
+  font-weight: var(--font-weight-semibold, 600);
+  margin: 20px 0 10px 0;
+  color: var(--text-primary);
+}
+
+.csv-ai-context-preview p {
+  margin: 0 0 12px 0;
+}
+
+.csv-ai-context-preview ul {
+  margin: 0 0 12px 0;
+  padding-left: 24px;
+}
+
+.csv-ai-context-preview li {
+  margin-bottom: 4px;
+}
+
+.csv-ai-context-preview code {
+  font-family: var(--font-mono, monospace);
+  font-size: 0.9em;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: var(--bg-secondary);
+  color: var(--accent-primary);
+}
+
+.csv-ai-context-preview pre {
+  padding: 12px;
+  border-radius: 8px;
+  background: var(--bg-secondary);
+  overflow-x: auto;
+  margin: 0 0 12px 0;
+}
+
+.csv-ai-context-preview pre code {
+  padding: 0;
+  background: none;
+}
+
+.csv-ai-context-preview strong {
+  font-weight: var(--font-weight-semibold, 600);
+}
+
+/* Tables in preview */
+.csv-ai-context-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 16px 0;
+  font-size: var(--type-footnote, 13px);
+}
+
+.csv-ai-context-table th,
+.csv-ai-context-table td {
+  padding: 8px 12px;
+  text-align: left;
+  border: 1px solid var(--border-section);
+}
+
+.csv-ai-context-table th {
+  font-weight: var(--font-weight-semibold, 600);
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+}
+
+.csv-ai-context-table td {
+  color: var(--text-secondary);
+}
+
+.csv-ai-context-table tbody tr:hover {
+  background: var(--bg-hover);
+}
+
+/* Markdown raw view */
+.csv-ai-context-markdown-container {
+  padding: 16px 20px;
+  height: 100%;
+  overflow: auto;
+}
+
+.csv-ai-context-markdown {
+  font-family: var(--font-mono, monospace);
+  font-size: var(--type-footnote, 13px);
+  line-height: 1.6;
+  color: var(--text-secondary);
+  white-space: pre-wrap;
+  word-break: break-word;
+  margin: 0;
+}
+
+/* Modal footer */
+.csv-ai-context-modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 16px 20px;
+  border-top: 1px solid var(--border-section);
+  background: var(--bg-secondary);
+}
+
+.csv-ai-context-copy-btn,
+.csv-ai-context-close-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  border-radius: 6px;
+  font-size: var(--type-footnote, 13px);
+  font-weight: var(--font-weight-medium, 500);
+  cursor: pointer;
+  transition: var(--transition-colors);
+}
+
+.csv-ai-context-copy-btn {
+  background: var(--accent-primary);
+  border: none;
+  color: white;
+}
+
+.csv-ai-context-copy-btn:hover {
+  background: var(--accent-primary-hover);
+}
+
+.csv-ai-context-copy-btn.copied {
+  background: var(--success-color, #22c55e);
+}
+
+.csv-ai-context-close-btn {
+  background: var(--bg-primary);
+  border: 1px solid var(--border-input);
+  color: var(--text-secondary);
+}
+
+.csv-ai-context-close-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+/* Loading state */
+.csv-ai-context-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 20px;
+  gap: 16px;
+}
+
+.csv-ai-context-loading p {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: var(--type-footnote, 13px);
+}
+
+/* Error state */
+.csv-ai-context-error {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 20px;
+  text-align: center;
+  gap: 12px;
+}
+
+.csv-ai-context-error svg {
+  color: var(--error-color, #ef4444);
+}
+
+.csv-ai-context-error h4 {
+  margin: 0;
+  font-size: var(--type-headline, 16px);
+  font-weight: var(--font-weight-semibold, 600);
+  color: var(--text-primary);
+}
+
+.csv-ai-context-error p {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: var(--type-footnote, 13px);
+  max-width: 300px;
+}
+
+.csv-ai-context-retry-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+  padding: 8px 16px;
+  border: 1px solid var(--border-input);
+  border-radius: 6px;
+  background: var(--bg-primary);
+  color: var(--text-secondary);
+  font-size: var(--type-footnote, 13px);
+  font-weight: var(--font-weight-medium, 500);
+  cursor: pointer;
+  transition: var(--transition-colors);
+}
+
+.csv-ai-context-retry-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+  border-color: var(--accent-primary);
+}
+
+/* Premium alert content */
+.csv-premium-alert-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: 20px;
+  gap: 12px;
+}
+
+.csv-premium-alert-content svg {
+  color: var(--accent-primary);
+}
+
+.csv-premium-alert-content h4 {
+  margin: 0;
+  font-size: var(--type-headline, 16px);
+  font-weight: var(--font-weight-semibold, 600);
+  color: var(--text-primary);
+}
+
+.csv-premium-alert-content p {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: var(--type-footnote, 13px);
+  line-height: 1.5;
+}
+
+/* AI Context button locked state */
+.csv-toolbar .editor-control-btn.csv-ai-context-btn.locked {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.csv-toolbar .editor-control-btn.csv-ai-context-btn.locked:hover {
+  background: var(--bg-primary);
+  color: var(--text-secondary);
+  border-color: var(--border-input);
+}
+
+/* Responsive adjustments */
+@media (max-width: 600px) {
+  .csv-ai-context-modal {
+    margin: 10px;
+    max-width: calc(100% - 20px);
+    max-height: calc(100vh - 40px);
+  }
+
+  .csv-ai-context-modal-header,
+  .csv-ai-context-modal-footer {
+    padding: 12px 16px;
+  }
+
+  .csv-ai-context-tabs {
+    padding: 10px 16px;
+  }
+
+  .csv-ai-context-preview {
+    padding: 16px;
+  }
+}
+
+/* Reduced motion support */
+@media (prefers-reduced-motion: reduce) {
+  .csv-ai-context-modal-overlay,
+  .csv-ai-context-modal {
+    animation: none;
+  }
+}
+
+/* ============================================================================
+   Virtual Scrolling - Performance Optimization for Large Datasets
+   ============================================================================ */
+
+/* Container with virtual scrolling enabled */
+.csv-table-container.csv-virtual-scroll-enabled {
+  overflow: hidden;
+}
+
+/* Virtual scroll wrapper */
+.csv-virtual-wrapper {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  width: 100%;
+}
+
+/* Sticky header table for virtual scrolling */
+.csv-virtual-header {
+  flex-shrink: 0;
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  width: max-content;
+  min-width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+  background: var(--bg-secondary);
+  box-shadow: var(--elevation-raised);
+}
+
+/* Scrollable container for virtual body */
+.csv-virtual-scroll-container {
+  flex: 1;
+  overflow: auto;
+  position: relative;
+  will-change: transform;
+}
+
+/* Native scrollbar styling for virtual container */
+.csv-virtual-scroll-container::-webkit-scrollbar {
+  width: 12px;
+  height: 12px;
+}
+
+.csv-virtual-scroll-container::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.csv-virtual-scroll-container::-webkit-scrollbar-thumb {
+  background-color: var(--fill-primary);
+  border-radius: 6px;
+  border: 3px solid transparent;
+  background-clip: content-box;
+}
+
+.csv-virtual-scroll-container::-webkit-scrollbar-thumb:hover {
+  background-color: var(--fill-pressed);
+}
+
+/* Spacer element to create scroll height */
+.csv-virtual-spacer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 1px;
+  pointer-events: none;
+}
+
+/* Body table for visible rows - positioned absolutely within scroll container */
+.csv-virtual-body {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: max-content;
+  min-width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+
+/* Virtual tbody - rows are positioned absolutely */
+.csv-virtual-tbody {
+  position: relative;
+}
+
+/* Virtual row - absolutely positioned based on index */
+.csv-virtual-row {
+  position: absolute;
+  left: 0;
+  width: 100%;
+  height: 32px; /* Fixed row height for performance */
+  display: table;
+  table-layout: fixed;
+}
+
+/* Ensure cells in virtual rows have fixed height */
+.csv-virtual-row .csv-cell,
+.csv-virtual-row .csv-row-number {
+  height: 32px;
+  padding: 6px 12px;
+  box-sizing: border-box;
+  overflow: hidden;
+}
+
+/* Row number in virtual rows */
+.csv-virtual-row .csv-row-number {
+  padding: 6px 8px;
+}
+
+/* Alternating colors for virtual rows - using data attribute */
+.csv-virtual-row:nth-child(even) {
+  background: var(--fill-quaternary);
+}
+
+.csv-virtual-row:nth-child(even) .csv-cell {
+  background: var(--fill-quaternary);
+}
+
+.csv-virtual-row:nth-child(even) .csv-row-number {
+  background: var(--bg-secondary);
+}
+
+/* Hover states for virtual rows */
+.csv-virtual-row:hover {
+  background: var(--fill-hover);
+}
+
+.csv-virtual-row:hover .csv-cell {
+  background: var(--fill-hover);
+}
+
+.csv-virtual-row:hover .csv-row-number {
+  color: var(--text-secondary);
+  background: var(--bg-secondary);
+}
+
+/* Selection in virtual rows */
+.csv-virtual-row .csv-cell-selected {
+  background: var(--accent-bg) !important;
+  box-shadow: inset 0 0 0 2px var(--accent-primary);
+  z-index: 1;
+}
+
+.csv-virtual-row:has(.csv-cell-selected) .csv-row-number {
+  color: var(--accent-primary);
+  background: var(--accent-bg);
+  font-weight: var(--font-weight-semibold, 600);
+}
+
+/* Editing in virtual rows */
+.csv-virtual-row .csv-cell-editing {
+  padding: 0 !important;
+  height: 32px;
+  background: var(--bg-primary) !important;
+  box-shadow: inset 0 0 0 2px var(--accent-primary),
+              var(--elevation-floating);
+  z-index: 2;
+}
+
+/* Reduced motion - disable transform animations */
+@media (prefers-reduced-motion: reduce) {
+  .csv-virtual-row {
+    transition: none;
+  }
+}
