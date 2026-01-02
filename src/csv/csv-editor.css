@@ -655,6 +655,28 @@
    Save Button States
    ============================================================================ */
 
+/* Save button active state - blue background when there are unsaved changes */
+.csv-save-btn:not(:disabled) {
+  background: var(--accent-primary);
+  border-color: var(--accent-primary);
+  color: white;
+}
+
+.csv-save-btn:not(:disabled) svg {
+  stroke: white;
+}
+
+.csv-save-btn:not(:disabled):hover {
+  background: var(--accent-primary);
+  border-color: var(--accent-primary);
+  color: white;
+  filter: brightness(1.1);
+}
+
+.csv-save-btn:not(:disabled):hover svg {
+  stroke: white;
+}
+
 .csv-save-btn.saving {
   opacity: 0.7;
   cursor: wait;
@@ -769,12 +791,13 @@
 .csv-toolbar .editor-control-btn.locked {
   position: relative;
   color: var(--text-disabled);
+  padding-right: 26px;  /* Extra padding for lock icon */
 }
 
 .csv-toolbar .editor-control-btn.locked::after {
   content: '';
   position: absolute;
-  right: 6px;
+  right: 8px;
   top: 50%;
   transform: translateY(-50%);
   width: 12px;
@@ -1948,6 +1971,7 @@
   flex: 1;
   overflow: hidden;
   position: relative;
+  min-height: 300px;
 }
 
 .csv-ai-context-panel {
@@ -2107,11 +2131,99 @@
 }
 
 .csv-ai-context-copy-btn:hover {
-  background: var(--accent-primary-hover);
+  background: var(--primary-700, #1d4ed8);
+  filter: brightness(1.1);
 }
 
 .csv-ai-context-copy-btn.copied {
   background: var(--success-color, #22c55e);
+}
+
+/* Copy dropdown container */
+.csv-ai-context-copy-dropdown {
+  position: relative;
+  display: flex;
+}
+
+.csv-ai-context-copy-dropdown .csv-ai-context-copy-btn {
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
+.csv-ai-context-copy-dropdown-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 10px;
+  background: var(--accent-primary);
+  border: none;
+  border-left: 1px solid rgba(255, 255, 255, 0.2);
+  border-top-right-radius: 6px;
+  border-bottom-right-radius: 6px;
+  color: white;
+  cursor: pointer;
+  transition: var(--transition-colors);
+}
+
+.csv-ai-context-copy-dropdown-toggle:hover {
+  background: var(--primary-700, #1d4ed8);
+  filter: brightness(1.1);
+}
+
+.csv-ai-context-copy-menu {
+  position: absolute;
+  bottom: 100%;
+  right: 0;
+  margin-bottom: 4px;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-input);
+  border-radius: 8px;
+  box-shadow: var(--shadow-md);
+  min-width: 180px;
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(8px);
+  transition: opacity 0.15s ease, transform 0.15s ease, visibility 0.15s;
+  z-index: 100;
+}
+
+.csv-ai-context-copy-menu.open {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0);
+}
+
+.csv-ai-context-copy-option {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 10px 14px;
+  background: none;
+  border: none;
+  color: var(--text-primary);
+  font-size: var(--type-footnote, 13px);
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+.csv-ai-context-copy-option:first-child {
+  border-top-left-radius: 8px;
+  border-top-right-radius: 8px;
+}
+
+.csv-ai-context-copy-option:last-child {
+  border-bottom-left-radius: 8px;
+  border-bottom-right-radius: 8px;
+}
+
+.csv-ai-context-copy-option:hover {
+  background: var(--bg-hover);
+}
+
+.csv-ai-context-copy-option svg {
+  color: var(--text-tertiary);
 }
 
 .csv-ai-context-close-btn {
@@ -2321,6 +2433,71 @@
 }
 
 /* ============================================================================
+   Input Modal - Simple text input dialog
+   ============================================================================ */
+
+.csv-input-modal {
+  width: 400px;
+  max-width: 90vw;
+}
+
+.csv-input-modal .csv-ai-context-modal-body {
+  padding: 20px;
+}
+
+.csv-input-modal-field {
+  width: 100%;
+  padding: 10px 12px;
+  font-size: var(--type-body, 14px);
+  border: 1px solid var(--border-input);
+  border-radius: 6px;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.csv-input-modal-field:focus {
+  outline: none;
+  border-color: var(--accent-primary);
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
+}
+
+.csv-input-modal-field::placeholder {
+  color: var(--text-tertiary);
+}
+
+.csv-input-modal-cancel,
+.csv-input-modal-submit {
+  padding: 8px 16px;
+  border-radius: 6px;
+  font-size: var(--type-footnote, 13px);
+  font-weight: var(--font-weight-medium, 500);
+  cursor: pointer;
+  transition: var(--transition-colors);
+}
+
+.csv-input-modal-cancel {
+  background: transparent;
+  border: 1px solid var(--border-input);
+  color: var(--text-secondary);
+}
+
+.csv-input-modal-cancel:hover {
+  background: var(--bg-hover);
+  border-color: var(--border-section);
+}
+
+.csv-input-modal-submit {
+  background: var(--accent-primary);
+  border: none;
+  color: white;
+}
+
+.csv-input-modal-submit:hover {
+  filter: brightness(1.1);
+}
+
+/* ============================================================================
    Virtual Scrolling - Performance Optimization for Large Datasets
    ============================================================================ */
 
@@ -2356,7 +2533,50 @@
   flex: 1;
   overflow: auto;
   position: relative;
-  will-change: transform;
+}
+
+/* Unified virtual table - single table with sticky header */
+.csv-unified-virtual-table {
+  width: max-content;
+  min-width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+  font-size: var(--type-footnote, 13px);
+}
+
+.csv-unified-virtual-table .csv-thead-sticky {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: var(--bg-secondary);
+}
+
+/* Force header and body cells to respect colgroup widths */
+.csv-unified-virtual-table th,
+.csv-unified-virtual-table td {
+  box-sizing: border-box;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 8px 12px;  /* Consistent padding for alignment */
+}
+
+/* Override any conflicting width properties from base styles */
+.csv-unified-virtual-table .csv-header-cell,
+.csv-unified-virtual-table .csv-cell {
+  width: auto !important;
+  min-width: 0 !important;
+  max-width: none !important;
+}
+
+/* Row number cells have fixed width (from colgroup) */
+.csv-unified-virtual-table .csv-row-number-header,
+.csv-unified-virtual-table .csv-row-number {
+  width: 50px !important;
+  min-width: 50px !important;
+  max-width: 50px !important;
+  text-align: center;
+  padding: 8px !important;  /* Consistent row number padding */
 }
 
 /* Native scrollbar styling for virtual container */
@@ -2400,33 +2620,30 @@
   table-layout: fixed;
 }
 
-/* Virtual tbody - rows are positioned absolutely */
+/* Virtual tbody - normal table body layout */
 .csv-virtual-tbody {
-  position: relative;
+  /* No positioning - let table layout handle it */
 }
 
-/* Virtual row - absolutely positioned based on index */
+/* Virtual row - standard table row */
 .csv-virtual-row {
-  position: absolute;
-  left: 0;
-  width: 100%;
-  height: 32px; /* Fixed row height for performance */
-  display: table;
-  table-layout: fixed;
+  height: 32px;
 }
 
-/* Ensure cells in virtual rows have fixed height */
+/* Ensure cells in virtual rows have consistent styling */
 .csv-virtual-row .csv-cell,
 .csv-virtual-row .csv-row-number {
   height: 32px;
   padding: 6px 12px;
   box-sizing: border-box;
   overflow: hidden;
+  vertical-align: middle;
 }
 
 /* Row number in virtual rows */
 .csv-virtual-row .csv-row-number {
   padding: 6px 8px;
+  text-align: center;
 }
 
 /* Alternating colors for virtual rows - using data attribute */
@@ -2491,4 +2708,330 @@
   .csv-virtual-row {
     transition: none;
   }
+}
+
+/* ============================================================================
+   Add Row Dropdown Menu
+   ============================================================================ */
+
+.csv-add-row-dropdown {
+  position: relative;
+  display: inline-block;
+}
+
+.csv-add-row-btn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.csv-add-row-dropdown.open .csv-dropdown-arrow {
+  transform: rotate(180deg);
+}
+
+.csv-add-row-menu {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  margin-top: 4px;
+  min-width: 160px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-card);
+  border-radius: var(--radius-md, 8px);
+  box-shadow: var(--elevation-floating);
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(-8px);
+  transition: opacity 0.15s ease, transform 0.15s ease, visibility 0.15s;
+  z-index: 100;
+}
+
+.csv-add-row-dropdown.open .csv-add-row-menu {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0);
+}
+
+.csv-add-row-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 12px;
+  border: none;
+  background: transparent;
+  color: var(--text-primary);
+  font-size: var(--type-body-sm, 15px);
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.csv-add-row-menu-item:first-child {
+  border-radius: var(--radius-md, 8px) var(--radius-md, 8px) 0 0;
+}
+
+.csv-add-row-menu-item:last-child {
+  border-radius: 0 0 var(--radius-md, 8px) var(--radius-md, 8px);
+}
+
+.csv-add-row-menu-item:hover {
+  background: var(--bg-hover);
+}
+
+.csv-add-row-menu-item svg {
+  color: var(--text-tertiary);
+}
+
+.csv-add-row-menu-divider {
+  height: 1px;
+  margin: 4px 0;
+  background: var(--border-subtle);
+}
+
+/* ============================================================================
+   Add Column Dropdown Menu
+   ============================================================================ */
+
+.csv-add-col-dropdown {
+  position: relative;
+  display: inline-block;
+}
+
+.csv-add-col-btn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.csv-add-col-dropdown.open .csv-dropdown-arrow {
+  transform: rotate(180deg);
+}
+
+.csv-add-col-menu {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  margin-top: 4px;
+  min-width: 160px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md, 8px);
+  box-shadow: var(--shadow-lg);
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(-8px);
+  transition: opacity 0.15s ease, transform 0.15s ease, visibility 0.15s;
+  z-index: 100;
+}
+
+.csv-add-col-dropdown.open .csv-add-col-menu {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0);
+}
+
+.csv-add-col-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 12px;
+  background: none;
+  border: none;
+  color: var(--text-primary);
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.csv-add-col-menu-item:first-child {
+  border-radius: var(--radius-md, 8px) var(--radius-md, 8px) 0 0;
+}
+
+.csv-add-col-menu-item:last-child {
+  border-radius: 0 0 var(--radius-md, 8px) var(--radius-md, 8px);
+}
+
+.csv-add-col-menu-item:hover {
+  background: var(--bg-hover);
+}
+
+.csv-add-col-menu-item svg {
+  color: var(--text-tertiary);
+}
+
+/* ============================================================================
+   Export Dropdown Menu
+   ============================================================================ */
+
+.csv-export-dropdown {
+  position: relative;
+  display: inline-block;
+}
+
+.csv-export-btn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.csv-dropdown-arrow {
+  margin-left: 2px;
+  transition: transform 0.2s ease;
+}
+
+.csv-export-dropdown.open .csv-dropdown-arrow {
+  transform: rotate(180deg);
+}
+
+.csv-export-menu {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  margin-top: 4px;
+  min-width: 180px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-card);
+  border-radius: var(--radius-md, 8px);
+  box-shadow: var(--elevation-floating);
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(-8px);
+  transition: opacity 0.15s ease, transform 0.15s ease, visibility 0.15s;
+  z-index: 100;
+}
+
+.csv-export-dropdown.open .csv-export-menu {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0);
+}
+
+.csv-export-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 12px;
+  border: none;
+  background: transparent;
+  color: var(--text-primary);
+  font-size: var(--type-body-sm, 15px);
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.csv-export-menu-item:first-child {
+  border-radius: var(--radius-md, 8px) var(--radius-md, 8px) 0 0;
+}
+
+.csv-export-menu-item:last-child {
+  border-radius: 0 0 var(--radius-md, 8px) var(--radius-md, 8px);
+}
+
+.csv-export-menu-item:hover {
+  background: var(--bg-hover);
+}
+
+.csv-export-menu-item.locked {
+  color: var(--text-tertiary);
+}
+
+.csv-export-menu-item.locked:hover {
+  background: var(--bg-hover);
+}
+
+.csv-premium-label {
+  margin-left: auto;
+  padding: 2px 6px;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--accent-primary);
+  background: var(--accent-primary-alpha, rgba(59, 130, 246, 0.15));
+  border-radius: var(--radius-sm, 4px);
+}
+
+.csv-export-menu-divider {
+  height: 1px;
+  margin: 4px 0;
+  background: var(--border-subtle);
+}
+
+/* ============================================================================
+   Drag and Drop Overlay
+   ============================================================================ */
+
+.csv-drop-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-primary-alpha, rgba(0, 0, 0, 0.8));
+  backdrop-filter: blur(4px);
+  border: 3px dashed var(--accent-primary);
+  border-radius: var(--radius-lg, 12px);
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.2s ease, visibility 0.2s;
+  z-index: 50;
+  pointer-events: none;
+}
+
+.csv-drop-overlay.active {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+}
+
+.csv-drop-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  color: var(--accent-primary);
+}
+
+.csv-drop-content svg {
+  opacity: 0.8;
+}
+
+.csv-drop-content p {
+  margin: 0;
+  font-size: var(--type-body-lg, 18px);
+  font-weight: 500;
+}
+
+/* ============================================================================
+   Toast Notification
+   ============================================================================ */
+
+.csv-toast {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%) translateY(100%);
+  padding: 12px 24px;
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  border: 1px solid var(--border-card);
+  border-radius: var(--radius-md, 8px);
+  box-shadow: var(--elevation-floating);
+  font-size: var(--type-body-sm, 15px);
+  opacity: 0;
+  transition: transform 0.3s ease, opacity 0.3s ease;
+  z-index: 1000;
+}
+
+.csv-toast.show {
+  transform: translateX(-50%) translateY(0);
+  opacity: 1;
 }

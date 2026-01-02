@@ -74,6 +74,8 @@ machine-uid = "0.3"
 keyring = "2.0"
 # For CSV parsing
 csv = "1.3"
+# For macOS window decorations (traffic lights)
+tauri-plugin-decorum = "1"
 # For TypeScript type generation
 specta = { version = "2.0.0-rc.22", features = ["derive", "serde"] }
 

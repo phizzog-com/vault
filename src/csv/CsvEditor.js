@@ -7,13 +7,18 @@
  * - Cell selection and editing (CodeMirror integration)
  * - Dirty state tracking
  * - Premium schema support
+ * - Drag-and-drop CSV import
+ * - Export to JSON with schema (premium)
+ * - Copy selection as markdown table
  */
 
 import { invoke } from '@tauri-apps/api/core';
+import { save } from '@tauri-apps/plugin-dialog';
 import { EditorView, keymap } from '@codemirror/view';
 import { EditorState } from '@codemirror/state';
 import { defaultKeymap, history, historyKeymap } from '@codemirror/commands';
 import { csvErrorHandler, CsvErrorType, getUserFriendlyMessage } from './CsvErrorHandler.js';
+import EntitlementManager from '../services/entitlement-manager.js';
 
 /**
  * CsvEditor class - Main CSV editing component
@@ -99,6 +104,12 @@ export class CsvEditor {
 
     // Bound scroll handler for cleanup
     this.boundScrollHandler = null;
+
+    // Entitlement manager for premium status checks
+    this.entitlementManager = null;
+
+    // Modal state flag to prevent cell editing while modal is open
+    this.inputModalOpen = false;
   }
 
   /**
@@ -179,25 +190,35 @@ export class CsvEditor {
       this.state.savedRows = data.rows.map(row => [...row]);   // Snapshot
       this.state.savedHeaders = [...data.headers];             // Snapshot of headers
 
-      // Try to load schema (premium feature) - graceful degradation
-      const schema = await csvErrorHandler.withGracefulDegradation(
-        () => invoke('get_csv_schema', {
-          path: this.filePath,
-          createIfMissing: false
-        }),
-        null, // Fallback to null schema
-        { operationName: 'Load CSV schema', logError: false }
-      );
+      // Check premium status via EntitlementManager
+      if (!this.entitlementManager) {
+        this.entitlementManager = new EntitlementManager();
+        await this.entitlementManager.initialize();
+      }
+      this.state.isPremium = this.entitlementManager.isPremiumEnabled();
+      console.log('CSV Editor premium status:', this.state.isPremium);
 
-      if (schema) {
-        this.state.schema = schema;
-        this.state.isPremium = !schema.readOnly;
-        console.log('CSV schema loaded, premium:', this.state.isPremium);
+      // Try to load schema (premium feature) - graceful degradation
+      if (this.state.isPremium) {
+        const schema = await csvErrorHandler.withGracefulDegradation(
+          () => invoke('get_csv_schema', {
+            path: this.filePath,
+            createIfMissing: false
+          }),
+          null, // Fallback to null schema
+          { operationName: 'Load CSV schema', logError: false }
+        );
+
+        if (schema) {
+          this.state.schema = schema;
+          console.log('CSV schema loaded');
+        } else {
+          console.log('No schema found for this file (can be created)');
+          this.state.schema = null;
+        }
       } else {
-        // Schema not found or not premium - this is expected for free users
-        console.log('No schema loaded (expected for free users)');
+        // Free user - no schema access
         this.state.schema = null;
-        this.state.isPremium = false;
       }
 
       this.state.isLoading = false;
@@ -289,25 +310,84 @@ export class CsvEditor {
           <span>Redo</span>
         </button>
         <div class="csv-toolbar-divider"></div>
-        <button class="editor-control-btn csv-add-row-btn" title="Add Row">
+        <div class="csv-add-row-dropdown">
+          <button class="editor-control-btn csv-add-row-btn" title="Row">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="12" y1="5" x2="12" y2="19"></line>
+              <line x1="5" y1="12" x2="19" y2="12"></line>
+            </svg>
+            <span>Row</span>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="csv-dropdown-arrow">
+              <polyline points="6 9 12 15 18 9"></polyline>
+            </svg>
+          </button>
+          <div class="csv-add-row-menu">
+            <button class="csv-add-row-menu-item" data-action="above" title="Insert row above selected">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="18 15 12 9 6 15"></polyline>
+              </svg>
+              Insert Above
+            </button>
+            <button class="csv-add-row-menu-item" data-action="below" title="Insert row below selected">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="6 9 12 15 18 9"></polyline>
+              </svg>
+              Insert Below
+            </button>
+            <div class="csv-add-row-menu-divider"></div>
+            <button class="csv-add-row-menu-item" data-action="top" title="Add row at top of sheet">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="17 11 12 6 7 11"></polyline>
+                <line x1="12" y1="6" x2="12" y2="18"></line>
+              </svg>
+              Add to Top
+            </button>
+            <button class="csv-add-row-menu-item" data-action="bottom" title="Add row at bottom of sheet">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="7 13 12 18 17 13"></polyline>
+                <line x1="12" y1="18" x2="12" y2="6"></line>
+              </svg>
+              Add to Bottom
+            </button>
+          </div>
+        </div>
+        <div class="csv-add-col-dropdown">
+          <button class="editor-control-btn csv-add-col-btn" title="Column">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="12" y1="5" x2="12" y2="19"></line>
+              <line x1="5" y1="12" x2="19" y2="12"></line>
+            </svg>
+            <span>Column</span>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="csv-dropdown-arrow">
+              <polyline points="6 9 12 15 18 9"></polyline>
+            </svg>
+          </button>
+          <div class="csv-add-col-menu">
+            <button class="csv-add-col-menu-item" data-action="before" title="Insert column before selected">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="15 18 9 12 15 6"></polyline>
+              </svg>
+              Insert Before
+            </button>
+            <button class="csv-add-col-menu-item" data-action="after" title="Insert column after selected">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="9 18 15 12 9 6"></polyline>
+              </svg>
+              Insert After
+            </button>
+          </div>
+        </div>
+        <button class="editor-control-btn csv-delete-row-btn" title="Row" disabled>
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <line x1="12" y1="5" x2="12" y2="19"></line>
             <line x1="5" y1="12" x2="19" y2="12"></line>
           </svg>
-          <span>Add Row</span>
+          <span>Row</span>
         </button>
-        <button class="editor-control-btn csv-add-col-btn" title="Add Column">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <line x1="12" y1="5" x2="12" y2="19"></line>
-            <line x1="5" y1="12" x2="19" y2="12"></line>
-          </svg>
-          <span>Add Column</span>
-        </button>
-        <button class="editor-control-btn csv-delete-row-btn" title="Delete Row" disabled>
+        <button class="editor-control-btn csv-delete-col-btn" title="Column" disabled>
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <line x1="5" y1="12" x2="19" y2="12"></line>
           </svg>
-          <span>Delete Row</span>
+          <span>Column</span>
         </button>
       </div>
 
@@ -318,14 +398,6 @@ export class CsvEditor {
       </div>
 
       <div class="editor-header-right">
-        <button class="editor-control-btn csv-ai-context-btn${this.state.isPremium ? '' : ' locked'}" title="${this.state.isPremium ? 'Get AI Context' : 'AI Context (Premium Feature)'}">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M12 2a2 2 0 0 1 2 2c0 .74-.4 1.39-1 1.73V7h1a7 7 0 0 1 7 7h1a2 2 0 0 1 0 4h-1v1a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-1H2a2 2 0 0 1 0-4h1a7 7 0 0 1 7-7h1V5.73c-.6-.34-1-.99-1-1.73a2 2 0 0 1 2-2z"></path>
-            <circle cx="7.5" cy="14.5" r="1.5"></circle>
-            <circle cx="16.5" cy="14.5" r="1.5"></circle>
-          </svg>
-          <span>AI Context</span>
-        </button>
         <button class="editor-control-btn csv-schema-btn${this.state.isPremium ? '' : ' locked'}" title="${this.state.isPremium ? 'Toggle Schema Sidebar' : 'Schema (Premium Feature)'}">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <rect x="3" y="3" width="7" height="7"></rect>
@@ -335,6 +407,70 @@ export class CsvEditor {
           </svg>
           <span>Schema</span>
         </button>
+        <button class="editor-control-btn csv-ai-context-btn${this.state.isPremium ? '' : ' locked'}" title="${this.state.isPremium ? 'Get AI Context' : 'AI Context (Premium Feature)'}">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M12 2a2 2 0 0 1 2 2c0 .74-.4 1.39-1 1.73V7h1a7 7 0 0 1 7 7h1a2 2 0 0 1 0 4h-1v1a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-1H2a2 2 0 0 1 0-4h1a7 7 0 0 1 7-7h1V5.73c-.6-.34-1-.99-1-1.73a2 2 0 0 1 2-2z"></path>
+            <circle cx="7.5" cy="14.5" r="1.5"></circle>
+            <circle cx="16.5" cy="14.5" r="1.5"></circle>
+          </svg>
+          <span>AI Context</span>
+        </button>
+        <div class="csv-export-dropdown">
+          <button class="editor-control-btn csv-export-btn" title="Export options">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+              <polyline points="7 10 12 15 17 10"></polyline>
+              <line x1="12" y1="15" x2="12" y2="3"></line>
+            </svg>
+            <span>Export</span>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="csv-dropdown-arrow">
+              <polyline points="6 9 12 15 18 9"></polyline>
+            </svg>
+          </button>
+          <div class="csv-export-menu">
+            <button class="csv-export-menu-item csv-export-csv-btn" title="Export as CSV">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                <polyline points="14 2 14 8 20 8"></polyline>
+              </svg>
+              Export as CSV
+            </button>
+            <button class="csv-export-menu-item csv-export-selection-btn" title="Export selected cells as CSV">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+                <rect x="7" y="7" width="10" height="10" rx="1" fill="currentColor" opacity="0.3"></rect>
+              </svg>
+              Export Selection
+            </button>
+            <button class="csv-export-menu-item csv-export-json-btn${this.state.isPremium ? '' : ' locked'}" title="${this.state.isPremium ? 'Export as JSON with schema' : 'Export JSON (Premium)'}">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                <polyline points="14 2 14 8 20 8"></polyline>
+                <path d="M8 13h2"></path>
+                <path d="M8 17h2"></path>
+                <path d="M14 13h2"></path>
+                <path d="M14 17h2"></path>
+              </svg>
+              Export as JSON
+              ${this.state.isPremium ? '' : '<span class="csv-premium-label">Pro</span>'}
+            </button>
+            <div class="csv-export-menu-divider"></div>
+            <button class="csv-export-menu-item csv-copy-json-btn" title="Copy data as JSON to clipboard">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+              </svg>
+              Copy as JSON
+            </button>
+            <button class="csv-export-menu-item csv-copy-markdown-btn" title="Copy selection as markdown table">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+              </svg>
+              Copy as Markdown
+            </button>
+          </div>
+        </div>
         <button class="editor-control-btn csv-save-btn" title="Save (Cmd+S)" disabled>
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
@@ -543,7 +679,7 @@ export class CsvEditor {
 
   /**
    * Render the virtual scrolling table structure
-   * Uses a fixed-height container with absolutely positioned rows
+   * Uses a SINGLE table with sticky thead for perfect column alignment
    * @returns {HTMLElement}
    */
   renderVirtualTable() {
@@ -564,33 +700,39 @@ export class CsvEditor {
     this.virtualScroll.totalHeight = totalRows * this.ROW_HEIGHT;
     this.virtualScroll.enabled = true;
 
-    // Create virtual scroll wrapper
-    const wrapper = document.createElement('div');
-    wrapper.className = 'csv-virtual-wrapper';
-
     // Calculate column widths
     const columnWidths = this.calculateColumnWidths();
+    this.virtualColumnWidths = columnWidths;
+    console.log('📊 Virtual table column widths:', columnWidths);
+    console.log('📊 Headers:', data.headers);
 
-    // Create sticky header table
-    const headerTable = document.createElement('table');
-    headerTable.className = 'csv-table csv-virtual-header';
+    // Create scrollable container
+    const scrollContainer = document.createElement('div');
+    scrollContainer.className = 'csv-virtual-scroll-container';
+    this.virtualScrollContainer = scrollContainer;
 
-    // Colgroup for header
-    const headerColgroup = document.createElement('colgroup');
+    // Create SINGLE table with sticky header
+    const table = document.createElement('table');
+    table.className = 'csv-table csv-unified-virtual-table';
+    this.virtualBodyTable = table;
+
+    // Colgroup for consistent column widths across header and body
+    const colgroup = document.createElement('colgroup');
     const rowNumCol = document.createElement('col');
     rowNumCol.style.width = '50px';
     rowNumCol.style.minWidth = '50px';
-    headerColgroup.appendChild(rowNumCol);
+    colgroup.appendChild(rowNumCol);
     columnWidths.forEach(width => {
       const col = document.createElement('col');
       col.style.width = `${width}px`;
       col.style.minWidth = `${Math.min(width, 80)}px`;
-      headerColgroup.appendChild(col);
+      colgroup.appendChild(col);
     });
-    headerTable.appendChild(headerColgroup);
+    table.appendChild(colgroup);
 
-    // Header row
+    // Sticky header (same table, uses CSS sticky)
     const thead = document.createElement('thead');
+    thead.className = 'csv-thead-sticky';
     const headerRow = document.createElement('tr');
     headerRow.className = 'csv-header-row';
 
@@ -614,51 +756,20 @@ export class CsvEditor {
     });
 
     thead.appendChild(headerRow);
-    headerTable.appendChild(thead);
-    wrapper.appendChild(headerTable);
+    table.appendChild(thead);
 
-    // Create scrollable body container
-    const scrollContainer = document.createElement('div');
-    scrollContainer.className = 'csv-virtual-scroll-container';
-    this.virtualScrollContainer = scrollContainer;
-
-    // Create total height spacer
-    const spacer = document.createElement('div');
-    spacer.className = 'csv-virtual-spacer';
-    spacer.style.height = `${this.virtualScroll.totalHeight}px`;
-    scrollContainer.appendChild(spacer);
-
-    // Create body table for visible rows (positioned absolutely)
-    const bodyTable = document.createElement('table');
-    bodyTable.className = 'csv-table csv-virtual-body';
-    this.virtualBodyTable = bodyTable;
-
-    // Colgroup for body
-    const bodyColgroup = document.createElement('colgroup');
-    const bodyRowNumCol = document.createElement('col');
-    bodyRowNumCol.style.width = '50px';
-    bodyRowNumCol.style.minWidth = '50px';
-    bodyColgroup.appendChild(bodyRowNumCol);
-    columnWidths.forEach(width => {
-      const col = document.createElement('col');
-      col.style.width = `${width}px`;
-      col.style.minWidth = `${Math.min(width, 80)}px`;
-      bodyColgroup.appendChild(col);
-    });
-    bodyTable.appendChild(bodyColgroup);
-
+    // Table body for data rows
     const tbody = document.createElement('tbody');
     tbody.className = 'csv-virtual-tbody';
     this.virtualTbody = tbody;
-    bodyTable.appendChild(tbody);
+    table.appendChild(tbody);
 
-    scrollContainer.appendChild(bodyTable);
-    wrapper.appendChild(scrollContainer);
+    scrollContainer.appendChild(table);
 
     // Initial render of visible rows
     this.updateVisibleRows();
 
-    return wrapper;
+    return scrollContainer;
   }
 
   /**
@@ -667,6 +778,11 @@ export class CsvEditor {
    */
   updateVisibleRows() {
     if (!this.virtualScroll.enabled || !this.virtualTbody) return;
+
+    // Skip entirely if currently editing - don't disrupt the editor
+    if (this.state.editingCell && this.cellEditor) {
+      return;
+    }
 
     const scrollTop = this.virtualScrollContainer?.scrollTop || 0;
     const containerHeight = this.virtualScrollContainer?.clientHeight || 600;
@@ -683,6 +799,17 @@ export class CsvEditor {
     this.virtualScroll.scrollTop = scrollTop;
     this.virtualScroll.containerHeight = containerHeight;
 
+    // If currently editing, save the editor DOM to reattach later
+    const editingCell = this.state.editingCell;
+    let editorDom = null;
+    if (editingCell && this.cellEditor) {
+      editorDom = this.cellEditor.dom;
+      // Remove from parent before clearing, to prevent destruction
+      if (editorDom.parentNode) {
+        editorDom.remove();
+      }
+    }
+
     // Clear existing rows
     this.virtualTbody.innerHTML = '';
 
@@ -697,17 +824,15 @@ export class CsvEditor {
       const tr = document.createElement('tr');
       tr.className = 'csv-data-row csv-virtual-row';
       tr.dataset.row = rowIndex;
-      // Position row absolutely based on its index
-      tr.style.transform = `translateY(${rowIndex * this.ROW_HEIGHT}px)`;
 
-      // Row number cell
+      // Row number cell (width controlled by colgroup)
       const rowNumCell = document.createElement('td');
       rowNumCell.className = 'csv-row-number';
       rowNumCell.textContent = rowIndex + 1;
       rowNumCell.title = `Row ${rowIndex + 1}`;
       tr.appendChild(rowNumCell);
 
-      // Data cells
+      // Data cells (widths controlled by colgroup)
       row.forEach((cellValue, colIndex) => {
         const td = document.createElement('td');
         td.className = 'csv-cell';
@@ -742,6 +867,25 @@ export class CsvEditor {
     // Position the body table
     if (this.virtualBodyTable) {
       this.virtualBodyTable.style.transform = `translateY(0)`;
+    }
+
+    // Reattach editor if we were editing and the cell is still visible
+    if (editingCell && editorDom) {
+      const { row, col } = editingCell;
+      if (row >= start && row < end) {
+        const cellElement = this.virtualTbody.querySelector(`td[data-row="${row}"][data-col="${col}"]`);
+        if (cellElement) {
+          // Hide the text span
+          const textSpan = cellElement.querySelector('.csv-cell-text');
+          if (textSpan) {
+            textSpan.style.display = 'none';
+          }
+          // Reattach editor and restore focus
+          cellElement.classList.add('csv-cell-editing');
+          cellElement.appendChild(editorDom);
+          this.cellEditor.focus();
+        }
+      }
     }
   }
 
@@ -1141,6 +1285,13 @@ export class CsvEditor {
    */
   async inferSchema() {
     console.log('Inferring schema for:', this.filePath);
+    console.log('Frontend isPremium state:', this.state.isPremium);
+
+    // Debug: Check entitlement status before calling backend
+    if (this.entitlementManager) {
+      const status = this.entitlementManager.getStatus();
+      console.log('EntitlementManager status:', JSON.stringify(status));
+    }
 
     try {
       // Call Tauri command to infer and create schema
@@ -1161,6 +1312,10 @@ export class CsvEditor {
       this.refreshToolbar();
 
     } catch (error) {
+      console.error('Schema inference error:', error);
+      console.log('Error code:', error.code);
+      console.log('Error details:', error.details);
+
       // Check if it's a premium required error
       const isPremiumError = error.code === 'premiumRequired' ||
         (error.message && error.message.includes('Premium'));
@@ -1221,15 +1376,17 @@ export class CsvEditor {
     const addRowBtn = this.toolbar.querySelector('.csv-add-row-btn');
     const addColBtn = this.toolbar.querySelector('.csv-add-col-btn');
     const deleteRowBtn = this.toolbar.querySelector('.csv-delete-row-btn');
+    const deleteColBtn = this.toolbar.querySelector('.csv-delete-col-btn');
     const saveBtn = this.toolbar.querySelector('.csv-save-btn');
     const schemaBtn = this.toolbar.querySelector('.csv-schema-btn');
     const aiContextBtn = this.toolbar.querySelector('.csv-ai-context-btn');
 
     if (undoBtn) undoBtn.addEventListener('click', () => this.undo());
     if (redoBtn) redoBtn.addEventListener('click', () => this.redo());
-    if (addRowBtn) addRowBtn.addEventListener('click', () => this.addRow());
-    if (addColBtn) addColBtn.addEventListener('click', () => this.addColumn());
+    this.setupAddRowDropdown();
+    this.setupAddColumnDropdown();
     if (deleteRowBtn) deleteRowBtn.addEventListener('click', () => this.deleteRow());
+    if (deleteColBtn) deleteColBtn.addEventListener('click', () => this.deleteColumn());
     if (saveBtn) saveBtn.addEventListener('click', () => this.save());
     if (schemaBtn) schemaBtn.addEventListener('click', () => this.toggleSchemaSidebar());
     if (aiContextBtn) aiContextBtn.addEventListener('click', () => this.openAiContextModal());
@@ -1243,6 +1400,12 @@ export class CsvEditor {
    */
   setupSchemaSidebarHandlers() {
     if (!this.schemaSidebar) return;
+
+    // Start Free Trial button (for non-premium users)
+    const upgradeBtn = this.schemaSidebar.querySelector('.csv-upgrade-btn');
+    if (upgradeBtn) {
+      upgradeBtn.addEventListener('click', () => this.startFreeTrial());
+    }
 
     // Infer schema button
     const inferBtn = this.schemaSidebar.querySelector('.csv-infer-schema-btn');
@@ -1484,6 +1647,11 @@ export class CsvEditor {
     // Table cell clicks for selection
     if (cellContainer && cellContainer.tagName === 'TABLE') {
       cellContainer.addEventListener('click', (e) => {
+        // Ignore clicks inside CodeMirror editor
+        if (e.target.closest('.cm-editor')) {
+          return;
+        }
+
         const cell = e.target.closest('.csv-cell');
         if (cell) {
           const row = parseInt(cell.dataset.row, 10);
@@ -1500,6 +1668,11 @@ export class CsvEditor {
 
       // Double-click for editing
       cellContainer.addEventListener('dblclick', (e) => {
+        // Ignore double-clicks inside CodeMirror editor
+        if (e.target.closest('.cm-editor')) {
+          return;
+        }
+
         const cell = e.target.closest('.csv-cell');
         if (cell) {
           const row = parseInt(cell.dataset.row, 10);
@@ -1521,23 +1694,31 @@ export class CsvEditor {
       const addRowBtn = this.toolbar.querySelector('.csv-add-row-btn');
       const addColBtn = this.toolbar.querySelector('.csv-add-col-btn');
       const deleteRowBtn = this.toolbar.querySelector('.csv-delete-row-btn');
+      const deleteColBtn = this.toolbar.querySelector('.csv-delete-col-btn');
       const saveBtn = this.toolbar.querySelector('.csv-save-btn');
       const schemaBtn = this.toolbar.querySelector('.csv-schema-btn');
       const aiContextBtn = this.toolbar.querySelector('.csv-ai-context-btn');
 
       if (undoBtn) undoBtn.addEventListener('click', () => this.undo());
       if (redoBtn) redoBtn.addEventListener('click', () => this.redo());
-      if (addRowBtn) addRowBtn.addEventListener('click', () => this.addRow());
-      if (addColBtn) addColBtn.addEventListener('click', () => this.addColumn());
+      this.setupAddRowDropdown();
+      this.setupAddColumnDropdown();
       if (deleteRowBtn) deleteRowBtn.addEventListener('click', () => this.deleteRow());
+      if (deleteColBtn) deleteColBtn.addEventListener('click', () => this.deleteColumn());
       if (saveBtn) saveBtn.addEventListener('click', () => this.save());
       if (schemaBtn) schemaBtn.addEventListener('click', () => this.toggleSchemaSidebar());
       if (aiContextBtn) aiContextBtn.addEventListener('click', () => this.openAiContextModal());
+
+      // Export dropdown handlers
+      this.setupExportDropdown();
     }
 
     // Keyboard navigation
     this.boundKeydownHandler = (e) => this.handleKeydown(e);
     document.addEventListener('keydown', this.boundKeydownHandler);
+
+    // Drag-and-drop handlers
+    this.setupDragAndDrop();
 
     // Schema sidebar handlers
     this.setupSchemaSidebarHandlers();
@@ -1703,6 +1884,11 @@ export class CsvEditor {
    * @param {number} col - Column index
    */
   startEditing(row, col) {
+    // Don't start editing if a modal is open
+    if (this.inputModalOpen) {
+      return;
+    }
+
     console.log('Start editing cell:', { row, col });
 
     // If already editing this cell, do nothing
@@ -1884,6 +2070,9 @@ export class CsvEditor {
 
     // Update the working data if value changed
     if (newValue !== oldValue) {
+      // Save state for undo BEFORE making the change
+      this.saveUndoState();
+
       if (this.state.workingRows[row]) {
         this.state.workingRows[row][col] = newValue;
       }
@@ -1919,13 +2108,13 @@ export class CsvEditor {
    * @param {string} displayValue - Value to display in the cell
    */
   cleanupEditing(row, col, displayValue) {
-    // Get the cell element
-    const cellElement = this.tableElement?.querySelector(`td[data-row="${row}"][data-col="${col}"]`);
+    // Get the cell element (check both virtual and regular table)
+    const cellContainer = this.virtualScroll.enabled ? this.virtualBodyTable : this.tableElement;
+    const cellElement = cellContainer?.querySelector(`td[data-row="${row}"][data-col="${col}"]`);
 
     if (cellElement) {
-      // Remove editing class and add selected class
+      // Remove editing class (don't add selected - that's handled by selectCell)
       cellElement.classList.remove('csv-cell-editing');
-      cellElement.classList.add('csv-cell-selected');
 
       // Restore text span
       const textSpan = cellElement.querySelector('.csv-cell-text');
@@ -2015,6 +2204,11 @@ export class CsvEditor {
    * @param {KeyboardEvent} e
    */
   handleKeydown(e) {
+    // Don't handle keydown if a modal is open
+    if (this.inputModalOpen) {
+      return;
+    }
+
     // Check if we're in the CSV editor context
     if (!this.container || !document.body.contains(this.container)) {
       return;
@@ -2431,6 +2625,7 @@ export class CsvEditor {
 
   /**
    * Save current state for undo
+   * Uses JSON stringify/parse for efficient deep cloning of large datasets
    */
   saveUndoState() {
     // Initialize undo stack if needed
@@ -2442,14 +2637,16 @@ export class CsvEditor {
     }
 
     // Deep copy current working rows
-    const currentState = this.state.workingRows.map(row => [...row]);
+    // Use JSON parse/stringify for better performance on large datasets
+    const currentState = JSON.parse(JSON.stringify(this.state.workingRows));
     this.undoStack.push(currentState);
 
     // Clear redo stack on new action
     this.redoStack = [];
 
-    // Limit undo history to 50 states
-    if (this.undoStack.length > 50) {
+    // Limit undo history to 50 states (reduce for large datasets)
+    const maxUndo = this.state.workingRows.length > 1000 ? 20 : 50;
+    if (this.undoStack.length > maxUndo) {
       this.undoStack.shift();
     }
 
@@ -2544,12 +2741,25 @@ export class CsvEditor {
     if (this.tableElement) {
       this.tableElement.remove();
     }
-    this.tableElement = this.renderTable();
+
+    // Use the appropriate render method based on current scroll mode
+    if (this.virtualScroll.enabled) {
+      this.tableElement = this.renderVirtualTable();
+    } else {
+      this.tableElement = this.renderTable();
+    }
     this.tableContainer.appendChild(this.tableElement);
 
     // Re-attach table event handlers
-    if (this.tableElement && this.tableElement.tagName === 'TABLE') {
-      this.tableElement.addEventListener('click', (e) => {
+    // For virtual scroll, the actual table is virtualBodyTable inside the scroll container
+    const targetTable = this.virtualScroll.enabled ? this.virtualBodyTable : this.tableElement;
+    if (targetTable && targetTable.tagName === 'TABLE') {
+      targetTable.addEventListener('click', (e) => {
+        // Ignore clicks inside CodeMirror editor
+        if (e.target.closest('.cm-editor')) {
+          return;
+        }
+
         const cell = e.target.closest('.csv-cell');
         if (cell) {
           const row = parseInt(cell.dataset.row, 10);
@@ -2558,7 +2768,12 @@ export class CsvEditor {
         }
       });
 
-      this.tableElement.addEventListener('dblclick', (e) => {
+      targetTable.addEventListener('dblclick', (e) => {
+        // Ignore double-clicks inside CodeMirror editor
+        if (e.target.closest('.cm-editor')) {
+          return;
+        }
+
         const cell = e.target.closest('.csv-cell');
         if (cell) {
           const row = parseInt(cell.dataset.row, 10);
@@ -2579,10 +2794,11 @@ export class CsvEditor {
   }
 
   /**
-   * Add a new empty row at the end of the table
+   * Add a new empty row at the specified position
+   * @param {string} position - 'above', 'below', 'top', or 'bottom' (default: 'bottom')
    */
-  addRow() {
-    console.log('Add row triggered');
+  addRow(position = 'bottom') {
+    console.log('Add row triggered:', position);
 
     // Save state for undo
     this.saveUndoState();
@@ -2597,8 +2813,30 @@ export class CsvEditor {
     // Create empty row with same number of columns
     const newRow = Array(numCols).fill('');
 
-    // Add to working rows
-    this.state.workingRows.push(newRow);
+    // Determine insert index based on position
+    let insertIndex;
+    const selectedRow = this.state.selectedCell?.row ?? -1;
+
+    switch (position) {
+      case 'above':
+        // Insert above selected row, or at top if no selection
+        insertIndex = selectedRow >= 0 ? selectedRow : 0;
+        break;
+      case 'below':
+        // Insert below selected row, or at bottom if no selection
+        insertIndex = selectedRow >= 0 ? selectedRow + 1 : this.state.workingRows.length;
+        break;
+      case 'top':
+        insertIndex = 0;
+        break;
+      case 'bottom':
+      default:
+        insertIndex = this.state.workingRows.length;
+        break;
+    }
+
+    // Insert the new row at the calculated index
+    this.state.workingRows.splice(insertIndex, 0, newRow);
 
     // Update total row count in data
     if (this.state.data) {
@@ -2615,20 +2853,20 @@ export class CsvEditor {
     this.checkDirty();
 
     // Select the first cell of the new row
-    const newRowIndex = this.state.workingRows.length - 1;
-    this.selectCell(newRowIndex, 0);
+    this.selectCell(insertIndex, 0);
 
-    console.log('Row added at index:', newRowIndex);
+    console.log('Row added at index:', insertIndex);
   }
 
   /**
-   * Add a new column with a prompted name
+   * Add a new column with a prompted name at the specified position
+   * @param {string} position - 'before' or 'after' (default: 'after')
    */
-  addColumn() {
-    console.log('Add column triggered');
+  async addColumn(position = 'after') {
+    console.log('Add column triggered:', position);
 
-    // Prompt user for column name
-    const columnName = prompt('Enter column name:');
+    // Show input modal for column name (native prompt() doesn't work in Tauri)
+    const columnName = await this.showInputModal('Add Column', 'Enter column name');
 
     // User cancelled or empty name
     if (columnName === null) {
@@ -2639,28 +2877,45 @@ export class CsvEditor {
     const trimmedName = columnName.trim();
     if (trimmedName === '') {
       console.warn('Column name cannot be empty');
-      alert('Column name cannot be empty');
+      this.showToast('Column name cannot be empty');
       return;
     }
 
     // Check for duplicate column names
     if (this.state.data?.headers?.includes(trimmedName)) {
       console.warn('Column name already exists:', trimmedName);
-      alert('A column with this name already exists');
+      this.showToast('A column with this name already exists');
       return;
     }
 
     // Save state for undo
     this.saveUndoState();
 
-    // Add header
-    if (this.state.data) {
-      this.state.data.headers.push(trimmedName);
+    // Determine insertion index based on position and selected cell
+    let insertIndex;
+    const selectedCol = this.state.selectedCell?.col;
+    const headersLength = this.state.data?.headers?.length || 0;
+
+    if (selectedCol !== undefined && selectedCol !== null) {
+      // Insert relative to selected column
+      if (position === 'before') {
+        insertIndex = selectedCol;
+      } else {
+        insertIndex = selectedCol + 1;
+      }
+    } else {
+      // No selection, add at end
+      insertIndex = headersLength;
     }
 
-    // Add empty value to each row
+    // Add header at the specified position
+    if (this.state.data) {
+      this.state.data.headers.splice(insertIndex, 0, trimmedName);
+    }
+
+    // Add empty value to each row at the specified position
     this.state.workingRows.forEach(row => {
-      row.push('');
+      row.splice(insertIndex, 0, '');
     });
 
     // Note: Do NOT update savedRows or savedHeaders - they should remain as the
@@ -2672,13 +2927,12 @@ export class CsvEditor {
     // Mark as dirty (new column is a change)
     this.checkDirty();
 
-    // Select the header cell of the new column (first row, new column)
+    // Select the first data cell of the new column
     if (this.state.workingRows.length > 0) {
-      const newColIndex = this.state.data.headers.length - 1;
-      this.selectCell(0, newColIndex);
+      this.selectCell(0, insertIndex);
     }
 
-    console.log('Column added:', trimmedName);
+    console.log('Column added:', trimmedName, 'at index:', insertIndex);
   }
 
   /**
@@ -2732,6 +2986,63 @@ export class CsvEditor {
     }
 
     console.log('Row deleted at index:', rowIndex);
+  }
+
+  /**
+   * Delete the currently selected column
+   */
+  deleteColumn() {
+    console.log('Delete column triggered');
+
+    // Check if a column is selected
+    if (!this.state.selectedCell) {
+      console.warn('Cannot delete column: no column selected');
+      return;
+    }
+
+    const colIndex = this.state.selectedCell.col;
+
+    // Validate column index
+    const numCols = this.state.data?.headers?.length || 0;
+    if (colIndex < 0 || colIndex >= numCols) {
+      console.warn('Invalid column index:', colIndex);
+      return;
+    }
+
+    // Prevent deleting the last column
+    if (numCols <= 1) {
+      this.showToast('Cannot delete the last column');
+      return;
+    }
+
+    // Save state for undo
+    this.saveUndoState();
+
+    // Remove header at the column index
+    const deletedHeader = this.state.data.headers.splice(colIndex, 1)[0];
+
+    // Remove the value at colIndex from each row
+    this.state.workingRows.forEach(row => {
+      row.splice(colIndex, 1);
+    });
+
+    // Re-render table
+    this.refreshTable();
+
+    // Mark as dirty
+    this.checkDirty();
+
+    // Update selection: select same column index if it exists, otherwise previous column
+    if (this.state.data.headers.length > 0) {
+      const newColIndex = Math.min(colIndex, this.state.data.headers.length - 1);
+      this.selectCell(this.state.selectedCell.row, newColIndex);
+    } else {
+      // No columns left, clear selection
+      this.state.selectedCell = null;
+      this.updateDeleteButtonState();
+    }
+
+    console.log('Column deleted:', deletedHeader, 'at index:', colIndex);
   }
 
   /**
@@ -2888,9 +3199,15 @@ export class CsvEditor {
    * Update delete button enabled state
    */
   updateDeleteButtonState() {
-    const deleteBtn = this.toolbar?.querySelector('.csv-delete-row-btn');
-    if (deleteBtn) {
-      deleteBtn.disabled = !this.state.selectedCell;
+    const deleteRowBtn = this.toolbar?.querySelector('.csv-delete-row-btn');
+    const deleteColBtn = this.toolbar?.querySelector('.csv-delete-col-btn');
+    const hasSelection = !!this.state.selectedCell;
+
+    if (deleteRowBtn) {
+      deleteRowBtn.disabled = !hasSelection;
+    }
+    if (deleteColBtn) {
+      deleteColBtn.disabled = !hasSelection;
     }
   }
 
@@ -3598,10 +3915,14 @@ export class CsvEditor {
     // Generate full markdown content
     const markdownContent = this.generateAiContextMarkdown(aiContext);
 
+    // Generate JSON content from aiContext
+    const jsonContent = this.generateAiContextJson(aiContext);
+
     body.innerHTML = `
       <div class="csv-ai-context-tabs">
         <button class="csv-ai-context-tab active" data-tab="preview">Preview</button>
         <button class="csv-ai-context-tab" data-tab="markdown">Markdown</button>
+        <button class="csv-ai-context-tab" data-tab="json">JSON</button>
       </div>
       <div class="csv-ai-context-content">
         <div class="csv-ai-context-panel active" data-panel="preview">
@@ -3614,17 +3935,51 @@ export class CsvEditor {
             <pre class="csv-ai-context-markdown">${this.escapeHtml(markdownContent)}</pre>
           </div>
         </div>
+        <div class="csv-ai-context-panel" data-panel="json">
+          <div class="csv-ai-context-markdown-container">
+            <pre class="csv-ai-context-markdown csv-ai-context-json">${this.escapeHtml(jsonContent)}</pre>
+          </div>
+        </div>
       </div>
       <div class="csv-ai-context-modal-footer">
-        <button class="csv-ai-context-copy-btn">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
-            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
-          </svg>
-          Copy to Clipboard
-        </button>
+        <div class="csv-ai-context-copy-dropdown">
+          <button class="csv-ai-context-copy-btn">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+              <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+            </svg>
+            Copy as Markdown
+          </button>
+          <button class="csv-ai-context-copy-dropdown-toggle" title="Copy format options">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="6 9 12 15 18 9"></polyline>
+            </svg>
+          </button>
+          <div class="csv-ai-context-copy-menu">
+            <button class="csv-ai-context-copy-option" data-format="markdown">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                <polyline points="14 2 14 8 20 8"></polyline>
+                <line x1="16" y1="13" x2="8" y2="13"></line>
+                <line x1="16" y1="17" x2="8" y2="17"></line>
+              </svg>
+              Copy as Markdown
+            </button>
+            <button class="csv-ai-context-copy-option" data-format="json">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M16 18l6-6-6-6"></path>
+                <path d="M8 6l-6 6 6 6"></path>
+              </svg>
+              Copy as JSON
+            </button>
+          </div>
+        </div>
       </div>
     `;
+
+    // Store content for copy operations
+    this.aiContextMarkdown = markdownContent;
+    this.aiContextJson = jsonContent;
 
     // Set up tab switching
     const tabs = body.querySelectorAll('.csv-ai-context-tab');
@@ -3642,34 +3997,89 @@ export class CsvEditor {
       });
     });
 
-    // Set up copy button
+    // Set up copy dropdown
+    const copyDropdown = body.querySelector('.csv-ai-context-copy-dropdown');
     const copyBtn = body.querySelector('.csv-ai-context-copy-btn');
-    copyBtn.addEventListener('click', async () => {
-      try {
-        await navigator.clipboard.writeText(markdownContent);
-        copyBtn.innerHTML = `
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <polyline points="20 6 9 17 4 12"></polyline>
-          </svg>
-          Copied!
-        `;
-        copyBtn.classList.add('copied');
+    const dropdownToggle = body.querySelector('.csv-ai-context-copy-dropdown-toggle');
+    const copyMenu = body.querySelector('.csv-ai-context-copy-menu');
+    const copyOptions = body.querySelectorAll('.csv-ai-context-copy-option');
 
-        setTimeout(() => {
-          copyBtn.innerHTML = `
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
-              <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
-            </svg>
-            Copy to Clipboard
-          `;
-          copyBtn.classList.remove('copied');
-        }, 2000);
-      } catch (error) {
-        console.error('Failed to copy:', error);
-        alert('Failed to copy to clipboard');
+    // Track current copy format
+    let currentFormat = 'markdown';
+
+    // Toggle dropdown menu
+    dropdownToggle.addEventListener('click', (e) => {
+      e.stopPropagation();
+      copyMenu.classList.toggle('open');
+    });
+
+    // Close dropdown when clicking outside
+    document.addEventListener('click', (e) => {
+      if (!copyDropdown.contains(e.target)) {
+        copyMenu.classList.remove('open');
       }
     });
+
+    // Handle copy option selection
+    copyOptions.forEach(option => {
+      option.addEventListener('click', async () => {
+        const format = option.dataset.format;
+        currentFormat = format;
+        copyMenu.classList.remove('open');
+
+        // Update main button text
+        copyBtn.innerHTML = `
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+          </svg>
+          Copy as ${format === 'markdown' ? 'Markdown' : 'JSON'}
+        `;
+
+        // Perform the copy
+        await this.copyAiContext(format, copyBtn);
+      });
+    });
+
+    // Main copy button click
+    copyBtn.addEventListener('click', async () => {
+      await this.copyAiContext(currentFormat, copyBtn);
+    });
+  }
+
+  /**
+   * Copy AI context content to clipboard
+   * @param {string} format - 'markdown' or 'json'
+   * @param {HTMLElement} copyBtn - The copy button element
+   */
+  async copyAiContext(format, copyBtn) {
+    try {
+      const content = format === 'markdown' ? this.aiContextMarkdown : this.aiContextJson;
+      await navigator.clipboard.writeText(content);
+
+      const formatLabel = format === 'markdown' ? 'Markdown' : 'JSON';
+      copyBtn.innerHTML = `
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <polyline points="20 6 9 17 4 12"></polyline>
+        </svg>
+        Copied!
+      `;
+      copyBtn.classList.add('copied');
+
+      setTimeout(() => {
+        copyBtn.innerHTML = `
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+          </svg>
+          Copy as ${formatLabel}
+        `;
+        copyBtn.classList.remove('copied');
+      }, 2000);
+    } catch (error) {
+      console.error('Failed to copy:', error);
+      alert('Failed to copy to clipboard');
+    }
   }
 
   /**
@@ -3721,6 +4131,87 @@ export class CsvEditor {
     }
 
     return markdown;
+  }
+
+  /**
+   * Generate JSON content from AI context
+   * Creates a structured JSON object suitable for AI consumption
+   * @param {Object} aiContext - The AI context data from backend
+   * @returns {string} Pretty-printed JSON string
+   */
+  generateAiContextJson(aiContext) {
+    // Build a clean JSON structure optimized for AI consumption
+    const jsonObj = {
+      file: aiContext.filePath,
+      description: aiContext.description || null,
+      schema: {
+        summary: aiContext.schemaSummary || null,
+        rowCount: aiContext.rowCount || null,
+        columnCount: aiContext.columns?.length || 0
+      },
+      columns: (aiContext.columns || []).map(col => ({
+        name: col.name,
+        type: col.dataType,
+        role: col.role,
+        description: col.description || null
+      })),
+      sampleData: null,
+      relationships: (aiContext.relationships || []).map(rel => ({
+        name: rel.name,
+        description: rel.description
+      }))
+    };
+
+    // Parse sample data markdown table into JSON array if present
+    if (aiContext.sampleData) {
+      jsonObj.sampleData = this.parseSampleDataToJson(aiContext.sampleData, aiContext.columns);
+    }
+
+    return JSON.stringify(jsonObj, null, 2);
+  }
+
+  /**
+   * Parse markdown table sample data into JSON array
+   * @param {string} sampleData - Markdown table string
+   * @param {Array} columns - Column definitions
+   * @returns {Array} Array of row objects
+   */
+  parseSampleDataToJson(sampleData, columns) {
+    try {
+      const lines = sampleData.split('\n').filter(line => line.trim());
+      if (lines.length < 2) return [];
+
+      // Find header line (first line with |)
+      const headerLine = lines.find(line => line.includes('|'));
+      if (!headerLine) return [];
+
+      const headers = headerLine.split('|')
+        .map(h => h.trim())
+        .filter(h => h && !h.match(/^[-:]+$/));
+
+      // Find data rows (skip header and separator lines)
+      const dataRows = lines.filter(line => {
+        const trimmed = line.trim();
+        return trimmed.startsWith('|') &&
+               !trimmed.match(/^\|[-:\s|]+\|$/) &&
+               line !== headerLine;
+      });
+
+      return dataRows.map(row => {
+        const cells = row.split('|')
+          .map(c => c.trim())
+          .filter((c, i, arr) => i > 0 && i < arr.length - 1); // Remove empty first/last from split
+
+        const obj = {};
+        headers.forEach((header, idx) => {
+          obj[header] = cells[idx] || '';
+        });
+        return obj;
+      });
+    } catch (e) {
+      console.warn('Failed to parse sample data to JSON:', e);
+      return [];
+    }
   }
 
   /**
@@ -3794,7 +4285,7 @@ export class CsvEditor {
       } else {
         if (inTable) {
           // End of table, render it
-          result.push(this.renderTable(tableRows));
+          result.push(this.renderMarkdownTable(tableRows));
           inTable = false;
           tableRows = [];
         }
@@ -3804,7 +4295,7 @@ export class CsvEditor {
 
     // Handle table at end of content
     if (inTable && tableRows.length > 0) {
-      result.push(this.renderTable(tableRows));
+      result.push(this.renderMarkdownTable(tableRows));
     }
 
     return result.join('\n');
@@ -3815,8 +4306,8 @@ export class CsvEditor {
    * @param {string[]} rows - Array of table row strings
    * @returns {string} HTML table string
    */
-  renderTable(rows) {
-    if (rows.length === 0) return '';
+  renderMarkdownTable(rows) {
+    if (!rows || rows.length === 0) return '';
 
     let html = '<table class="csv-ai-context-table">\n';
 
@@ -3918,6 +4409,89 @@ export class CsvEditor {
   }
 
   /**
+   * Show an input modal dialog (replaces native prompt() which doesn't work in Tauri)
+   * @param {string} title - Modal title
+   * @param {string} placeholder - Input placeholder text
+   * @returns {Promise<string|null>} - Resolves with input value or null if cancelled
+   */
+  showInputModal(title, placeholder = '') {
+    return new Promise((resolve) => {
+      // Cancel any active cell editing first
+      if (this.state.editingCell) {
+        this.cancelEditing();
+      }
+
+      // Set flag to prevent cell editing while modal is open
+      this.inputModalOpen = true;
+
+      const overlay = document.createElement('div');
+      overlay.className = 'csv-ai-context-modal-overlay';
+
+      const modal = document.createElement('div');
+      modal.className = 'csv-ai-context-modal csv-input-modal';
+
+      modal.innerHTML = `
+        <div class="csv-ai-context-modal-header">
+          <h3>${title}</h3>
+          <button class="csv-ai-context-modal-close" title="Close">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="18" y1="6" x2="6" y2="18"></line>
+              <line x1="6" y1="6" x2="18" y2="18"></line>
+            </svg>
+          </button>
+        </div>
+        <div class="csv-ai-context-modal-body">
+          <input type="text" class="csv-input-modal-field" placeholder="${placeholder}" />
+        </div>
+        <div class="csv-ai-context-modal-footer">
+          <button class="csv-input-modal-cancel">Cancel</button>
+          <button class="csv-input-modal-submit">Add</button>
+        </div>
+      `;
+
+      overlay.appendChild(modal);
+      document.body.appendChild(overlay);
+
+      const input = modal.querySelector('.csv-input-modal-field');
+      const closeBtn = modal.querySelector('.csv-ai-context-modal-close');
+      const cancelBtn = modal.querySelector('.csv-input-modal-cancel');
+      const submitBtn = modal.querySelector('.csv-input-modal-submit');
+
+      const close = (value) => {
+        this.inputModalOpen = false;
+        overlay.remove();
+        resolve(value);
+      };
+
+      closeBtn.addEventListener('click', () => close(null));
+      cancelBtn.addEventListener('click', () => close(null));
+      submitBtn.addEventListener('click', () => close(input.value));
+      overlay.addEventListener('click', (e) => {
+        if (e.target === overlay) close(null);
+      });
+
+      // Prevent clicks from propagating to the table
+      modal.addEventListener('mousedown', (e) => e.stopPropagation());
+      modal.addEventListener('click', (e) => e.stopPropagation());
+
+      // Handle Enter key to submit
+      input.addEventListener('keydown', (e) => {
+        e.stopPropagation(); // Prevent table keyboard handlers
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          close(input.value);
+        } else if (e.key === 'Escape') {
+          e.preventDefault();
+          close(null);
+        }
+      });
+
+      // Focus the input immediately
+      input.focus();
+    });
+  }
+
+  /**
    * Show a premium required alert for a feature
    * @param {string} featureName - Name of the premium feature
    */
@@ -3969,5 +4543,789 @@ export class CsvEditor {
     overlay.addEventListener('click', (e) => {
       if (e.target === overlay) close();
     });
+  }
+
+  /**
+   * Start a free trial for premium features
+   */
+  async startFreeTrial() {
+    try {
+      if (!this.entitlementManager) {
+        this.entitlementManager = new EntitlementManager();
+        await this.entitlementManager.initialize();
+      }
+
+      await this.entitlementManager.startTrial();
+
+      // Update premium status
+      this.state.isPremium = this.entitlementManager.isPremiumEnabled();
+      console.log('Trial started, premium status:', this.state.isPremium);
+
+      // Re-render the editor to show premium features
+      if (this.state.isPremium) {
+        // Re-render toolbar to update button states (remove locked classes)
+        const newToolbar = this.renderToolbar();
+        this.toolbar.replaceWith(newToolbar);
+        this.toolbar = newToolbar;
+
+        // Re-attach toolbar event handlers
+        const schemaBtn = this.toolbar.querySelector('.csv-schema-btn');
+        const aiContextBtn = this.toolbar.querySelector('.csv-ai-context-btn');
+        const saveBtn = this.toolbar.querySelector('.csv-save-btn');
+        const undoBtn = this.toolbar.querySelector('.csv-undo-btn');
+        const redoBtn = this.toolbar.querySelector('.csv-redo-btn');
+        const addRowBtn = this.toolbar.querySelector('.csv-add-row-btn');
+        const addColBtn = this.toolbar.querySelector('.csv-add-col-btn');
+        const deleteRowBtn = this.toolbar.querySelector('.csv-delete-row-btn');
+        const deleteColBtn = this.toolbar.querySelector('.csv-delete-col-btn');
+
+        if (undoBtn) undoBtn.addEventListener('click', () => this.undo());
+        if (redoBtn) redoBtn.addEventListener('click', () => this.redo());
+        this.setupAddRowDropdown();
+        this.setupAddColumnDropdown();
+        if (deleteRowBtn) deleteRowBtn.addEventListener('click', () => this.deleteRow());
+        if (deleteColBtn) deleteColBtn.addEventListener('click', () => this.deleteColumn());
+        if (saveBtn) saveBtn.addEventListener('click', () => this.save());
+        if (schemaBtn) schemaBtn.addEventListener('click', () => this.toggleSchemaSidebar());
+        if (aiContextBtn) aiContextBtn.addEventListener('click', () => this.openAiContextModal());
+        this.setupExportDropdown();
+
+        // Re-render schema sidebar
+        if (this.state.schemaSidebarOpen) {
+          this.refreshSchemaSidebar();
+        }
+
+        // Show success message
+        this.showToast('Trial activated! You now have 30 days of premium access.');
+      }
+    } catch (error) {
+      console.error('Failed to start trial:', error);
+      this.showToast('Failed to start trial: ' + error.message);
+    }
+  }
+
+  // ============================================================================
+  // Export Functionality
+  // ============================================================================
+
+  /**
+   * Set up the Add Row dropdown menu handlers
+   */
+  setupAddRowDropdown() {
+    const dropdown = this.toolbar?.querySelector('.csv-add-row-dropdown');
+    const addRowBtn = this.toolbar?.querySelector('.csv-add-row-btn');
+    const menu = this.toolbar?.querySelector('.csv-add-row-menu');
+
+    if (!dropdown || !addRowBtn || !menu) return;
+
+    // Toggle dropdown on button click
+    addRowBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      dropdown.classList.toggle('open');
+    });
+
+    // Close dropdown when clicking outside
+    document.addEventListener('click', (e) => {
+      if (!dropdown.contains(e.target)) {
+        dropdown.classList.remove('open');
+      }
+    });
+
+    // Handle menu item clicks
+    const menuItems = menu.querySelectorAll('.csv-add-row-menu-item');
+    menuItems.forEach(item => {
+      item.addEventListener('click', () => {
+        const action = item.dataset.action;
+        dropdown.classList.remove('open');
+        this.addRow(action);
+      });
+    });
+  }
+
+  /**
+   * Set up the Add Column dropdown menu handlers
+   */
+  setupAddColumnDropdown() {
+    const dropdown = this.toolbar?.querySelector('.csv-add-col-dropdown');
+    const addColBtn = this.toolbar?.querySelector('.csv-add-col-btn');
+    const menu = this.toolbar?.querySelector('.csv-add-col-menu');
+
+    if (!dropdown || !addColBtn || !menu) return;
+
+    // Toggle dropdown on button click
+    addColBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      dropdown.classList.toggle('open');
+    });
+
+    // Close dropdown when clicking outside
+    document.addEventListener('click', (e) => {
+      if (!dropdown.contains(e.target)) {
+        dropdown.classList.remove('open');
+      }
+    });
+
+    // Handle menu item clicks
+    const menuItems = menu.querySelectorAll('.csv-add-col-menu-item');
+    menuItems.forEach(item => {
+      item.addEventListener('click', () => {
+        const action = item.dataset.action;
+        dropdown.classList.remove('open');
+        this.addColumn(action);
+      });
+    });
+  }
+
+  /**
+   * Set up the export dropdown menu handlers
+   */
+  setupExportDropdown() {
+    const dropdown = this.toolbar.querySelector('.csv-export-dropdown');
+    const exportBtn = this.toolbar.querySelector('.csv-export-btn');
+    const menu = this.toolbar.querySelector('.csv-export-menu');
+
+    if (!dropdown || !exportBtn || !menu) return;
+
+    // Toggle dropdown on button click
+    exportBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      dropdown.classList.toggle('open');
+    });
+
+    // Close dropdown when clicking outside
+    document.addEventListener('click', (e) => {
+      if (!dropdown.contains(e.target)) {
+        dropdown.classList.remove('open');
+      }
+    });
+
+    // Export as CSV
+    const exportCsvBtn = menu.querySelector('.csv-export-csv-btn');
+    if (exportCsvBtn) {
+      exportCsvBtn.addEventListener('click', () => {
+        dropdown.classList.remove('open');
+        this.exportAsCsv();
+      });
+    }
+
+    // Export selection
+    const exportSelectionBtn = menu.querySelector('.csv-export-selection-btn');
+    if (exportSelectionBtn) {
+      exportSelectionBtn.addEventListener('click', () => {
+        dropdown.classList.remove('open');
+        this.exportSelection();
+      });
+    }
+
+    // Export as JSON (premium)
+    const exportJsonBtn = menu.querySelector('.csv-export-json-btn');
+    if (exportJsonBtn) {
+      exportJsonBtn.addEventListener('click', () => {
+        dropdown.classList.remove('open');
+        if (this.state.isPremium) {
+          this.exportAsJson();
+        } else {
+          this.showPremiumRequiredAlert('Export as JSON');
+        }
+      });
+    }
+
+    // Copy as JSON
+    const copyJsonBtn = menu.querySelector('.csv-copy-json-btn');
+    if (copyJsonBtn) {
+      copyJsonBtn.addEventListener('click', () => {
+        dropdown.classList.remove('open');
+        this.copyAsJson();
+      });
+    }
+
+    // Copy as markdown
+    const copyMarkdownBtn = menu.querySelector('.csv-copy-markdown-btn');
+    if (copyMarkdownBtn) {
+      copyMarkdownBtn.addEventListener('click', () => {
+        dropdown.classList.remove('open');
+        this.copyAsMarkdown();
+      });
+    }
+  }
+
+  /**
+   * Export the entire CSV file
+   */
+  async exportAsCsv() {
+    try {
+      const headers = this.state.data?.headers || [];
+      const rows = this.state.workingRows || [];
+
+      if (headers.length === 0) {
+        console.log('No data to export');
+        return;
+      }
+
+      // Build CSV content
+      const csvContent = this.buildCsvContent(headers, rows);
+
+      // Get save path from user
+      const defaultName = this.fileName.replace(/\.csv$/i, '') + '_export.csv';
+      const savePath = await save({
+        defaultPath: defaultName,
+        filters: [{ name: 'CSV', extensions: ['csv'] }]
+      });
+
+      if (savePath) {
+        await invoke('export_to_file', { path: savePath, content: csvContent });
+        console.log('CSV exported to:', savePath);
+        this.showToast('Exported CSV file');
+      }
+    } catch (error) {
+      console.error('Failed to export CSV:', error);
+      csvErrorHandler.handleError(error, {
+        operation: 'Export CSV',
+        showToast: true
+      });
+    }
+  }
+
+  /**
+   * Export only the selected cells/rows as CSV
+   */
+  async exportSelection() {
+    try {
+      const range = this.getSelectionRange();
+      if (!range) {
+        // No selection - export current row if cell is selected
+        if (this.state.selectedCell) {
+          const row = this.state.selectedCell.row;
+          const headers = this.state.data?.headers || [];
+          const rowData = [this.state.workingRows[row] || []];
+          const csvContent = this.buildCsvContent(headers, rowData);
+
+          const defaultName = this.fileName.replace(/\.csv$/i, '') + '_row.csv';
+          const savePath = await save({
+            defaultPath: defaultName,
+            filters: [{ name: 'CSV', extensions: ['csv'] }]
+          });
+
+          if (savePath) {
+            await invoke('export_to_file', { path: savePath, content: csvContent });
+            console.log('Selection exported to:', savePath);
+            this.showToast('Exported selection');
+          }
+        } else {
+          console.log('No selection to export');
+        }
+        return;
+      }
+
+      const { startRow, startCol, endRow, endCol } = range;
+      const headers = this.state.data?.headers || [];
+      const rows = this.state.workingRows || [];
+
+      // Extract selected headers
+      const selectedHeaders = headers.slice(startCol, endCol + 1);
+
+      // Extract selected rows
+      const selectedRows = [];
+      for (let r = startRow; r <= endRow; r++) {
+        const row = rows[r] || [];
+        selectedRows.push(row.slice(startCol, endCol + 1));
+      }
+
+      const csvContent = this.buildCsvContent(selectedHeaders, selectedRows);
+
+      const defaultName = this.fileName.replace(/\.csv$/i, '') + '_selection.csv';
+      const savePath = await save({
+        defaultPath: defaultName,
+        filters: [{ name: 'CSV', extensions: ['csv'] }]
+      });
+
+      if (savePath) {
+        await invoke('export_to_file', { path: savePath, content: csvContent });
+        console.log('Selection exported to:', savePath);
+        this.showToast('Exported selection');
+      }
+    } catch (error) {
+      console.error('Failed to export selection:', error);
+      csvErrorHandler.handleError(error, {
+        operation: 'Export Selection',
+        showToast: true
+      });
+    }
+  }
+
+  /**
+   * Export as JSON with schema (premium feature)
+   */
+  async exportAsJson() {
+    try {
+      const headers = this.state.data?.headers || [];
+      const rows = this.state.workingRows || [];
+      const schema = this.state.schema;
+
+      if (headers.length === 0) {
+        console.log('No data to export');
+        return;
+      }
+
+      // Build JSON structure with schema
+      const jsonExport = {
+        metadata: {
+          exportedAt: new Date().toISOString(),
+          sourceFile: this.filePath,
+          rowCount: rows.length,
+          columnCount: headers.length
+        },
+        schema: schema ? {
+          version: schema.version,
+          columns: schema.columns.map(col => ({
+            name: col.name,
+            displayName: col.displayName,
+            description: col.description,
+            dataType: col.dataType,
+            semanticRole: col.semanticRole
+          })),
+          relationships: schema.relationships || []
+        } : null,
+        columns: headers,
+        data: rows.map(row => {
+          const obj = {};
+          headers.forEach((header, i) => {
+            obj[header] = row[i] || '';
+          });
+          return obj;
+        })
+      };
+
+      const jsonContent = JSON.stringify(jsonExport, null, 2);
+
+      const defaultName = this.fileName.replace(/\.csv$/i, '') + '.json';
+      const savePath = await save({
+        defaultPath: defaultName,
+        filters: [{ name: 'JSON', extensions: ['json'] }]
+      });
+
+      if (savePath) {
+        await invoke('export_to_file', { path: savePath, content: jsonContent });
+        console.log('JSON exported to:', savePath);
+        this.showToast('Exported JSON file');
+      }
+    } catch (error) {
+      console.error('Failed to export JSON:', error);
+      csvErrorHandler.handleError(error, {
+        operation: 'Export JSON',
+        showToast: true
+      });
+    }
+  }
+
+  /**
+   * Copy data as JSON to clipboard
+   * Converts CSV data to array of objects with header keys
+   */
+  async copyAsJson() {
+    try {
+      const headers = this.state.data?.headers || [];
+      const rows = this.state.workingRows || [];
+
+      if (headers.length === 0) {
+        console.log('No data to copy');
+        return;
+      }
+
+      // Convert to array of objects
+      const jsonData = rows.map(row => {
+        const obj = {};
+        headers.forEach((header, index) => {
+          obj[header] = row[index] ?? '';
+        });
+        return obj;
+      });
+
+      // Format with 2-space indentation for readability
+      const jsonString = JSON.stringify(jsonData, null, 2);
+
+      await navigator.clipboard.writeText(jsonString);
+      console.log('Copied JSON to clipboard');
+
+      this.showToast(`Copied ${rows.length} rows as JSON`);
+    } catch (error) {
+      console.error('Failed to copy as JSON:', error);
+      csvErrorHandler.handleError(error, {
+        operation: 'Copy as JSON',
+        showToast: true
+      });
+    }
+  }
+
+  /**
+   * Copy selection as a markdown table
+   */
+  async copyAsMarkdown() {
+    try {
+      const range = this.getSelectionRange();
+      const headers = this.state.data?.headers || [];
+      const rows = this.state.workingRows || [];
+
+      let selectedHeaders;
+      let selectedRows;
+
+      if (range) {
+        const { startRow, startCol, endRow, endCol } = range;
+        selectedHeaders = headers.slice(startCol, endCol + 1);
+        selectedRows = [];
+        for (let r = startRow; r <= endRow; r++) {
+          const row = rows[r] || [];
+          selectedRows.push(row.slice(startCol, endCol + 1));
+        }
+      } else if (this.state.selectedCell) {
+        // Single cell selected - copy that row
+        const row = this.state.selectedCell.row;
+        selectedHeaders = headers;
+        selectedRows = [rows[row] || []];
+      } else {
+        // No selection - copy all (up to first 100 rows for clipboard)
+        selectedHeaders = headers;
+        selectedRows = rows.slice(0, 100);
+      }
+
+      if (selectedHeaders.length === 0) {
+        console.log('No data to copy');
+        return;
+      }
+
+      // Build markdown table
+      const markdown = this.buildMarkdownTable(selectedHeaders, selectedRows);
+
+      await navigator.clipboard.writeText(markdown);
+      console.log('Copied markdown table to clipboard');
+
+      // Show brief feedback
+      this.showToast('Copied as markdown table');
+    } catch (error) {
+      console.error('Failed to copy as markdown:', error);
+    }
+  }
+
+  /**
+   * Build CSV content from headers and rows
+   * @param {string[]} headers - Column headers
+   * @param {string[][]} rows - Data rows
+   * @returns {string} CSV formatted string
+   */
+  buildCsvContent(headers, rows) {
+    const escapeCsvField = (field) => {
+      const str = String(field || '');
+      if (str.includes(',') || str.includes('"') || str.includes('\n') || str.includes('\r')) {
+        return `"${str.replace(/"/g, '""')}"`;
+      }
+      return str;
+    };
+
+    const lines = [];
+    lines.push(headers.map(escapeCsvField).join(','));
+    for (const row of rows) {
+      lines.push(row.map(escapeCsvField).join(','));
+    }
+    return lines.join('\n');
+  }
+
+  /**
+   * Build a markdown table from headers and rows
+   * @param {string[]} headers - Column headers
+   * @param {string[][]} rows - Data rows
+   * @returns {string} Markdown table string
+   */
+  buildMarkdownTable(headers, rows) {
+    // Escape pipe characters in cell content
+    const escapeCell = (cell) => String(cell || '').replace(/\|/g, '\\|').replace(/\n/g, ' ');
+
+    const lines = [];
+
+    // Header row
+    lines.push('| ' + headers.map(escapeCell).join(' | ') + ' |');
+
+    // Separator row
+    lines.push('| ' + headers.map(() => '---').join(' | ') + ' |');
+
+    // Data rows
+    for (const row of rows) {
+      const cells = headers.map((_, i) => escapeCell(row[i]));
+      lines.push('| ' + cells.join(' | ') + ' |');
+    }
+
+    return lines.join('\n');
+  }
+
+  /**
+   * Show a brief toast notification
+   * @param {string} message - Message to display
+   */
+  showToast(message) {
+    const toast = document.createElement('div');
+    toast.className = 'csv-toast';
+    toast.textContent = message;
+    document.body.appendChild(toast);
+
+    // Trigger animation
+    requestAnimationFrame(() => {
+      toast.classList.add('show');
+    });
+
+    // Remove after delay
+    setTimeout(() => {
+      toast.classList.remove('show');
+      setTimeout(() => toast.remove(), 300);
+    }, 2000);
+  }
+
+  // ============================================================================
+  // Drag and Drop Import
+  // ============================================================================
+
+  /**
+   * Set up drag and drop handlers for CSV import
+   */
+  setupDragAndDrop() {
+    if (!this.container) return;
+
+    // Create drop overlay (hidden by default)
+    this.dropOverlay = document.createElement('div');
+    this.dropOverlay.className = 'csv-drop-overlay';
+    this.dropOverlay.innerHTML = `
+      <div class="csv-drop-content">
+        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+          <polyline points="17 8 12 3 7 8"></polyline>
+          <line x1="12" y1="3" x2="12" y2="15"></line>
+        </svg>
+        <p>Drop CSV file to import</p>
+      </div>
+    `;
+    this.container.appendChild(this.dropOverlay);
+
+    // Drag enter - show overlay
+    this.container.addEventListener('dragenter', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (this.isDragDataCsv(e)) {
+        this.dropOverlay.classList.add('active');
+      }
+    });
+
+    // Drag over - allow drop
+    this.container.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (this.isDragDataCsv(e)) {
+        e.dataTransfer.dropEffect = 'copy';
+      }
+    });
+
+    // Drag leave - hide overlay
+    this.container.addEventListener('dragleave', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      // Only hide if leaving the container entirely
+      if (!this.container.contains(e.relatedTarget)) {
+        this.dropOverlay.classList.remove('active');
+      }
+    });
+
+    // Drop - handle file
+    this.container.addEventListener('drop', async (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      this.dropOverlay.classList.remove('active');
+
+      const files = e.dataTransfer.files;
+      if (files.length > 0) {
+        const file = files[0];
+        if (file.name.toLowerCase().endsWith('.csv')) {
+          await this.importDroppedFile(file);
+        }
+      }
+    });
+  }
+
+  /**
+   * Check if drag data contains CSV files
+   * @param {DragEvent} e - The drag event
+   * @returns {boolean}
+   */
+  isDragDataCsv(e) {
+    if (e.dataTransfer.types.includes('Files')) {
+      // Check items if available
+      if (e.dataTransfer.items) {
+        for (const item of e.dataTransfer.items) {
+          if (item.kind === 'file') {
+            // Can't always check extension during drag, so accept all files
+            return true;
+          }
+        }
+      }
+      return true;
+    }
+    return false;
+  }
+
+  /**
+   * Import a dropped CSV file
+   * @param {File} file - The dropped file
+   */
+  async importDroppedFile(file) {
+    try {
+      console.log('Importing dropped file:', file.name);
+
+      // Read file content
+      const content = await file.text();
+
+      // Detect delimiter
+      const delimiter = this.detectDelimiter(content);
+      console.log('Detected delimiter:', delimiter === '\t' ? 'TAB' : delimiter);
+
+      // Parse CSV content
+      const { headers, rows } = this.parseCsvContent(content, delimiter);
+
+      if (headers.length === 0) {
+        throw new Error('No data found in CSV file');
+      }
+
+      // Update state with imported data
+      this.state.data = {
+        headers,
+        rows,
+        totalRows: rows.length,
+        truncated: false
+      };
+      this.state.workingRows = rows.map(row => [...row]);
+      this.state.savedRows = rows.map(row => [...row]);
+      this.state.savedHeaders = [...headers];
+      this.state.isDirty = true; // Mark as dirty since this is new data
+
+      // Clear any existing selection
+      this.state.selectedCell = null;
+      this.state.selectionStart = null;
+      this.state.selectionEnd = null;
+      this.state.editingCell = null;
+
+      // Re-render the table
+      this.render();
+      this.setupEventHandlers();
+
+      // Update tab name
+      this.fileName = file.name;
+      this.updateDirtyState();
+
+      this.showToast(`Imported ${rows.length} rows from ${file.name}`);
+    } catch (error) {
+      console.error('Failed to import dropped file:', error);
+      csvErrorHandler.handleError(error, {
+        operation: 'Import CSV',
+        showToast: true
+      });
+    }
+  }
+
+  /**
+   * Detect the delimiter used in CSV content
+   * Supports comma, tab, and semicolon
+   * @param {string} content - CSV content
+   * @returns {string} The detected delimiter
+   */
+  detectDelimiter(content) {
+    // Take first few lines for analysis
+    const lines = content.split('\n').slice(0, 10);
+    if (lines.length === 0) return ',';
+
+    const delimiters = [',', '\t', ';'];
+    const counts = {};
+
+    for (const delim of delimiters) {
+      counts[delim] = 0;
+      for (const line of lines) {
+        // Count occurrences, accounting for quoted fields
+        let count = 0;
+        let inQuotes = false;
+        for (const char of line) {
+          if (char === '"') {
+            inQuotes = !inQuotes;
+          } else if (char === delim && !inQuotes) {
+            count++;
+          }
+        }
+        counts[delim] += count;
+      }
+    }
+
+    // Find delimiter with most consistent count across lines
+    let bestDelim = ',';
+    let bestScore = 0;
+
+    for (const delim of delimiters) {
+      // Calculate consistency score (average count per line)
+      const avgCount = counts[delim] / lines.length;
+      if (avgCount > bestScore) {
+        bestScore = avgCount;
+        bestDelim = delim;
+      }
+    }
+
+    return bestDelim;
+  }
+
+  /**
+   * Parse CSV content into headers and rows
+   * @param {string} content - CSV content
+   * @param {string} delimiter - Field delimiter
+   * @returns {{ headers: string[], rows: string[][] }}
+   */
+  parseCsvContent(content, delimiter = ',') {
+    const lines = content.split(/\r?\n/);
+    const rows = [];
+
+    for (const line of lines) {
+      if (line.trim() === '') continue;
+
+      const row = [];
+      let field = '';
+      let inQuotes = false;
+
+      for (let i = 0; i < line.length; i++) {
+        const char = line[i];
+        const nextChar = line[i + 1];
+
+        if (inQuotes) {
+          if (char === '"' && nextChar === '"') {
+            // Escaped quote
+            field += '"';
+            i++;
+          } else if (char === '"') {
+            // End of quoted field
+            inQuotes = false;
+          } else {
+            field += char;
+          }
+        } else {
+          if (char === '"') {
+            // Start of quoted field
+            inQuotes = true;
+          } else if (char === delimiter) {
+            // End of field
+            row.push(field);
+            field = '';
+          } else {
+            field += char;
+          }
+        }
+      }
+      // Don't forget the last field
+      row.push(field);
+      rows.push(row);
+    }
+
+    // First row is headers
+    const headers = rows.length > 0 ? rows.shift() : [];
+
+    return { headers, rows };
   }
 }

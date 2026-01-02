@@ -277,6 +277,39 @@ export class ClaudeAgentSDK {
           },
           required: ["path", "content"]
         }
+      },
+      // CSV Editor Pro tools (Premium features)
+      {
+        name: "mcp__vault__list_csv_files",
+        description: "List all CSV files in the vault. Returns file information including path, name, size, and whether a schema exists.",
+        input_schema: {
+          type: "object",
+          properties: {}
+        }
+      },
+      {
+        name: "mcp__vault__get_csv_schema",
+        description: "Get the schema for a CSV file. Returns column definitions with data types, semantic roles, and descriptions. Premium feature - creates schema if missing when createIfMissing is true.",
+        input_schema: {
+          type: "object",
+          properties: {
+            path: { type: "string", description: "Path to the CSV file relative to vault root (e.g., 'data/sales.csv')" },
+            createIfMissing: { type: "boolean", description: "If true and no schema exists, infer and create one (requires premium)", default: false }
+          },
+          required: ["path"]
+        }
+      },
+      {
+        name: "mcp__vault__get_csv_context",
+        description: "Get AI-optimized context for a CSV file. Returns rich metadata including schema summary, column descriptions, sample data as markdown table, and relationship context. Premium feature - ideal for understanding CSV structure before analysis.",
+        input_schema: {
+          type: "object",
+          properties: {
+            path: { type: "string", description: "Path to the CSV file relative to vault root (e.g., 'data/sales.csv')" },
+            maxSampleRows: { type: "number", description: "Maximum number of sample rows to include in context", default: 10 }
+          },
+          required: ["path"]
+        }
       }
     ];
 
@@ -290,7 +323,11 @@ export class ClaudeAgentSDK {
       "mcp__vault__semantic_search": this.handleSemanticSearch.bind(this),
       "mcp__vault__write_note": this.handleWriteNote.bind(this),
       "mcp__vault__update_note": this.handleUpdateNote.bind(this),
-      "mcp__vault__append_to_note": this.handleAppendToNote.bind(this)
+      "mcp__vault__append_to_note": this.handleAppendToNote.bind(this),
+      // CSV Editor Pro handlers
+      "mcp__vault__list_csv_files": this.handleListCsvFiles.bind(this),
+      "mcp__vault__get_csv_schema": this.handleGetCsvSchema.bind(this),
+      "mcp__vault__get_csv_context": this.handleGetCsvContext.bind(this)
     };
 
     console.log('Created', this.tools.length, 'tool definitions');
@@ -506,6 +543,151 @@ export class ClaudeAgentSDK {
       console.error('append_to_note error:', error);
       return JSON.stringify({ error: error.message || 'Failed to append to note', path: args.path });
     }
+  }
+
+  // CSV Editor Pro Tool Handlers
+
+  async handleListCsvFiles() {
+    console.log('list_csv_files called');
+    try {
+      const files = await invoke('list_csv_files');
+      console.log('list_csv_files found', files.length, 'CSV files');
+
+      // Format as markdown list for easy AI consumption
+      const formatted = files.map(f => {
+        const schemaStatus = f.hasSchema ? ' (has schema)' : '';
+        return `- ${f.path}${schemaStatus} - ${this.formatFileSize(f.size)}`;
+      }).join('\n');
+
+      return JSON.stringify({
+        files,
+        count: files.length,
+        formatted: `## CSV Files in Vault\n\n${formatted || 'No CSV files found.'}`
+      });
+    } catch (error) {
+      console.error('list_csv_files error:', error);
+      return JSON.stringify({ error: error.message || 'Failed to list CSV files' });
+    }
+  }
+
+  async handleGetCsvSchema(args) {
+    console.log('get_csv_schema called:', args);
+    try {
+      if (!args.path) {
+        return JSON.stringify({ error: "Path is required" });
+      }
+
+      const schema = await invoke('get_csv_schema', {
+        path: args.path,
+        createIfMissing: args.createIfMissing || false
+      });
+
+      console.log('get_csv_schema loaded schema for:', args.path);
+
+      // Format column info for AI consumption
+      const columnSummary = schema.columns.map(col => {
+        const role = col.semanticRole?.role || 'unknown';
+        const type = col.dataType?.type || 'text';
+        return `- **${col.name}** (${type}, ${role}): ${col.description || 'No description'}`;
+      }).join('\n');
+
+      return JSON.stringify({
+        schema,
+        path: args.path,
+        columnCount: schema.columns.length,
+        hasRelationships: schema.relationships?.length > 0,
+        readOnly: schema.readOnly,
+        formatted: `## Schema: ${args.path}\n\n### Columns\n\n${columnSummary}`
+      });
+    } catch (error) {
+      console.error('get_csv_schema error:', error);
+      // Handle premium required error gracefully
+      const errorMsg = error.message || error.toString();
+      if (errorMsg.includes('PremiumRequired') || errorMsg.includes('premium')) {
+        return JSON.stringify({
+          error: 'Schema features require CSV Editor Pro premium subscription',
+          path: args.path,
+          premiumRequired: true
+        });
+      }
+      return JSON.stringify({ error: errorMsg || 'Failed to get CSV schema', path: args.path });
+    }
+  }
+
+  async handleGetCsvContext(args) {
+    console.log('get_csv_context called:', args);
+    try {
+      if (!args.path) {
+        return JSON.stringify({ error: "Path is required" });
+      }
+
+      const context = await invoke('get_csv_ai_context', {
+        path: args.path,
+        maxSampleRows: args.maxSampleRows || 10
+      });
+
+      console.log('get_csv_context generated context for:', args.path);
+
+      // Build comprehensive markdown context
+      let markdown = `# CSV Context: ${context.filePath}\n\n`;
+
+      if (context.description) {
+        markdown += `## Description\n\n${context.description}\n\n`;
+      }
+
+      if (context.schemaSummary) {
+        markdown += `## Schema Summary\n\n${context.schemaSummary}\n\n`;
+      }
+
+      if (context.columns?.length > 0) {
+        markdown += `## Columns\n\n`;
+        markdown += `| Column | Type | Role | Description |\n`;
+        markdown += `|--------|------|------|-------------|\n`;
+        for (const col of context.columns) {
+          markdown += `| ${col.name} | ${col.dataType} | ${col.role} | ${col.description || '-'} |\n`;
+        }
+        markdown += '\n';
+      }
+
+      if (context.sampleData) {
+        markdown += `## Sample Data\n\n${context.sampleData}\n\n`;
+      }
+
+      if (context.relationships?.length > 0) {
+        markdown += `## Relationships\n\n`;
+        for (const rel of context.relationships) {
+          markdown += `- **${rel.name}**: ${rel.description}\n`;
+        }
+        markdown += '\n';
+      }
+
+      return JSON.stringify({
+        context,
+        path: args.path,
+        formatted: markdown
+      });
+    } catch (error) {
+      console.error('get_csv_context error:', error);
+      // Handle premium required error gracefully
+      const errorMsg = error.message || error.toString();
+      if (errorMsg.includes('PremiumRequired') || errorMsg.includes('premium')) {
+        return JSON.stringify({
+          error: 'AI Context features require CSV Editor Pro premium subscription',
+          path: args.path,
+          premiumRequired: true
+        });
+      }
+      return JSON.stringify({ error: errorMsg || 'Failed to get CSV context', path: args.path });
+    }
+  }
+
+  /**
+   * Format file size in human-readable format
+   */
+  formatFileSize(bytes) {
+    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+    return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
   }
 
   /**

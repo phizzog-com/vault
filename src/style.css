@@ -618,12 +618,55 @@ body {
 .tree-icon {
   margin-right: 8px;
   font-size: 16px;
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.tree-icon svg {
+  color: var(--text-secondary);
+}
+
+.folder-icon svg {
+  color: var(--accent-primary);
+}
+
+.file-icon svg {
+  color: var(--text-tertiary);
+}
+
+/* File type badges for PDF, CSV, etc. */
+.file-type-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 9px;
+  font-weight: 600;
+  padding: 2px 4px;
+  border-radius: 3px;
+  margin-right: 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  flex-shrink: 0;
+}
+
+.file-type-badge.pdf {
+  background-color: rgba(239, 68, 68, 0.15);
+  color: #ef4444;
+}
+
+.file-type-badge.csv {
+  background-color: rgba(34, 197, 94, 0.15);
+  color: #22c55e;
 }
 
 .tree-label {
   flex: 1;
   color: var(--text-primary);
   cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* Editor */
@@ -655,6 +698,23 @@ body {
   flex-shrink: 0;
 }
 
+/* When sidebar is hidden, offset controls for macOS traffic light buttons */
+.editor-container.sidebar-hidden .editor-left-controls {
+  left: 80px;
+}
+
+/* When sidebar is hidden, center the editor content with max-width */
+.editor-container.sidebar-hidden .editor-wrapper {
+  display: flex;
+  justify-content: center;
+}
+
+.editor-container.sidebar-hidden .editor-wrapper > * {
+  width: 100%;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
 .file-name {
   font-weight: 500;
   color: var(--text-primary);
@@ -663,7 +723,7 @@ body {
 
 .editor-left-controls {
   position: absolute;
-  left: 24px;
+  left: 8px;
   display: flex;
   align-items: center;
   gap: 8px;

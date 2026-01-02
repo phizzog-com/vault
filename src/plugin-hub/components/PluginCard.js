@@ -1,4 +1,5 @@
 import PacasDBSettings from './PacasDBSettings.js';
+import CsvSupportSettings from './CsvSupportSettings.js';
 
 class PluginCard {
     constructor(plugin, context, options = {}) {
@@ -8,6 +9,7 @@ class PluginCard {
         this.onToggleExpand = options.onToggleExpand || null;
         this.element = null;
         this.pacasDBSettings = null;
+        this.csvSupportSettings = null;
     }
 
     render() {
@@ -19,14 +21,8 @@ class PluginCard {
             card.classList.add('expanded');
         }
 
-        // Build badges for bundled and premium plugins
-        const badges = [];
-        if (this.plugin.isBundled) {
-            badges.push('<span class="bundled-badge">Built-in</span>');
-        }
-        if (this.plugin.requiresLicense) {
-            badges.push('<span class="premium-badge">Premium</span>');
-        }
+        // Build badges for bundled, premium, and freemium plugins
+        const badges = this.renderBadges();
 
         card.innerHTML = `
             <div class="plugin-card-header">
@@ -34,7 +30,7 @@ class PluginCard {
                     <div class="plugin-card-title">
                         <h3>${this.plugin.name}</h3>
                         ${this.plugin.version ? `<span class="plugin-version">v${this.plugin.version}</span>` : ''}
-                        ${badges.join('')}
+                        ${badges}
                     </div>
                     <p class="plugin-card-description">${this.plugin.description || 'No description available'}</p>
                     <div class="plugin-card-meta">
@@ -108,6 +104,26 @@ class PluginCard {
         }
 
         return actions.join('');
+    }
+
+    renderBadges() {
+        const badges = [];
+
+        // Built-in badge for bundled plugins
+        if (this.plugin.isBundled) {
+            badges.push('<span class="bundled-badge">Built-in</span>');
+        }
+
+        // Freemium badge: has premium features but doesn't require license for basic use
+        if (this.plugin.hasPremiumFeatures && !this.plugin.requiresLicense) {
+            badges.push('<span class="badge-freemium">Free + Premium</span>');
+        }
+        // Premium badge: requires license to use at all
+        else if (this.plugin.requiresLicense) {
+            badges.push('<span class="premium-badge">Premium</span>');
+        }
+
+        return badges.join('');
     }
 
     renderDetails() {
@@ -287,6 +303,15 @@ class PluginCard {
                 this.pacasDBSettings = new PacasDBSettings(this.context);
             }
             await this.pacasDBSettings.open();
+            return;
+        }
+
+        // Handle CSV Support specially with its own settings modal
+        if (this.plugin.id === 'csv-support') {
+            if (!this.csvSupportSettings) {
+                this.csvSupportSettings = new CsvSupportSettings(this.context);
+            }
+            await this.csvSupportSettings.open();
             return;
         }
 

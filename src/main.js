@@ -2477,11 +2477,13 @@ function displayFileTree(fileTree) {
     if (file.is_dir) {
       const expandIcon = isExpanded ? '▼' : '▶';
       const escapedPath = file.path.replace(/'/g, "\\'").replace(/"/g, "&quot;");
-      
+      const folderIcon = isExpanded ? icons.folderOpen({ size: 16 }) : icons.folder({ size: 16 });
+
       html += `
-        <div class="tree-item folder" data-path="${file.path}" style="padding-left: ${indent + 8}px;"
+        <div class="tree-item folder" data-path="${file.path}" style="padding-left: ${indent + 8}px;" title="${file.name}"
              ondragenter="handleFolderDragEnter(event)" ondragover="handleFolderDragOver(event)" ondragleave="handleFolderDragLeave(event)" ondrop="handleFolderDrop(event)">
           <span class="expand-icon" onclick="toggleFolder('${escapedPath}', event)">${expandIcon}</span>
+          <span class="tree-icon folder-icon">${folderIcon}</span>
           <span class="tree-label" onclick="handleFolderClick('${escapedPath}', event)">${file.name}</span>
           <span class="folder-actions">
             <button class="folder-action-btn" onclick="showCreateFileModal('${escapedPath}', event)" title="New File in Folder">${icons.filePlus({ size: 14 })}</button>
@@ -2491,12 +2493,29 @@ function displayFileTree(fileTree) {
     } else {
       const escapedPath = file.path.replace(/'/g, "\\'").replace(/"/g, "&quot;");
       const fileIndent = indent + 24;
-      
+
+      // Get file extension and determine icon
+      const ext = file.name.split('.').pop()?.toLowerCase();
+      let fileIcon = '';
+
+      if (ext === 'pdf') {
+        fileIcon = '<span class="file-type-badge pdf">PDF</span>';
+      } else if (ext === 'csv') {
+        fileIcon = '<span class="file-type-badge csv">CSV</span>';
+      } else if (ext === 'md' || ext === 'markdown') {
+        fileIcon = `<span class="tree-icon file-icon">${icons.fileText({ size: 16 })}</span>`;
+      } else if (ext === 'txt') {
+        fileIcon = `<span class="tree-icon file-icon">${icons.file({ size: 16 })}</span>`;
+      } else {
+        fileIcon = `<span class="tree-icon file-icon">${icons.file({ size: 16 })}</span>`;
+      }
+
       // Remove file extension for display
-      const displayName = file.name.replace(/\.(md|markdown|txt|doc|docx|pdf)$/i, '');
-      
+      const displayName = file.name.replace(/\.(md|markdown|txt|doc|docx|pdf|csv)$/i, '');
+
       html += `
-        <div class="tree-item file" data-path="${file.path}" style="padding-left: ${fileIndent}px;" data-file-path="${escapedPath}" draggable="true" ondragstart="handleFileDragStart(event)" ondrag="handleFileDrag(event)" ondragend="handleFileDragEnd(event)">
+        <div class="tree-item file" data-path="${file.path}" style="padding-left: ${fileIndent}px;" data-file-path="${escapedPath}" draggable="true" ondragstart="handleFileDragStart(event)" ondrag="handleFileDrag(event)" ondragend="handleFileDragEnd(event)" title="${file.name}">
+          ${fileIcon}
           <span class="tree-label" onclick="handleFileClick('${escapedPath}', false)">${displayName}</span>
         </div>
       `;
@@ -2764,21 +2783,43 @@ async function setupFileSystemWatcher() {
 // Call this when DOM is ready
 setupFileSystemWatcher();
 
+// Helper to check if CSV support is enabled (reads from localStorage)
+function isCsvSupportEnabled() {
+  try {
+    const key = 'bundled_plugin_csv-support';
+    const rawValue = localStorage.getItem(key);
+    console.log('🔧 CSV plugin localStorage raw value:', rawValue);
+    const settings = JSON.parse(rawValue || '{}');
+    console.log('🔧 CSV plugin settings parsed:', settings);
+    // If enabled is explicitly set, use that value; default to true
+    if (settings.enabled !== undefined) {
+      console.log('🔧 CSV plugin enabled explicitly set to:', settings.enabled);
+      return settings.enabled;
+    }
+    console.log('🔧 CSV plugin enabled not set, defaulting to true');
+    return true;
+  } catch (e) {
+    console.log('🔧 CSV plugin settings error:', e);
+    return true; // Default to enabled
+  }
+}
+
 // Handle file clicks with tabs
 window.handleFileClick = async function(filePath, isDir) {
   console.log('🔍 File clicked:', filePath, 'isDir:', isDir);
-  
+
   if (isDir) {
     console.log('📁 Directory clicked - not implemented yet');
     return;
   }
-  
+
   // Check file type
   const imageExtensions = ['png', 'jpg', 'jpeg', 'gif'];
   const fileExtension = filePath.split('.').pop().toLowerCase();
   const isImage = imageExtensions.includes(fileExtension);
   const isPDF = fileExtension === 'pdf';
-  
+  const isCSV = fileExtension === 'csv';
+
   try {
     // Get the active pane's TabManager
     const tabManager = paneManager ? paneManager.getActiveTabManager() : null;
@@ -2786,18 +2827,38 @@ window.handleFileClick = async function(filePath, isDir) {
       console.error('❌ No active TabManager found');
       return;
     }
-    
+
     // Check if file is already open in any pane
     const existingPane = paneManager.findPaneByFilePath(filePath);
     if (existingPane) {
-      console.log('📑 File already open in pane, switching to it');
-      // Activate the pane and tab
-      paneManager.activatePane(existingPane.id);
       const existingTab = existingPane.tabManager.findTabByPath(filePath);
-      if (existingTab) {
-        existingPane.tabManager.activateTab(existingTab.id);
+
+      // For CSV files, check if the tab type matches the current plugin state
+      // If plugin is enabled but tab is markdown (or vice versa), close and reopen
+      if (isCSV && existingTab) {
+        const csvEnabled = isCsvSupportEnabled();
+        const tabIsCsv = existingTab.type === 'csv';
+
+        if (csvEnabled !== tabIsCsv) {
+          console.log('📑 CSV tab type mismatch - closing and reopening with correct type');
+          console.log('   Plugin enabled:', csvEnabled, 'Tab is CSV:', tabIsCsv);
+          // Close the existing tab and fall through to reopen
+          await existingPane.tabManager.closeTab(existingTab.id, true);
+        } else {
+          console.log('📑 File already open in pane, switching to it');
+          paneManager.activatePane(existingPane.id);
+          existingPane.tabManager.activateTab(existingTab.id);
+          return;
+        }
+      } else {
+        console.log('📑 File already open in pane, switching to it');
+        // Activate the pane and tab
+        paneManager.activatePane(existingPane.id);
+        if (existingTab) {
+          existingPane.tabManager.activateTab(existingTab.id);
+        }
+        return;
       }
-      return;
     }
     
     // Handle PDF files
@@ -2840,7 +2901,33 @@ window.handleFileClick = async function(filePath, isDir) {
     
     // Get the active tab or create one if none exist
     let activeTab = tabManager.getActiveTab();
-    
+
+    // Check if this is a CSV file - use openFile which handles CSV detection
+    if (isCSV) {
+      console.log('📊 Opening CSV file via openFile():', filePath);
+      const tabId = await tabManager.openFile(filePath, content);
+      activeTab = tabManager.tabs.get(tabId);
+      if (activeTab?.editor) {
+        await loadEditorPreferences(activeTab.editor);
+      }
+
+      // Hide welcome screen if visible
+      const welcomeContainer = document.querySelector('.welcome-container');
+      if (welcomeContainer) {
+        welcomeContainer.style.display = 'none';
+      }
+
+      // Show editor header
+      const editorHeader = document.getElementById('editor-header');
+      if (editorHeader) {
+        editorHeader.style.display = 'flex';
+        rebuildEditorHeader(filePath.split('/').pop());
+      }
+
+      updateNavigationButtons();
+      return;
+    }
+
     if (!activeTab || tabManager.tabs.size === 0) {
       // No tabs exist, create the first one
       const tabId = tabManager.createTab(filePath, content);
@@ -4283,19 +4370,21 @@ window.toggleSidebar = function() {
   console.log('🔽 Toggling sidebar...');
   const sidebar = document.querySelector('.sidebar');
   const editorContainer = document.querySelector('.editor-container');
-  
+
   if (sidebar && editorContainer) {
     const isHidden = sidebar.style.display === 'none';
-    
+
     if (isHidden) {
       // Show sidebar
       sidebar.style.display = 'flex';
       editorContainer.style.marginLeft = '0';
+      editorContainer.classList.remove('sidebar-hidden');
       console.log('📋 Sidebar shown');
     } else {
       // Hide sidebar
       sidebar.style.display = 'none';
       editorContainer.style.marginLeft = '0';
+      editorContainer.classList.add('sidebar-hidden');
       console.log('📋 Sidebar hidden');
     }
   }

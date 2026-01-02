@@ -35,6 +35,7 @@ mod plugins;
 mod identity;
 mod tasks;
 mod vault_agent_commands;
+mod csv;
 
 use vault::Vault;
 use identity::IdentityManager;
@@ -1491,6 +1492,7 @@ fn main() {
     migrate_settings_if_needed();
     
     tauri::Builder::default()
+        .plugin(tauri_plugin_decorum::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_store::Builder::default().build())
@@ -1675,6 +1677,15 @@ fn main() {
             vault_agent_commands::agent_list_tags,
             vault_agent_commands::agent_notes_by_tag,
             vault_agent_commands::agent_semantic_search,
+            // CSV Editor Pro commands
+            csv::list_csv_files,
+            csv::read_csv_data,
+            csv::save_csv_data,
+            csv::get_csv_schema,
+            csv::save_csv_schema,
+            csv::get_csv_ai_context,
+            csv::get_csv_statistics,
+            csv::export_to_file,
         ])
         .setup(|app| {
             // Create MCP manager with app handle
@@ -1772,6 +1783,14 @@ fn main() {
             // Defer window state restoration to avoid WebKit displayID race condition
             // The window needs to be fully attached to a display before we can safely resize/reposition
             if let Some(main_window) = app.get_webview_window("main") {
+                // Set up macOS traffic lights position
+                #[cfg(target_os = "macos")]
+                {
+                    use tauri_plugin_decorum::WebviewWindowExt;
+                    // Position traffic lights within the sidebar ribbon area
+                    let _ = main_window.set_traffic_lights_inset(16.0, 12.0);
+                }
+
                 let window_clone = main_window.clone();
 
                 // Spawn async task to restore window state AFTER setup completes

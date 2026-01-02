@@ -93,14 +93,36 @@ export class TabBar {
         });
     }
     
+    /**
+     * Get the appropriate icon for a tab based on its type
+     * @param {Object} tab - Tab object with type property
+     * @returns {string} Icon HTML string
+     */
+    getTabIcon(tab) {
+        switch (tab.type) {
+            case 'csv':
+                // Use layout-grid icon for CSV files (tabular data)
+                return icons.layoutGrid({ size: 14 });
+            case 'pdf':
+                // Use file icon for PDF
+                return icons.file({ size: 14 });
+            default:
+                // Default to fileText for markdown/text files
+                return icons.fileText({ size: 14 });
+        }
+    }
+
     addTabElement(tabId, tab) {
         const tabElement = document.createElement('div');
         tabElement.className = 'tab';
         tabElement.dataset.tabId = tabId;
         tabElement.draggable = true;
-        
+
+        // Get appropriate icon based on tab type
+        const tabIcon = this.getTabIcon(tab);
+
         tabElement.innerHTML = `
-            <span class="tab-icon">${icons.fileText({ size: 14 })}</span>
+            <span class="tab-icon">${tabIcon}</span>
             <span class="tab-title">${this.escapeHtml(tab.title)}</span>
             <button class="tab-close" title="Close">
                 ${icons.x({ size: 12 })}

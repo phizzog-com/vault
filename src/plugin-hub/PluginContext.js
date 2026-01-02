@@ -104,10 +104,11 @@ export class PluginContext {
       // Clone the plugin definition
       const pluginData = { ...plugin };
 
-      // Load enabled state from storage
+      // Load enabled state from localStorage (bundled plugins use localStorage)
       try {
-        const savedSettings = await invoke('plugin_get_settings', { pluginId: id });
-        if (savedSettings && savedSettings.enabled !== undefined) {
+        const key = `bundled_plugin_${id}`;
+        const savedSettings = JSON.parse(localStorage.getItem(key) || '{}');
+        if (savedSettings.enabled !== undefined) {
           pluginData.enabled = savedSettings.enabled;
           pluginData.status = savedSettings.enabled ? 'active' : 'inactive';
         }
@@ -336,15 +337,12 @@ export class PluginContext {
    */
   async enablePlugin(pluginId) {
     try {
-      // For bundled plugins, save enabled state to settings instead of calling API
+      // For bundled plugins, use localStorage instead of backend API
       if (BUNDLED_PLUGINS[pluginId]) {
-        await invoke('plugin_update_settings', {
-          settings: {
-            plugin_id: pluginId,
-            enabled: true,
-            settings: {}
-          }
-        });
+        const key = `bundled_plugin_${pluginId}`;
+        const settings = JSON.parse(localStorage.getItem(key) || '{}');
+        settings.enabled = true;
+        localStorage.setItem(key, JSON.stringify(settings));
       } else {
         await this.api.enablePlugin(pluginId);
       }
@@ -361,15 +359,12 @@ export class PluginContext {
    */
   async disablePlugin(pluginId) {
     try {
-      // For bundled plugins, save enabled state to settings instead of calling API
+      // For bundled plugins, use localStorage instead of backend API
       if (BUNDLED_PLUGINS[pluginId]) {
-        await invoke('plugin_update_settings', {
-          settings: {
-            plugin_id: pluginId,
-            enabled: false,
-            settings: {}
-          }
-        });
+        const key = `bundled_plugin_${pluginId}`;
+        const settings = JSON.parse(localStorage.getItem(key) || '{}');
+        settings.enabled = false;
+        localStorage.setItem(key, JSON.stringify(settings));
       } else {
         await this.api.disablePlugin(pluginId);
       }

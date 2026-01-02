@@ -64,6 +64,9 @@ impl Vault {
                 } else if ext == Some("pdf") {
                     // Adding PDF file
                     items.push(path.to_path_buf());
+                } else if ext == Some("csv") {
+                    // Adding CSV file
+                    items.push(path.to_path_buf());
                 }
             }
         }

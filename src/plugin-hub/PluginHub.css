@@ -624,6 +624,185 @@
   margin-bottom: 0;
 }
 
+/* ===========================================
+   CSV Support Settings Modal
+   =========================================== */
+
+.csv-settings-modal .modal {
+  max-width: 700px;
+}
+
+.csv-settings-content {
+  padding: 0;
+}
+
+.csv-settings-content .settings-section {
+  padding: 20px 24px;
+  border-bottom: 1px solid var(--border-subtle, #333);
+}
+
+.csv-settings-content .settings-section:last-child {
+  border-bottom: none;
+}
+
+.csv-settings-content .settings-section h3 {
+  font-size: 14px;
+  font-weight: 600;
+  margin: 0 0 12px 0;
+  color: var(--text-primary);
+}
+
+.csv-settings-content .settings-group {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* CSV Statistics */
+.csv-settings-content .csv-stats {
+  display: flex;
+  gap: 32px;
+}
+
+.csv-settings-content .stat-item {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.csv-settings-content .stat-label {
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.csv-settings-content .stat-value {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.csv-settings-content .stat-badge {
+  font-size: 10px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: rgba(124, 58, 237, 0.15);
+  color: #a78bfa;
+  font-weight: 500;
+  margin-left: 4px;
+}
+
+/* Bulk Actions */
+.csv-settings-content .bulk-actions {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.csv-settings-content .modal-action-danger {
+  background: rgba(239, 68, 68, 0.1);
+  color: #ef4444;
+  border-color: rgba(239, 68, 68, 0.3);
+}
+
+.csv-settings-content .modal-action-danger:hover {
+  background: #ef4444;
+  color: white;
+  border-color: #ef4444;
+}
+
+/* Premium Upsell Section */
+.csv-settings-content .premium-upsell {
+  background: linear-gradient(135deg, rgba(124, 58, 237, 0.05) 0%, rgba(79, 70, 229, 0.05) 100%);
+}
+
+.csv-settings-content .upsell-intro {
+  font-size: 14px;
+  color: var(--text-secondary);
+  margin: 0 0 16px 0;
+}
+
+/* Feature Matrix */
+.csv-settings-content .feature-matrix {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+  margin-bottom: 20px;
+}
+
+.csv-settings-content .feature-column {
+  border: 1px solid var(--border-subtle, #333);
+  border-radius: 8px;
+  padding: 16px;
+  background: var(--bg-primary);
+}
+
+.csv-settings-content .feature-column h4 {
+  font-size: 14px;
+  font-weight: 600;
+  margin: 0 0 12px 0;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border-subtle, #333);
+  color: var(--text-primary);
+}
+
+.csv-settings-content .premium-column {
+  border-color: rgba(124, 58, 237, 0.3);
+  background: linear-gradient(180deg, rgba(124, 58, 237, 0.05) 0%, transparent 100%);
+}
+
+.csv-settings-content .premium-column h4 {
+  color: #a78bfa;
+  border-color: rgba(124, 58, 237, 0.3);
+}
+
+.csv-settings-content .feature-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.csv-settings-content .feature-list li {
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-secondary);
+}
+
+.csv-settings-content .feature-icon {
+  width: 16px;
+  text-align: center;
+  font-weight: bold;
+}
+
+.csv-settings-content .feature-included .feature-icon {
+  color: #22c55e;
+}
+
+.csv-settings-content .feature-excluded .feature-icon {
+  color: #6b7280;
+}
+
+.csv-settings-content .feature-included.highlight {
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+/* Upsell Actions */
+.csv-settings-content .upsell-actions {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+  padding-top: 8px;
+}
+
+.csv-settings-content .upsell-actions a {
+  text-decoration: none;
+}
+
 /* Bundled Plugin Badge in Plugin Card */
 .plugin-card .bundled-badge {
   display: inline-flex;

@@ -1,9 +1,37 @@
+import { invoke } from '@tauri-apps/api/core';
 import { MarkdownEditor } from './editor/markdown-editor.js';
 import { PDFTab } from './pdf/PDFTab.js';
 import { CsvEditor } from './csv/CsvEditor.js';
 
 // Import CSV editor styles
 import './csv/csv-editor.css';
+
+/**
+ * Check if the csv-support plugin is enabled
+ * @returns {Promise<boolean>} True if CSV support is enabled
+ */
+async function isCsvSupportEnabled() {
+    try {
+        // csv-support is a bundled plugin - read from localStorage
+        const key = 'bundled_plugin_csv-support';
+        const rawValue = localStorage.getItem(key);
+        console.log('🔧 [TabManager] CSV plugin localStorage raw:', rawValue);
+        const settings = JSON.parse(rawValue || '{}');
+        console.log('🔧 [TabManager] CSV plugin settings parsed:', settings);
+        // If enabled is explicitly set, use that value
+        // Default to true (enabled by default for free tier)
+        if (settings.enabled !== undefined) {
+            console.log('🔧 [TabManager] CSV enabled explicitly set to:', settings.enabled);
+            return settings.enabled;
+        }
+        console.log('🔧 [TabManager] CSV enabled not set, defaulting to true');
+        return true; // Default to enabled
+    } catch (e) {
+        console.log('🔧 [TabManager] CSV plugin settings error:', e);
+        // If settings not found, default to enabled (free tier on by default)
+        return true;
+    }
+}
 
 /**
  * TabManager handles multiple editor tabs with support for future split views
@@ -42,9 +70,10 @@ export class TabManager {
      * @param {string} filePath - Path to the file (null for new untitled tab)
      * @param {string} content - Initial content
      * @param {boolean} isPDF - Whether this is a PDF file
+     * @param {boolean} openAsCsv - Whether to open as CSV editor (only for .csv files with plugin enabled)
      * @returns {string} tabId
      */
-    createTab(filePath = null, content = '', isPDF = false) {
+    createTab(filePath = null, content = '', isPDF = false, openAsCsv = false) {
         if (this.tabs.size >= this.maxTabs) {
             throw new Error(`Maximum ${this.maxTabs} tabs allowed`);
         }
@@ -58,6 +87,9 @@ export class TabManager {
         let editor = null;
         let pdfTab = null;
         let csvEditor = null;
+
+        // Determine if this is a CSV file (for type assignment, even if opening as plain text)
+        const isCsvFile = filePath && filePath.toLowerCase().endsWith('.csv');
 
         // Check if this is a PDF file
         if (isPDF || (filePath && filePath.toLowerCase().endsWith('.pdf'))) {
@@ -74,7 +106,8 @@ export class TabManager {
                 console.error('Error creating PDF tab:', error);
                 editorContainer.innerHTML = `<div class="error-state">Error loading PDF: ${error.message}</div>`;
             });
-        } else if (filePath && filePath.toLowerCase().endsWith('.csv')) {
+        } else if (isCsvFile && openAsCsv) {
+            // CSV file with csv-support plugin enabled - open in tabular editor
             console.log('Creating CSV tab for:', filePath);
             // For CSV files, create a CsvEditor instance
             csvEditor = new CsvEditor(filePath, this, this.panes[0].id);
@@ -89,7 +122,10 @@ export class TabManager {
                 editorContainer.innerHTML = `<div class="error-state">Error loading CSV: ${error.message}</div>`;
             });
         } else {
-            // For regular files, create markdown editor
+            // For regular files (including CSV with plugin disabled), create markdown editor
+            if (isCsvFile && !openAsCsv) {
+                console.log('Opening CSV as plain text (plugin disabled):', filePath);
+            }
             editor = new MarkdownEditor(editorContainer);
         }
 
@@ -97,9 +133,11 @@ export class TabManager {
         let tabType = 'markdown';
         if (isPDF || (filePath && filePath.toLowerCase().endsWith('.pdf'))) {
             tabType = 'pdf';
-        } else if (filePath && filePath.toLowerCase().endsWith('.csv')) {
+        } else if (isCsvFile && openAsCsv) {
+            // Only set CSV type when actually using CSV editor
             tabType = 'csv';
         }
+        // Note: CSV files with plugin disabled remain as 'markdown' type (plain text)
 
         const tab = {
             id: tabId,
@@ -188,14 +226,23 @@ export class TabManager {
         if (!this.tabs.has(tabId)) {
             return false;
         }
-        
+
         const tab = this.tabs.get(tabId);
-        
+
         // Check for unsaved changes
-        if (!force && tab.isDirty && tab.filePath) {
-            const confirmed = confirm(`"${tab.title}" has unsaved changes. Close anyway?`);
-            if (!confirmed) {
-                return false;
+        if (!force && tab.filePath) {
+            let hasUnsavedChanges = tab.isDirty;
+
+            // For CSV tabs, check the editor's internal dirty state
+            if (tab.type === 'csv' && tab.csvEditor) {
+                hasUnsavedChanges = tab.csvEditor.hasUnsavedChanges();
+            }
+
+            if (hasUnsavedChanges) {
+                const confirmed = confirm(`"${tab.title}" has unsaved changes. Close anyway?`);
+                if (!confirmed) {
+                    return false;
+                }
             }
         }
         
@@ -369,15 +416,28 @@ export class TabManager {
      * @returns {Promise<string>} tabId
      */
     async openFile(filePath, content = '') {
+        console.log('🚀🚀🚀 TabManager.openFile called:', filePath);
+
         // Check if it's a PDF
         const isPDF = filePath && filePath.toLowerCase().endsWith('.pdf');
-        
-        // Create the tab
-        const tabId = this.createTab(filePath, content, isPDF);
-        
+
+        // Check if it's a CSV and if CSV support is enabled
+        const isCSV = filePath && filePath.toLowerCase().endsWith('.csv');
+        let openAsCsv = false;
+
+        if (isCSV) {
+            console.log('🚀🚀🚀 Detected CSV file, checking plugin status...');
+            // Check if csv-support plugin is enabled
+            openAsCsv = await isCsvSupportEnabled();
+            console.log('🚀🚀🚀 CSV file detected, CSV support enabled:', openAsCsv);
+        }
+
+        // Create the tab with appropriate type
+        const tabId = this.createTab(filePath, content, isPDF, openAsCsv);
+
         // Activate it
         this.activateTab(tabId);
-        
+
         return tabId;
     }
     
