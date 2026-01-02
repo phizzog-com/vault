@@ -10,6 +10,9 @@
  */
 
 import { invoke } from '@tauri-apps/api/core';
+import { EditorView, keymap } from '@codemirror/view';
+import { EditorState } from '@codemirror/state';
+import { defaultKeymap, history, historyKeymap } from '@codemirror/commands';
 
 /**
  * CsvEditor class - Main CSV editing component
@@ -63,6 +66,9 @@ export class CsvEditor {
 
     // CodeMirror editor for cell editing (singleton pattern)
     this.cellEditor = null;
+
+    // Original value before editing (for cancel operation)
+    this.originalEditValue = null;
 
     // Bound event handlers for cleanup
     this.boundKeydownHandler = null;
@@ -247,6 +253,41 @@ export class CsvEditor {
   }
 
   /**
+   * Calculate optimal column widths based on content
+   * @returns {number[]} Array of column widths in pixels
+   */
+  calculateColumnWidths() {
+    const data = this.state.data;
+    if (!data || data.headers.length === 0) return [];
+
+    const MIN_WIDTH = 80;
+    const MAX_WIDTH = 300;
+    const CHAR_WIDTH = 8; // Approximate width per character
+    const PADDING = 24;   // Cell padding (12px * 2)
+
+    const widths = [];
+
+    // Calculate width for each column based on header and data content
+    for (let colIndex = 0; colIndex < data.headers.length; colIndex++) {
+      // Start with header length
+      let maxLength = data.headers[colIndex].length;
+
+      // Check first 100 rows for content length (performance optimization)
+      const rowsToCheck = Math.min(this.state.workingRows.length, 100);
+      for (let rowIndex = 0; rowIndex < rowsToCheck; rowIndex++) {
+        const cellValue = this.state.workingRows[rowIndex][colIndex] || '';
+        maxLength = Math.max(maxLength, cellValue.toString().length);
+      }
+
+      // Calculate width with bounds
+      const calculatedWidth = (maxLength * CHAR_WIDTH) + PADDING;
+      widths.push(Math.max(MIN_WIDTH, Math.min(MAX_WIDTH, calculatedWidth)));
+    }
+
+    return widths;
+  }
+
+  /**
    * Render the data table
    * @returns {HTMLElement}
    */
@@ -267,8 +308,30 @@ export class CsvEditor {
       return emptyDiv;
     }
 
+    // Calculate column widths
+    const columnWidths = this.calculateColumnWidths();
+
+    // Create colgroup for column widths
+    const colgroup = document.createElement('colgroup');
+
+    // Row number column
+    const rowNumCol = document.createElement('col');
+    rowNumCol.style.width = '50px';
+    rowNumCol.style.minWidth = '50px';
+    colgroup.appendChild(rowNumCol);
+
+    // Data columns with calculated widths
+    columnWidths.forEach(width => {
+      const col = document.createElement('col');
+      col.style.width = `${width}px`;
+      col.style.minWidth = `${Math.min(width, 80)}px`;
+      colgroup.appendChild(col);
+    });
+    table.appendChild(colgroup);
+
     // Create header row
     const thead = document.createElement('thead');
+    thead.className = 'csv-thead-sticky';
     const headerRow = document.createElement('tr');
     headerRow.className = 'csv-header-row';
 
@@ -276,15 +339,24 @@ export class CsvEditor {
     const rowNumHeader = document.createElement('th');
     rowNumHeader.className = 'csv-row-number-header';
     rowNumHeader.textContent = '#';
+    rowNumHeader.title = 'Row number';
     headerRow.appendChild(rowNumHeader);
 
-    // Add column headers
+    // Add column headers with tooltips
     data.headers.forEach((header, colIndex) => {
       const th = document.createElement('th');
       th.className = 'csv-header-cell';
       th.dataset.col = colIndex;
-      th.textContent = header;
+
+      // Create span for text content (allows for truncation)
+      const textSpan = document.createElement('span');
+      textSpan.className = 'csv-header-text';
+      textSpan.textContent = header;
+      th.appendChild(textSpan);
+
+      // Full header value in tooltip
       th.title = header;
+      th.setAttribute('aria-label', header);
       headerRow.appendChild(th);
     });
 
@@ -303,16 +375,27 @@ export class CsvEditor {
       const rowNumCell = document.createElement('td');
       rowNumCell.className = 'csv-row-number';
       rowNumCell.textContent = rowIndex + 1;
+      rowNumCell.title = `Row ${rowIndex + 1}`;
       tr.appendChild(rowNumCell);
 
-      // Data cells
+      // Data cells with proper truncation and tooltips
       row.forEach((cellValue, colIndex) => {
         const td = document.createElement('td');
         td.className = 'csv-cell';
         td.dataset.row = rowIndex;
         td.dataset.col = colIndex;
-        td.textContent = cellValue;
-        td.title = cellValue;
+
+        // Create span for text content (allows for truncation styling)
+        const textSpan = document.createElement('span');
+        textSpan.className = 'csv-cell-text';
+        textSpan.textContent = cellValue;
+        td.appendChild(textSpan);
+
+        // Full value in tooltip for truncated cells
+        if (cellValue && cellValue.length > 0) {
+          td.title = cellValue;
+          td.setAttribute('aria-label', cellValue);
+        }
 
         // Add selection classes if this is the selected cell
         if (this.state.selectedCell &&
@@ -427,6 +510,12 @@ export class CsvEditor {
    * @param {number} col - Column index
    */
   selectCell(row, col) {
+    // If currently editing a different cell, finish editing first
+    if (this.state.editingCell &&
+        (this.state.editingCell.row !== row || this.state.editingCell.col !== col)) {
+      this.finishEditing();
+    }
+
     // Clear previous selection
     const prevSelected = this.tableElement?.querySelector('.csv-cell-selected');
     if (prevSelected) {
@@ -436,10 +525,14 @@ export class CsvEditor {
     // Update state
     this.state.selectedCell = { row, col };
 
-    // Add selection to new cell
-    const newCell = this.tableElement?.querySelector(`td[data-row="${row}"][data-col="${col}"]`);
-    if (newCell) {
-      newCell.classList.add('csv-cell-selected');
+    // Add selection to new cell (unless it's being edited)
+    if (!this.state.editingCell ||
+        this.state.editingCell.row !== row ||
+        this.state.editingCell.col !== col) {
+      const newCell = this.tableElement?.querySelector(`td[data-row="${row}"][data-col="${col}"]`);
+      if (newCell) {
+        newCell.classList.add('csv-cell-selected');
+      }
     }
 
     // Update delete button state
@@ -449,14 +542,308 @@ export class CsvEditor {
   }
 
   /**
-   * Start editing a cell (placeholder - full implementation in csv-4.3)
+   * Start editing a cell with CodeMirror
+   * Uses singleton pattern - one CodeMirror instance repositioned for each cell edit
    * @param {number} row - Row index
    * @param {number} col - Column index
    */
   startEditing(row, col) {
     console.log('Start editing cell:', { row, col });
-    // Full implementation in csv-4.3 with CodeMirror integration
+
+    // If already editing this cell, do nothing
+    if (this.state.editingCell &&
+        this.state.editingCell.row === row &&
+        this.state.editingCell.col === col) {
+      return;
+    }
+
+    // If editing a different cell, finish it first
+    if (this.state.editingCell) {
+      this.finishEditing();
+    }
+
+    // Get the cell element
+    const cellElement = this.tableElement?.querySelector(`td[data-row="${row}"][data-col="${col}"]`);
+    if (!cellElement) {
+      console.error('Cell element not found for editing:', { row, col });
+      return;
+    }
+
+    // Get the current cell value
+    const currentValue = this.state.workingRows[row]?.[col] ?? '';
+
+    // Store original value for cancel operation
+    this.originalEditValue = currentValue;
+
+    // Update state
     this.state.editingCell = { row, col };
+    this.state.selectedCell = { row, col };
+
+    // Remove selection styling and add editing styling
+    cellElement.classList.remove('csv-cell-selected');
+    cellElement.classList.add('csv-cell-editing');
+
+    // Clear cell content (the span with text)
+    const textSpan = cellElement.querySelector('.csv-cell-text');
+    if (textSpan) {
+      textSpan.style.display = 'none';
+    }
+
+    // Create or reuse CodeMirror editor (singleton pattern)
+    if (!this.cellEditor) {
+      this.cellEditor = new EditorView({
+        doc: currentValue,
+        extensions: this.createCellEditorExtensions(),
+        parent: cellElement
+      });
+    } else {
+      // Reposition existing editor to this cell
+      cellElement.appendChild(this.cellEditor.dom);
+
+      // Reset content for this cell
+      this.cellEditor.dispatch({
+        changes: {
+          from: 0,
+          to: this.cellEditor.state.doc.length,
+          insert: currentValue
+        }
+      });
+    }
+
+    // Focus the editor and select all text
+    this.cellEditor.focus();
+    this.cellEditor.dispatch({
+      selection: { anchor: 0, head: this.cellEditor.state.doc.length }
+    });
+
+    console.log('Cell editing started:', { row, col, value: currentValue });
+  }
+
+  /**
+   * Create CodeMirror extensions for cell editing
+   * Minimal setup optimized for single-line CSV cell editing
+   * @returns {Array} Array of CodeMirror extensions
+   */
+  createCellEditorExtensions() {
+    return [
+      // History for undo/redo
+      history(),
+      keymap.of(historyKeymap),
+
+      // Default keymap for basic editing
+      keymap.of(defaultKeymap),
+
+      // Custom keymap for CSV cell editing
+      keymap.of([
+        {
+          key: 'Enter',
+          run: () => {
+            this.finishEditing();
+            return true;
+          }
+        },
+        {
+          key: 'Escape',
+          run: () => {
+            this.cancelEditing();
+            return true;
+          }
+        },
+        {
+          key: 'Tab',
+          run: () => {
+            this.finishEditingAndMoveNext();
+            return true;
+          }
+        },
+        {
+          key: 'Shift-Tab',
+          run: () => {
+            this.finishEditingAndMovePrev();
+            return true;
+          }
+        }
+      ]),
+
+      // Minimal theme for cell editor
+      EditorView.theme({
+        '&': {
+          backgroundColor: 'var(--background-primary, #1e1e1e)',
+          color: 'var(--text-normal, #dcddde)',
+          fontSize: '13px',
+          fontFamily: 'inherit'
+        },
+        '.cm-content': {
+          padding: '6px 12px',
+          caretColor: 'var(--interactive-accent, #7c3aed)'
+        },
+        '&.cm-focused': {
+          outline: 'none'
+        },
+        '.cm-line': {
+          padding: '0'
+        },
+        '.cm-cursor': {
+          borderLeftColor: 'var(--interactive-accent, #7c3aed)'
+        },
+        '.cm-selectionBackground': {
+          backgroundColor: 'var(--interactive-accent-muted, rgba(124, 58, 237, 0.3))'
+        },
+        '&.cm-focused .cm-selectionBackground': {
+          backgroundColor: 'var(--interactive-accent-muted, rgba(124, 58, 237, 0.3))'
+        }
+      }),
+
+      // Listen for document changes to track dirty state
+      EditorView.updateListener.of((update) => {
+        if (update.docChanged && this.state.editingCell) {
+          // Mark as potentially dirty (will be confirmed on finishEditing)
+          console.log('Cell content changed');
+        }
+      })
+    ];
+  }
+
+  /**
+   * Finish editing and save the value
+   */
+  finishEditing() {
+    if (!this.state.editingCell || !this.cellEditor) {
+      return;
+    }
+
+    const { row, col } = this.state.editingCell;
+    const newValue = this.cellEditor.state.doc.toString();
+    const oldValue = this.originalEditValue;
+
+    console.log('Finishing edit:', { row, col, oldValue, newValue });
+
+    // Update the working data if value changed
+    if (newValue !== oldValue) {
+      if (this.state.workingRows[row]) {
+        this.state.workingRows[row][col] = newValue;
+      }
+      // Check if dirty state changed
+      this.checkDirty();
+    }
+
+    // Clean up the editing state
+    this.cleanupEditing(row, col, newValue);
+  }
+
+  /**
+   * Cancel editing and discard changes
+   */
+  cancelEditing() {
+    if (!this.state.editingCell || !this.cellEditor) {
+      return;
+    }
+
+    const { row, col } = this.state.editingCell;
+    const originalValue = this.originalEditValue;
+
+    console.log('Canceling edit:', { row, col, restoredValue: originalValue });
+
+    // Clean up without updating the value (restore original)
+    this.cleanupEditing(row, col, originalValue);
+  }
+
+  /**
+   * Clean up after editing - restore cell display and state
+   * @param {number} row - Row index
+   * @param {number} col - Column index
+   * @param {string} displayValue - Value to display in the cell
+   */
+  cleanupEditing(row, col, displayValue) {
+    // Get the cell element
+    const cellElement = this.tableElement?.querySelector(`td[data-row="${row}"][data-col="${col}"]`);
+
+    if (cellElement) {
+      // Remove editing class and add selected class
+      cellElement.classList.remove('csv-cell-editing');
+      cellElement.classList.add('csv-cell-selected');
+
+      // Restore text span
+      const textSpan = cellElement.querySelector('.csv-cell-text');
+      if (textSpan) {
+        textSpan.textContent = displayValue;
+        textSpan.style.display = '';
+      }
+
+      // Update tooltip
+      cellElement.title = displayValue || '';
+
+      // Remove CodeMirror DOM from cell (but keep instance for reuse)
+      if (this.cellEditor && this.cellEditor.dom.parentNode === cellElement) {
+        this.cellEditor.dom.remove();
+      }
+    }
+
+    // Clear editing state
+    this.state.editingCell = null;
+    this.originalEditValue = null;
+
+    // Focus the table container for keyboard navigation
+    if (this.tableContainer) {
+      this.tableContainer.focus();
+    }
+  }
+
+  /**
+   * Finish editing and move to next cell (Tab)
+   */
+  finishEditingAndMoveNext() {
+    if (!this.state.editingCell) return;
+
+    const { row, col } = this.state.editingCell;
+    this.finishEditing();
+
+    // Calculate next cell position
+    const headers = this.state.data?.headers || [];
+    const rows = this.state.workingRows || [];
+
+    let nextRow = row;
+    let nextCol = col + 1;
+
+    // Wrap to next row if at end of columns
+    if (nextCol >= headers.length) {
+      nextCol = 0;
+      nextRow = row + 1;
+    }
+
+    // Check if within bounds
+    if (nextRow < rows.length) {
+      this.selectCell(nextRow, nextCol);
+      this.startEditing(nextRow, nextCol);
+    }
+  }
+
+  /**
+   * Finish editing and move to previous cell (Shift+Tab)
+   */
+  finishEditingAndMovePrev() {
+    if (!this.state.editingCell) return;
+
+    const { row, col } = this.state.editingCell;
+    this.finishEditing();
+
+    // Calculate previous cell position
+    const headers = this.state.data?.headers || [];
+
+    let prevRow = row;
+    let prevCol = col - 1;
+
+    // Wrap to previous row if at start of columns
+    if (prevCol < 0) {
+      prevCol = headers.length - 1;
+      prevRow = row - 1;
+    }
+
+    // Check if within bounds
+    if (prevRow >= 0) {
+      this.selectCell(prevRow, prevCol);
+      this.startEditing(prevRow, prevCol);
+    }
   }
 
   /**
@@ -548,7 +935,22 @@ export class CsvEditor {
     }
 
     this.updateSaveButtonState();
+    this.updateDirtyIndicator();
     return this.state.isDirty;
+  }
+
+  /**
+   * Update the dirty indicator on the filename
+   */
+  updateDirtyIndicator() {
+    const filenameEl = this.toolbar?.querySelector('.csv-filename');
+    if (filenameEl) {
+      if (this.state.isDirty) {
+        filenameEl.classList.add('dirty');
+      } else {
+        filenameEl.classList.remove('dirty');
+      }
+    }
   }
 
   /**
