@@ -5111,7 +5111,7 @@
       "phase": "Phase 6: AI Integration (Premium)",
       "task": "Agent Tools",
       "name": "Add CSV agent tools to ClaudeAgentSDK",
-      "passes": false,
+      "passes": true,
       "instructions": [
         "Open src/chat/ClaudeAgentSDK.js",
         "Add mcp__vault__list_csv_files tool definition",
@@ -5132,7 +5132,7 @@
       "phase": "Phase 6: AI Integration (Premium)",
       "task": "Agent Tools",
       "name": "Implement CSV tool handlers",
-      "passes": false,
+      "passes": true,
       "instructions": [
         "Implement handleListCsvFiles() returning markdown list",
         "Implement handleGetCsvContext() formatting rich context",
@@ -5153,7 +5153,7 @@
       "phase": "Phase 6: AI Integration (Premium)",
       "task": "Chat Integration",
       "name": "Update EnhancedChatPanel for CSV context",
-      "passes": false,
+      "passes": true,
       "instructions": [
         "Open src/chat/EnhancedChatPanel.js",
         "In getAllContext() or similar, detect CSV files in context",

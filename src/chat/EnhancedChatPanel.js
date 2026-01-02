@@ -1146,66 +1146,175 @@ export class EnhancedChatPanel {
     async getAllContext() {
         // Get all context from the ChatInterface (what's shown in the pills)
         const contextNotes = [];
-        
+
         // Get active note
         console.log('Getting all context...');
         const activeNote = await this.getActiveNoteContent();
         console.log('Active note:', activeNote ? `Found: ${activeNote.title}` : 'None');
-        
+
         if (activeNote) {
             contextNotes.push(activeNote);
         }
-        
+
         // Get mentioned notes from currentContext
         const mentionedNotes = this.interface.currentContext || [];
         console.log('Mentioned notes:', mentionedNotes.length);
-        
+
         for (const note of mentionedNotes) {
+            // Check if this is a CSV file - get rich context if available
+            const isCsv = note.path?.toLowerCase().endsWith('.csv');
+
+            if (isCsv) {
+                const csvContext = await this.getCsvContext(note.path, note.title || note.name);
+                if (csvContext) {
+                    contextNotes.push(csvContext);
+                    continue;
+                }
+            }
+
+            // Default: get raw file content
             const content = await this.getNoteContent(note.path);
             if (content) {
                 contextNotes.push({
                     title: note.title || note.name,
                     content: content,
-                    path: note.path
+                    path: note.path,
+                    type: isCsv ? 'csv' : 'markdown'
                 });
             }
         }
-        
+
         console.log('Total context notes:', contextNotes.length);
         return contextNotes;
     }
+
+    /**
+     * Get rich AI context for a CSV file.
+     * For premium users, returns structured context with schema, sample data, and metadata.
+     * For free users, falls back to raw file content.
+     *
+     * @param {string} path - Path to the CSV file
+     * @param {string} title - Display title for the file
+     * @returns {Object|null} Context object with title, content, path, and type
+     */
+    async getCsvContext(path, title) {
+        try {
+            const { invoke } = await import('@tauri-apps/api/core');
+
+            // Try to get rich AI context (premium feature)
+            const aiContext = await invoke('get_csv_ai_context', {
+                path: path,
+                maxSampleRows: 10
+            });
+
+            console.log('Got rich CSV AI context for:', title);
+
+            // Format the AI context as markdown for the chat
+            let content = `## CSV File: ${title}\n\n`;
+
+            if (aiContext.schema_summary) {
+                content += `### Schema\n${aiContext.schema_summary}\n\n`;
+            }
+
+            if (aiContext.column_descriptions && aiContext.column_descriptions.length > 0) {
+                content += `### Columns\n`;
+                for (const col of aiContext.column_descriptions) {
+                    content += `- **${col.name}** (${col.data_type}): ${col.description || 'No description'}\n`;
+                }
+                content += '\n';
+            }
+
+            if (aiContext.sample_data_markdown) {
+                content += `### Sample Data\n${aiContext.sample_data_markdown}\n\n`;
+            }
+
+            if (aiContext.row_count !== undefined) {
+                content += `### Statistics\n- Total rows: ${aiContext.row_count}\n`;
+            }
+
+            if (aiContext.relationship_context) {
+                content += `\n### Relationships\n${aiContext.relationship_context}\n`;
+            }
+
+            return {
+                title: title,
+                content: content,
+                path: path,
+                type: 'csv',
+                isPremium: true
+            };
+
+        } catch (error) {
+            // Check if this is a premium feature error
+            const errorMessage = error?.message || error?.toString() || '';
+            const isPremiumError = errorMessage.includes('premium') ||
+                                   errorMessage.includes('Premium') ||
+                                   errorMessage.includes('subscription');
+
+            if (isPremiumError) {
+                console.log('CSV AI context requires premium, falling back to basic content');
+
+                // Fall back to raw file content for free users
+                const rawContent = await this.getNoteContent(path);
+                if (rawContent) {
+                    return {
+                        title: title,
+                        content: `## CSV File: ${title}\n\n(Premium feature: Rich CSV context is available with CSV Editor Pro)\n\n### Raw Content Preview:\n\`\`\`csv\n${rawContent}\n\`\`\``,
+                        path: path,
+                        type: 'csv',
+                        isPremium: false
+                    };
+                }
+            } else {
+                console.error('Error getting CSV context:', error);
+            }
+
+            return null;
+        }
+    }
     
     async getActiveNoteContent() {
-        // Get current note content from CodeMirror
+        // Get current note content from CodeMirror or CSV editor
         console.log('Getting active note content...');
-        
+
         if (!window.paneManager) {
             console.log('No paneManager found');
             return null;
         }
-        
+
         const activeTabManager = window.paneManager.getActiveTabManager();
         console.log('Active tab manager:', activeTabManager);
-        
+
         if (!activeTabManager) {
             console.log('No active tab manager');
             return null;
         }
-        
+
         const activeTab = activeTabManager.getActiveTab();
         console.log('Active tab:', activeTab);
-        
+
         if (!activeTab) {
             console.log('No active tab');
             return null;
         }
-        
+
         const title = activeTab.title || 'Current Note';
         const filePath = activeTab.filePath;
-        
+
+        // Check if this is a CSV file - use rich context if available
+        const isCsv = filePath?.toLowerCase().endsWith('.csv');
+        if (isCsv) {
+            console.log('Active file is CSV, getting rich context...');
+            const csvContext = await this.getCsvContext(filePath, title);
+            if (csvContext) {
+                return csvContext;
+            }
+            // Fall through to raw content if getCsvContext fails
+        }
+
         // Try to get content from editor first
         let content = '';
-        
+
         if (activeTab.editor) {
             // activeTab.editor is a MarkdownEditor instance
             // Use the getContent method if available
@@ -1217,10 +1326,10 @@ export class EnhancedChatPanel {
                 content = activeTab.editor.state.doc.toString();
             }
         }
-        
+
         // If we couldn't get content from editor, try reading from file
         if ((!content || content.length === 0) && filePath) {
-            console.log('⚠️ No content from editor, trying to read from file:', filePath);
+            console.log('No content from editor, trying to read from file:', filePath);
             try {
                 content = await this.getNoteContent(filePath);
                 console.log('Got content from file:', content?.length || 0, 'chars');
@@ -1228,24 +1337,25 @@ export class EnhancedChatPanel {
                 console.error('Failed to read file:', error);
             }
         }
-        
+
         if (!content || content.length === 0) {
-            console.error('⚠️ No content found! This is why context is lost.');
+            console.error('No content found! This is why context is lost.');
             return null;
         }
-        
+
         console.log('Got content from:', title, 'Length:', content.length);
-        
+
         // Truncate if too long
         const maxLength = this.getContextCharLimit();
-        const truncatedContent = content.length > maxLength 
+        const truncatedContent = content.length > maxLength
             ? content.substring(0, maxLength) + '...[truncated]'
             : content;
-        
+
         return {
             title: title,
             content: truncatedContent,
-            path: filePath
+            path: filePath,
+            type: isCsv ? 'csv' : 'markdown'
         };
     }
     

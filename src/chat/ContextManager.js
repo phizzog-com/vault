@@ -131,33 +131,46 @@ export class ContextManager {
   // Search for notes to add via @ mention
   async searchNotes(query) {
     console.log('🔍 Searching notes for:', query);
-    
+
     try {
       const { invoke } = await import('@tauri-apps/api/core');
       const fileTree = await invoke('get_file_tree');
-      
+
+      // Helper to check if file is supported (markdown or CSV)
+      const isSupportedFile = (file) => {
+        if (file.is_dir) return false;
+        const name = file.name.toLowerCase();
+        return name.endsWith('.md') || name.endsWith('.csv');
+      };
+
+      // Helper to get file type
+      const getFileType = (fileName) => {
+        return fileName.toLowerCase().endsWith('.csv') ? 'csv' : 'markdown';
+      };
+
       // If no query, show recent files or all files
       if (!query) {
         const allFiles = fileTree.files
-          .filter(file => !file.is_dir && file.name.endsWith('.md'))
+          .filter(isSupportedFile)
           .slice(0, 10);
-        
+
         return allFiles.map(file => ({
           path: file.path,
-          name: file.name
+          name: file.name,
+          type: getFileType(file.name)
         }));
       }
-      
+
       // Score-based search for better results
       const scoredResults = fileTree.files
-        .filter(file => !file.is_dir && file.name.endsWith('.md'))
+        .filter(isSupportedFile)
         .map(file => {
           const fileName = file.name.toLowerCase();
           const searchTerm = query.toLowerCase();
           let score = 0;
-          
-          // Exact match
-          if (fileName === searchTerm + '.md') {
+
+          // Exact match (check both .md and .csv extensions)
+          if (fileName === searchTerm + '.md' || fileName === searchTerm + '.csv') {
             score = 100;
           }
           // Starts with query
@@ -185,7 +198,7 @@ export class ContextManager {
               score = 0; // Didn't match all characters
             }
           }
-          
+
           return { file, score };
         })
         .filter(item => item.score > 0)
@@ -193,11 +206,12 @@ export class ContextManager {
         .slice(0, 10)
         .map(item => ({
           path: item.file.path,
-          name: item.file.name
+          name: item.file.name,
+          type: getFileType(item.file.name)
         }));
-      
+
       return scoredResults;
-      
+
     } catch (error) {
       console.error('❌ Error searching notes:', error);
       return [];
