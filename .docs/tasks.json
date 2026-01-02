@@ -4948,7 +4948,7 @@
       "phase": "Phase 4: Frontend Editor",
       "task": "CsvEditor Component",
       "name": "Implement dirty state and save",
-      "passes": false,
+      "passes": true,
       "instructions": [
         "Implement checkDirty() comparing current to saved state",
         "Update isDirty on edits and operations",
@@ -4992,7 +4992,7 @@
       "phase": "Phase 4: Frontend Editor",
       "task": "CSS Styling",
       "name": "Create CSS styles for CSV editor",
-      "passes": false,
+      "passes": true,
       "instructions": [
         "Create src/csv/csv-editor.css",
         "Style toolbar, buttons, row count",
@@ -5016,7 +5016,7 @@
       "phase": "Phase 4: Frontend Editor",
       "task": "TabManager Integration",
       "name": "Integrate CsvEditor with TabManager",
-      "passes": false,
+      "passes": true,
       "instructions": [
         "Modify src/TabManager.js (or equivalent)",
         "Import CsvEditor",
@@ -5040,7 +5040,7 @@
       "phase": "Phase 5: Schema UI (Premium)",
       "task": "Schema Sidebar",
       "name": "Implement schema sidebar in CsvEditor",
-      "passes": false,
+      "passes": true,
       "instructions": [
         "Implement renderSchemaSidebar() in CsvEditor",
         "Show \"No schema\" message with Infer button when no schema",
@@ -5064,7 +5064,7 @@
       "phase": "Phase 5: Schema UI (Premium)",
       "task": "Schema Sidebar",
       "name": "Implement schema editing handlers",
-      "passes": false,
+      "passes": true,
       "instructions": [
         "Implement handleDescriptionChange() to update schema",
         "Implement handleRoleChange() to update semantic role",
@@ -5087,7 +5087,7 @@
       "phase": "Phase 5: Schema UI (Premium)",
       "task": "Relationship Editor",
       "name": "Implement relationship editor modal",
-      "passes": false,
+      "passes": true,
       "instructions": [
         "Create relationship editor modal component",
         "Add local column dropdown (current CSV columns)",

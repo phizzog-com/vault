@@ -51,6 +51,7 @@ export class CsvEditor {
       editingCell: null,    // { row: number, col: number }
       isDirty: false,
       isPremium: false,
+      schemaSidebarOpen: false,  // Schema sidebar visibility
 
       // Working copy for edits
       workingRows: [],      // Copy of data.rows for editing
@@ -61,6 +62,9 @@ export class CsvEditor {
       isLoading: true,
       error: null
     };
+
+    // Schema sidebar element reference
+    this.schemaSidebar = null;
 
     // File info
     this.fileName = filePath ? filePath.split('/').pop() : 'Untitled.csv';
@@ -178,6 +182,16 @@ export class CsvEditor {
     this.toolbar = this.renderToolbar();
     this.container.appendChild(this.toolbar);
 
+    // Add premium banner if truncated
+    if (this.state.data && this.state.data.truncated) {
+      const banner = this.renderTruncationBanner();
+      this.container.appendChild(banner);
+    }
+
+    // Create main content area with flex layout for sidebar
+    const mainContent = document.createElement('div');
+    mainContent.className = 'csv-main-content';
+
     // Create table container with scrolling
     this.tableContainer = document.createElement('div');
     this.tableContainer.className = 'csv-table-container';
@@ -186,13 +200,13 @@ export class CsvEditor {
     this.tableElement = this.renderTable();
     this.tableContainer.appendChild(this.tableElement);
 
-    this.container.appendChild(this.tableContainer);
+    mainContent.appendChild(this.tableContainer);
 
-    // Add premium banner if truncated
-    if (this.state.data && this.state.data.truncated) {
-      const banner = this.renderTruncationBanner();
-      this.container.insertBefore(banner, this.tableContainer);
-    }
+    // Create schema sidebar (always rendered, visibility controlled by CSS)
+    this.schemaSidebar = this.renderSchemaSidebar();
+    mainContent.appendChild(this.schemaSidebar);
+
+    this.container.appendChild(mainContent);
   }
 
   /**
@@ -240,6 +254,15 @@ export class CsvEditor {
       </div>
 
       <div class="editor-header-right">
+        <button class="editor-control-btn csv-schema-btn${this.state.isPremium ? '' : ' locked'}" title="${this.state.isPremium ? 'Toggle Schema Sidebar' : 'Schema (Premium Feature)'}">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="3" y="3" width="7" height="7"></rect>
+            <rect x="14" y="3" width="7" height="7"></rect>
+            <rect x="14" y="14" width="7" height="7"></rect>
+            <rect x="3" y="14" width="7" height="7"></rect>
+          </svg>
+          <span>Schema</span>
+        </button>
         <button class="editor-control-btn csv-save-btn" title="Save (Cmd+S)" disabled>
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
@@ -439,6 +462,562 @@ export class CsvEditor {
   }
 
   /**
+   * Render the schema sidebar
+   * Shows column metadata, data types, semantic roles, and sample values
+   * @returns {HTMLElement}
+   */
+  renderSchemaSidebar() {
+    const sidebar = document.createElement('div');
+    sidebar.className = `csv-schema-sidebar${this.state.schemaSidebarOpen ? ' open' : ''}`;
+
+    // Sidebar header
+    const header = document.createElement('div');
+    header.className = 'csv-schema-sidebar-header';
+    header.innerHTML = `
+      <h3>Schema</h3>
+      <button class="csv-schema-close-btn" title="Close sidebar">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <line x1="18" y1="6" x2="6" y2="18"></line>
+          <line x1="6" y1="6" x2="18" y2="18"></line>
+        </svg>
+      </button>
+    `;
+    sidebar.appendChild(header);
+
+    // Close button handler
+    const closeBtn = header.querySelector('.csv-schema-close-btn');
+    if (closeBtn) {
+      closeBtn.addEventListener('click', () => this.toggleSchemaSidebar());
+    }
+
+    // Sidebar content
+    const content = document.createElement('div');
+    content.className = 'csv-schema-sidebar-content';
+
+    // Check if we have a schema or if user can create one
+    if (!this.state.schema && !this.state.isPremium) {
+      // Free user without schema - show upsell
+      content.innerHTML = this.renderSchemaUpsell();
+    } else if (!this.state.schema) {
+      // Premium user without schema - show infer button
+      content.innerHTML = this.renderNoSchemaState();
+    } else {
+      // Has schema - render column cards and relationships
+      content.innerHTML = this.renderSchemaColumnCards() + this.renderRelationshipsSection();
+    }
+
+    sidebar.appendChild(content);
+
+    return sidebar;
+  }
+
+  /**
+   * Render upsell content for free users
+   * @returns {string} HTML string
+   */
+  renderSchemaUpsell() {
+    return `
+      <div class="csv-schema-upsell">
+        <div class="csv-schema-upsell-icon">
+          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+            <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+          </svg>
+        </div>
+        <h4>Schema is a Premium Feature</h4>
+        <p>Unlock AI-powered schema inference to understand your data better:</p>
+        <ul class="csv-schema-features">
+          <li>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="20 6 9 17 4 12"></polyline>
+            </svg>
+            Automatic data type detection
+          </li>
+          <li>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="20 6 9 17 4 12"></polyline>
+            </svg>
+            Semantic role identification
+          </li>
+          <li>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="20 6 9 17 4 12"></polyline>
+            </svg>
+            AI-optimized context for chat
+          </li>
+          <li>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="20 6 9 17 4 12"></polyline>
+            </svg>
+            Editable column descriptions
+          </li>
+        </ul>
+        <button class="csv-upgrade-btn">Start Free Trial</button>
+      </div>
+    `;
+  }
+
+  /**
+   * Render no schema state for premium users
+   * @returns {string} HTML string
+   */
+  renderNoSchemaState() {
+    return `
+      <div class="csv-schema-empty">
+        <div class="csv-schema-empty-icon">
+          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <rect x="3" y="3" width="7" height="7"></rect>
+            <rect x="14" y="3" width="7" height="7"></rect>
+            <rect x="14" y="14" width="7" height="7"></rect>
+            <rect x="3" y="14" width="7" height="7"></rect>
+          </svg>
+        </div>
+        <h4>No Schema</h4>
+        <p>Infer schema from your data to unlock AI-powered insights and better context for chat.</p>
+        <button class="csv-infer-schema-btn">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M21 2v6h-6"></path>
+            <path d="M3 12a9 9 0 0 1 15-6.7L21 8"></path>
+            <path d="M3 22v-6h6"></path>
+            <path d="M21 12a9 9 0 0 1-15 6.7L3 16"></path>
+          </svg>
+          Infer Schema
+        </button>
+      </div>
+    `;
+  }
+
+  /**
+   * Render column cards when schema is available
+   * @returns {string} HTML string
+   */
+  renderSchemaColumnCards() {
+    const schema = this.state.schema;
+    const columns = schema.columns || [];
+    const isReadOnly = schema.readOnly || false;
+
+    if (columns.length === 0) {
+      return `<p class="csv-schema-empty-text">No columns in schema</p>`;
+    }
+
+    let html = '';
+
+    // Optional: Add re-infer button at top if not read-only
+    if (!isReadOnly) {
+      html += `
+        <div class="csv-schema-actions">
+          <button class="csv-reinfer-schema-btn" title="Re-infer schema from current data">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M21 2v6h-6"></path>
+              <path d="M3 12a9 9 0 0 1 15-6.7L21 8"></path>
+              <path d="M3 22v-6h6"></path>
+              <path d="M21 12a9 9 0 0 1-15 6.7L3 16"></path>
+            </svg>
+            Re-infer
+          </button>
+        </div>
+      `;
+    }
+
+    // Render each column card
+    columns.forEach((col, index) => {
+      const typeBadge = this.getDataTypeBadge(col.dataType);
+      const roleBadge = this.getSemanticRoleBadge(col.semanticRole);
+      const sampleValues = this.getSampleValues(index, 3);
+      const userEditedClass = col.userEdited ? ' user-edited' : '';
+
+      html += `
+        <div class="csv-schema-column-card${userEditedClass}" data-column-index="${index}">
+          <div class="csv-schema-column-header">
+            <span class="csv-schema-column-name">${this.escapeHtml(col.name)}</span>
+            ${col.userEdited ? '<span class="csv-schema-edited-badge">Edited</span>' : ''}
+            <span class="csv-schema-type-badge ${typeBadge.className}">${typeBadge.label}</span>
+          </div>
+
+          <div class="csv-schema-column-role">
+            <label>Role:</label>
+            <select class="csv-schema-role-select" data-column-index="${index}" ${isReadOnly ? 'disabled' : ''}>
+              <option value="unknown" ${roleBadge.value === 'unknown' ? 'selected' : ''}>Unknown</option>
+              <option value="identifier" ${roleBadge.value === 'identifier' ? 'selected' : ''}>Identifier</option>
+              <option value="dimension" ${roleBadge.value === 'dimension' ? 'selected' : ''}>Dimension</option>
+              <option value="measure" ${roleBadge.value === 'measure' ? 'selected' : ''}>Measure</option>
+              <option value="temporal" ${roleBadge.value === 'temporal' ? 'selected' : ''}>Temporal</option>
+              <option value="descriptive" ${roleBadge.value === 'descriptive' ? 'selected' : ''}>Descriptive</option>
+            </select>
+          </div>
+
+          <div class="csv-schema-column-description">
+            <label>Description:</label>
+            <textarea
+              class="csv-schema-description-input"
+              data-column-index="${index}"
+              placeholder="Add a description for AI context..."
+              ${isReadOnly ? 'disabled' : ''}
+            >${this.escapeHtml(col.description || '')}</textarea>
+          </div>
+
+          <div class="csv-schema-column-samples">
+            <label>Sample values:</label>
+            <div class="csv-schema-sample-values">
+              ${sampleValues.map(v => `<span class="csv-schema-sample-value">${this.escapeHtml(v)}</span>`).join('')}
+            </div>
+          </div>
+        </div>
+      `;
+    });
+
+    return html;
+  }
+
+  /**
+   * Get data type badge info
+   * @param {Object} dataType - The DataType object from schema
+   * @returns {Object} { className, label }
+   */
+  getDataTypeBadge(dataType) {
+    if (!dataType || !dataType.type) {
+      return { className: 'type-unknown', label: 'Unknown' };
+    }
+
+    const typeMap = {
+      text: { className: 'type-text', label: 'Text' },
+      integer: { className: 'type-number', label: 'Integer' },
+      decimal: { className: 'type-number', label: 'Decimal' },
+      currency: { className: 'type-currency', label: 'Currency' },
+      date: { className: 'type-date', label: 'Date' },
+      dateTime: { className: 'type-date', label: 'DateTime' },
+      boolean: { className: 'type-boolean', label: 'Boolean' },
+      percentage: { className: 'type-number', label: 'Percentage' },
+      enum: { className: 'type-enum', label: 'Enum' },
+    };
+
+    return typeMap[dataType.type] || { className: 'type-unknown', label: dataType.type };
+  }
+
+  /**
+   * Get semantic role badge info
+   * @param {Object} semanticRole - The SemanticRole object from schema
+   * @returns {Object} { value, label }
+   */
+  getSemanticRoleBadge(semanticRole) {
+    if (!semanticRole || !semanticRole.role) {
+      return { value: 'unknown', label: 'Unknown' };
+    }
+
+    const roleMap = {
+      identifier: { value: 'identifier', label: 'Identifier' },
+      dimension: { value: 'dimension', label: 'Dimension' },
+      measure: { value: 'measure', label: 'Measure' },
+      temporal: { value: 'temporal', label: 'Temporal' },
+      reference: { value: 'reference', label: 'Reference' },
+      descriptive: { value: 'descriptive', label: 'Descriptive' },
+      unknown: { value: 'unknown', label: 'Unknown' },
+    };
+
+    return roleMap[semanticRole.role] || { value: 'unknown', label: semanticRole.role };
+  }
+
+  /**
+   * Get sample values for a column
+   * @param {number} colIndex - Column index
+   * @param {number} count - Number of samples to get
+   * @returns {string[]} Array of sample values
+   */
+  getSampleValues(colIndex, count = 3) {
+    const rows = this.state.workingRows || [];
+    const samples = [];
+    const seen = new Set();
+
+    for (let i = 0; i < rows.length && samples.length < count; i++) {
+      const value = rows[i][colIndex];
+      if (value && value.trim() && !seen.has(value)) {
+        seen.add(value);
+        samples.push(value.length > 30 ? value.substring(0, 30) + '...' : value);
+      }
+    }
+
+    if (samples.length === 0) {
+      samples.push('(no data)');
+    }
+
+    return samples;
+  }
+
+  /**
+   * Toggle the schema sidebar open/closed
+   */
+  toggleSchemaSidebar() {
+    // For free users, show upgrade prompt instead of opening sidebar
+    if (!this.state.isPremium && !this.state.schema) {
+      // Still toggle to show the upsell content
+    }
+
+    this.state.schemaSidebarOpen = !this.state.schemaSidebarOpen;
+
+    // Update sidebar class
+    if (this.schemaSidebar) {
+      if (this.state.schemaSidebarOpen) {
+        this.schemaSidebar.classList.add('open');
+      } else {
+        this.schemaSidebar.classList.remove('open');
+      }
+    }
+
+    // Update button active state
+    const schemaBtn = this.toolbar?.querySelector('.csv-schema-btn');
+    if (schemaBtn) {
+      if (this.state.schemaSidebarOpen) {
+        schemaBtn.classList.add('active');
+      } else {
+        schemaBtn.classList.remove('active');
+      }
+    }
+
+    console.log('Schema sidebar toggled:', this.state.schemaSidebarOpen);
+  }
+
+  /**
+   * Infer schema from current data
+   * Called when user clicks "Infer Schema" button
+   */
+  async inferSchema() {
+    console.log('Inferring schema for:', this.filePath);
+
+    try {
+      // Call Tauri command to infer and create schema
+      const schema = await invoke('get_csv_schema', {
+        path: this.filePath,
+        createIfMissing: true
+      });
+
+      console.log('Schema inferred:', schema);
+
+      this.state.schema = schema;
+      this.state.isPremium = !schema.readOnly;
+
+      // Re-render sidebar content
+      this.refreshSchemaSidebar();
+
+      // Update toolbar premium badge
+      this.refreshToolbar();
+
+    } catch (error) {
+      console.error('Error inferring schema:', error);
+
+      // Check if it's a premium required error
+      if (error.code === 'premiumRequired' || (error.message && error.message.includes('Premium'))) {
+        alert('Schema inference requires a premium license.');
+      } else {
+        alert(`Error inferring schema: ${error.message || error}`);
+      }
+    }
+  }
+
+  /**
+   * Refresh the schema sidebar content
+   */
+  refreshSchemaSidebar() {
+    if (!this.schemaSidebar) return;
+
+    const content = this.schemaSidebar.querySelector('.csv-schema-sidebar-content');
+    if (!content) return;
+
+    // Re-render content based on current state
+    if (!this.state.schema && !this.state.isPremium) {
+      content.innerHTML = this.renderSchemaUpsell();
+    } else if (!this.state.schema) {
+      content.innerHTML = this.renderNoSchemaState();
+    } else {
+      content.innerHTML = this.renderSchemaColumnCards();
+    }
+
+    // Re-attach event handlers for sidebar content
+    this.setupSchemaSidebarHandlers();
+  }
+
+  /**
+   * Refresh the toolbar (e.g., after premium status changes)
+   */
+  refreshToolbar() {
+    if (!this.toolbar || !this.container) return;
+
+    const newToolbar = this.renderToolbar();
+    this.container.replaceChild(newToolbar, this.toolbar);
+    this.toolbar = newToolbar;
+
+    // Re-attach toolbar event handlers
+    const addRowBtn = this.toolbar.querySelector('.csv-add-row-btn');
+    const addColBtn = this.toolbar.querySelector('.csv-add-col-btn');
+    const deleteRowBtn = this.toolbar.querySelector('.csv-delete-row-btn');
+    const saveBtn = this.toolbar.querySelector('.csv-save-btn');
+    const schemaBtn = this.toolbar.querySelector('.csv-schema-btn');
+
+    if (addRowBtn) addRowBtn.addEventListener('click', () => this.addRow());
+    if (addColBtn) addColBtn.addEventListener('click', () => this.addColumn());
+    if (deleteRowBtn) deleteRowBtn.addEventListener('click', () => this.deleteRow());
+    if (saveBtn) saveBtn.addEventListener('click', () => this.save());
+    if (schemaBtn) schemaBtn.addEventListener('click', () => this.toggleSchemaSidebar());
+  }
+
+  /**
+   * Set up event handlers for schema sidebar interactive elements
+   */
+  setupSchemaSidebarHandlers() {
+    if (!this.schemaSidebar) return;
+
+    // Infer schema button
+    const inferBtn = this.schemaSidebar.querySelector('.csv-infer-schema-btn');
+    if (inferBtn) {
+      inferBtn.addEventListener('click', () => this.inferSchema());
+    }
+
+    // Re-infer schema button
+    const reinferBtn = this.schemaSidebar.querySelector('.csv-reinfer-schema-btn');
+    if (reinferBtn) {
+      reinferBtn.addEventListener('click', () => this.inferSchema());
+    }
+
+    // Description textareas - auto-save on blur
+    const descriptionInputs = this.schemaSidebar.querySelectorAll('.csv-schema-description-input');
+    descriptionInputs.forEach(textarea => {
+      textarea.addEventListener('blur', (e) => this.handleDescriptionChange(e));
+    });
+
+    // Role dropdowns
+    const roleSelects = this.schemaSidebar.querySelectorAll('.csv-schema-role-select');
+    roleSelects.forEach(select => {
+      select.addEventListener('change', (e) => this.handleRoleChange(e));
+    });
+
+    // Relationship handlers
+    this.setupRelationshipHandlers();
+  }
+
+  /**
+   * Handle description change for a column
+   * @param {Event} e - Blur event from textarea
+   */
+  handleDescriptionChange(e) {
+    const textarea = e.target;
+    const colIndex = parseInt(textarea.dataset.columnIndex, 10);
+    const newDescription = textarea.value.trim();
+
+    if (!this.state.schema || isNaN(colIndex)) return;
+    if (this.state.schema.readOnly) return;
+
+    const column = this.state.schema.columns[colIndex];
+    if (!column) return;
+
+    // Only update if changed
+    if (column.description !== newDescription) {
+      column.description = newDescription;
+
+      // Mark as user-edited
+      column.userEdited = true;
+
+      // Add visual indicator to the card
+      const card = textarea.closest('.csv-schema-column-card');
+      if (card) {
+        card.classList.add('user-edited');
+      }
+
+      this.state.isDirty = true;
+      this.updateSaveButtonState();
+      this.updateDirtyIndicator();
+      console.log(`Updated description for column ${colIndex}:`, newDescription);
+
+      // Auto-save schema after a short delay (debounced)
+      this.debouncedSaveSchema();
+    }
+  }
+
+  /**
+   * Handle semantic role change for a column
+   * @param {Event} e - Change event from select
+   */
+  handleRoleChange(e) {
+    const select = e.target;
+    const colIndex = parseInt(select.dataset.columnIndex, 10);
+    const newRole = select.value;
+
+    if (!this.state.schema || isNaN(colIndex)) return;
+    if (this.state.schema.readOnly) return;
+
+    const column = this.state.schema.columns[colIndex];
+    if (!column) return;
+
+    // Update the semantic role
+    column.semanticRole = { role: newRole };
+
+    // Mark as user-edited
+    column.userEdited = true;
+
+    // Add visual indicator to the card
+    const card = select.closest('.csv-schema-column-card');
+    if (card) {
+      card.classList.add('user-edited');
+    }
+
+    this.state.isDirty = true;
+    this.updateSaveButtonState();
+    this.updateDirtyIndicator();
+    console.log(`Updated role for column ${colIndex}:`, newRole);
+
+    // Auto-save schema after a short delay (debounced)
+    this.debouncedSaveSchema();
+  }
+
+  /**
+   * Debounced save schema - waits 500ms after last edit before saving
+   */
+  debouncedSaveSchema() {
+    // Clear any pending save
+    if (this.schemaSaveTimeout) {
+      clearTimeout(this.schemaSaveTimeout);
+    }
+
+    // Schedule new save
+    this.schemaSaveTimeout = setTimeout(() => {
+      this.saveSchema();
+    }, 500);
+  }
+
+  /**
+   * Save schema to disk via Tauri command
+   * Called automatically after schema edits
+   */
+  async saveSchema() {
+    if (!this.state.schema || this.state.schema.readOnly) {
+      console.log('Cannot save schema: no schema or read-only');
+      return;
+    }
+
+    console.log('Saving schema for:', this.filePath);
+
+    try {
+      // Call Tauri command to save schema
+      // Note: Tauri v2 auto-converts camelCase JS to snake_case Rust
+      await invoke('save_csv_schema', {
+        path: this.filePath,
+        schema: this.state.schema
+      });
+
+      console.log('Schema saved successfully');
+
+    } catch (error) {
+      console.error('Error saving schema:', error);
+
+      // Check if it's a premium required error
+      if (error.code === 'premiumRequired' || (error.message && error.message.includes('Premium'))) {
+        console.warn('Schema save requires premium license');
+      } else {
+        // Show error notification for other errors
+        console.error(`Failed to save schema: ${error.message || error}`);
+      }
+    }
+  }
+
+  /**
    * Render error state
    */
   renderError() {
@@ -494,16 +1073,21 @@ export class CsvEditor {
       const addColBtn = this.toolbar.querySelector('.csv-add-col-btn');
       const deleteRowBtn = this.toolbar.querySelector('.csv-delete-row-btn');
       const saveBtn = this.toolbar.querySelector('.csv-save-btn');
+      const schemaBtn = this.toolbar.querySelector('.csv-schema-btn');
 
       if (addRowBtn) addRowBtn.addEventListener('click', () => this.addRow());
       if (addColBtn) addColBtn.addEventListener('click', () => this.addColumn());
       if (deleteRowBtn) deleteRowBtn.addEventListener('click', () => this.deleteRow());
       if (saveBtn) saveBtn.addEventListener('click', () => this.save());
+      if (schemaBtn) schemaBtn.addEventListener('click', () => this.toggleSchemaSidebar());
     }
 
     // Keyboard navigation
     this.boundKeydownHandler = (e) => this.handleKeydown(e);
     document.addEventListener('keydown', this.boundKeydownHandler);
+
+    // Schema sidebar handlers
+    this.setupSchemaSidebarHandlers();
   }
 
   /**
@@ -1398,11 +1982,128 @@ export class CsvEditor {
   }
 
   /**
-   * Save changes to disk (placeholder - full implementation in csv-4.6)
+   * Save changes to disk
+   * Calls save_csv_data Tauri command and updates state on success
    */
   async save() {
     console.log('Save triggered');
-    // Full implementation in csv-4.6
+
+    // Nothing to save if not dirty
+    if (!this.state.isDirty) {
+      console.log('No changes to save');
+      return;
+    }
+
+    // If currently editing a cell, finish editing first
+    if (this.state.editingCell) {
+      this.finishEditing();
+    }
+
+    // Show saving status
+    this.showSaveStatus('saving');
+
+    try {
+      // Call Tauri command to save CSV data
+      // Note: Tauri v2 auto-converts camelCase JS to snake_case Rust
+      await invoke('save_csv_data', {
+        path: this.filePath,
+        headers: this.state.data.headers,
+        rows: this.state.workingRows
+      });
+
+      console.log('CSV data saved successfully');
+
+      // Update saved state snapshots (deep copy)
+      this.state.savedRows = this.state.workingRows.map(row => [...row]);
+      this.state.savedHeaders = [...this.state.data.headers];
+
+      // Clear dirty state
+      this.state.isDirty = false;
+      this.updateSaveButtonState();
+      this.updateDirtyIndicator();
+
+      // Show success feedback
+      this.showSaveStatus('success');
+
+      // Clear success message after delay
+      setTimeout(() => {
+        this.showSaveStatus('idle');
+      }, 2000);
+
+    } catch (error) {
+      console.error('Error saving CSV:', error);
+
+      // Show error feedback
+      this.showSaveStatus('error', error.message || 'Failed to save file');
+    }
+  }
+
+  /**
+   * Show save status feedback in the toolbar
+   * @param {'idle' | 'saving' | 'success' | 'error'} status - Current save status
+   * @param {string} [errorMessage] - Error message if status is 'error'
+   */
+  showSaveStatus(status, errorMessage) {
+    const saveBtn = this.toolbar?.querySelector('.csv-save-btn');
+    if (!saveBtn) return;
+
+    // Remove any existing status classes
+    saveBtn.classList.remove('saving', 'save-success', 'save-error');
+
+    // Get or create the button text span
+    let textSpan = saveBtn.querySelector('span');
+
+    switch (status) {
+      case 'saving':
+        saveBtn.classList.add('saving');
+        saveBtn.disabled = true;
+        if (textSpan) textSpan.textContent = 'Saving...';
+        break;
+
+      case 'success':
+        saveBtn.classList.add('save-success');
+        saveBtn.disabled = true;
+        if (textSpan) textSpan.textContent = 'Saved';
+        break;
+
+      case 'error':
+        saveBtn.classList.add('save-error');
+        saveBtn.disabled = false;
+        if (textSpan) textSpan.textContent = 'Save Failed';
+        // Show error alert
+        alert(`Error saving file: ${errorMessage}`);
+        // Reset button text after a moment
+        setTimeout(() => {
+          if (textSpan) textSpan.textContent = 'Save';
+          saveBtn.classList.remove('save-error');
+          this.updateSaveButtonState();
+        }, 3000);
+        break;
+
+      case 'idle':
+      default:
+        if (textSpan) textSpan.textContent = 'Save';
+        this.updateSaveButtonState();
+        break;
+    }
+  }
+
+  /**
+   * Check if there are unsaved changes and prompt for confirmation
+   * Used before closing the editor
+   * @returns {Promise<boolean>} True if it's safe to close, false to cancel
+   */
+  async confirmClose() {
+    if (!this.state.isDirty) {
+      return true; // No unsaved changes, safe to close
+    }
+
+    // Show confirmation dialog
+    const result = confirm(
+      `"${this.fileName}" has unsaved changes.\n\nDo you want to discard your changes?`
+    );
+
+    return result; // true = discard and close, false = cancel close
   }
 
   /**
@@ -1485,6 +2186,15 @@ export class CsvEditor {
   unmount() {
     console.log('Unmounting CSV editor');
 
+    // Clear any pending schema save
+    if (this.schemaSaveTimeout) {
+      clearTimeout(this.schemaSaveTimeout);
+      this.schemaSaveTimeout = null;
+    }
+
+    // Close relationship modal if open
+    this.closeRelationshipEditor();
+
     // Remove keyboard handler
     if (this.boundKeydownHandler) {
       document.removeEventListener('keydown', this.boundKeydownHandler);
@@ -1526,5 +2236,459 @@ export class CsvEditor {
    */
   hasUnsavedChanges() {
     return this.state.isDirty;
+  }
+
+  // ===========================================================================
+  // Relationship Editor
+  // ===========================================================================
+
+  /**
+   * Render the relationships section in the sidebar
+   * @returns {string} HTML string
+   */
+  renderRelationshipsSection() {
+    const schema = this.state.schema;
+    const relationships = schema?.relationships || [];
+    const isReadOnly = schema?.readOnly || false;
+
+    let html = `
+      <div class="csv-schema-relationships-section">
+        <div class="csv-schema-relationships-header">
+          <h4>Relationships</h4>
+          ${!isReadOnly ? `
+            <button class="csv-add-relationship-btn" title="Add relationship">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <line x1="12" y1="5" x2="12" y2="19"></line>
+                <line x1="5" y1="12" x2="19" y2="12"></line>
+              </svg>
+            </button>
+          ` : ''}
+        </div>
+    `;
+
+    if (relationships.length === 0) {
+      html += `
+        <div class="csv-schema-relationships-empty">
+          <p>No relationships defined</p>
+          ${!isReadOnly ? `
+            <button class="csv-add-relationship-btn-empty">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <line x1="12" y1="5" x2="12" y2="19"></line>
+                <line x1="5" y1="12" x2="19" y2="12"></line>
+              </svg>
+              Add Relationship
+            </button>
+          ` : ''}
+        </div>
+      `;
+    } else {
+      html += `<div class="csv-schema-relationships-list">`;
+      relationships.forEach((rel, index) => {
+        const cardinalityLabel = this.getCardinalityLabel(rel.cardinality);
+        html += `
+          <div class="csv-schema-relationship-card" data-relationship-index="${index}">
+            <div class="csv-relationship-header">
+              <span class="csv-relationship-name">${this.escapeHtml(rel.name || 'Unnamed')}</span>
+              ${!isReadOnly ? `
+                <div class="csv-relationship-actions">
+                  <button class="csv-edit-relationship-btn" data-index="${index}" title="Edit relationship">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                      <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                    </svg>
+                  </button>
+                  <button class="csv-delete-relationship-btn" data-index="${index}" title="Delete relationship">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <polyline points="3 6 5 6 21 6"></polyline>
+                      <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                    </svg>
+                  </button>
+                </div>
+              ` : ''}
+            </div>
+            <div class="csv-relationship-details">
+              <div class="csv-relationship-mapping">
+                <span class="csv-relationship-local">${this.escapeHtml(rel.localColumn)}</span>
+                <span class="csv-relationship-arrow">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="5" y1="12" x2="19" y2="12"></line>
+                    <polyline points="12 5 19 12 12 19"></polyline>
+                  </svg>
+                </span>
+                <span class="csv-relationship-foreign">${this.escapeHtml(rel.foreignFile)}.${this.escapeHtml(rel.foreignColumn)}</span>
+              </div>
+              <span class="csv-relationship-cardinality">${cardinalityLabel}</span>
+            </div>
+          </div>
+        `;
+      });
+      html += `</div>`;
+    }
+
+    html += `</div>`;
+    return html;
+  }
+
+  /**
+   * Get human-readable label for cardinality
+   * @param {string} cardinality - The cardinality value
+   * @returns {string} Human-readable label
+   */
+  getCardinalityLabel(cardinality) {
+    const labels = {
+      oneToOne: 'One-to-One',
+      oneToMany: 'One-to-Many',
+      manyToOne: 'Many-to-One',
+      manyToMany: 'Many-to-Many'
+    };
+    return labels[cardinality] || cardinality;
+  }
+
+  /**
+   * Open the relationship editor modal
+   * @param {number|null} editIndex - Index of relationship to edit, or null for new
+   */
+  async openRelationshipEditor(editIndex = null) {
+    console.log('Opening relationship editor, editIndex:', editIndex);
+
+    // Get existing relationship if editing
+    const existingRelationship = editIndex !== null
+      ? this.state.schema?.relationships?.[editIndex]
+      : null;
+
+    // Create modal overlay
+    const overlay = document.createElement('div');
+    overlay.className = 'csv-relationship-modal-overlay';
+
+    // Create modal content
+    const modal = document.createElement('div');
+    modal.className = 'csv-relationship-modal';
+
+    modal.innerHTML = `
+      <div class="csv-relationship-modal-header">
+        <h3>${editIndex !== null ? 'Edit Relationship' : 'Add Relationship'}</h3>
+        <button class="csv-relationship-modal-close" title="Close">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+          </svg>
+        </button>
+      </div>
+      <div class="csv-relationship-modal-body">
+        <div class="csv-relationship-form-group">
+          <label for="rel-name">Relationship Name</label>
+          <input type="text" id="rel-name" class="csv-relationship-input"
+                 placeholder="e.g., Customer Orders"
+                 value="${existingRelationship?.name || ''}">
+        </div>
+
+        <div class="csv-relationship-form-group">
+          <label for="rel-local-column">Local Column</label>
+          <select id="rel-local-column" class="csv-relationship-select">
+            <option value="">Select column...</option>
+            ${(this.state.data?.headers || []).map(header =>
+              `<option value="${this.escapeHtml(header)}"
+                       ${existingRelationship?.localColumn === header ? 'selected' : ''}>
+                 ${this.escapeHtml(header)}
+               </option>`
+            ).join('')}
+          </select>
+        </div>
+
+        <div class="csv-relationship-form-group">
+          <label for="rel-foreign-file">Foreign File</label>
+          <select id="rel-foreign-file" class="csv-relationship-select">
+            <option value="">Select CSV file...</option>
+            <option value="" disabled>Loading files...</option>
+          </select>
+        </div>
+
+        <div class="csv-relationship-form-group">
+          <label for="rel-foreign-column">Foreign Column</label>
+          <select id="rel-foreign-column" class="csv-relationship-select" disabled>
+            <option value="">Select foreign file first...</option>
+          </select>
+        </div>
+
+        <div class="csv-relationship-form-group">
+          <label for="rel-cardinality">Cardinality</label>
+          <select id="rel-cardinality" class="csv-relationship-select">
+            <option value="oneToOne" ${existingRelationship?.cardinality === 'oneToOne' ? 'selected' : ''}>One-to-One</option>
+            <option value="oneToMany" ${existingRelationship?.cardinality === 'oneToMany' ? 'selected' : ''}>One-to-Many</option>
+            <option value="manyToOne" ${existingRelationship?.cardinality === 'manyToOne' ? 'selected' : ''}>Many-to-One</option>
+            <option value="manyToMany" ${existingRelationship?.cardinality === 'manyToMany' ? 'selected' : ''}>Many-to-Many</option>
+          </select>
+        </div>
+      </div>
+      <div class="csv-relationship-modal-footer">
+        <button class="csv-relationship-cancel-btn">Cancel</button>
+        <button class="csv-relationship-save-btn">
+          ${editIndex !== null ? 'Save Changes' : 'Add Relationship'}
+        </button>
+      </div>
+    `;
+
+    overlay.appendChild(modal);
+    document.body.appendChild(overlay);
+
+    // Store reference for cleanup
+    this.relationshipModal = overlay;
+    this.relationshipEditIndex = editIndex;
+
+    // Set up event handlers
+    const closeBtn = modal.querySelector('.csv-relationship-modal-close');
+    const cancelBtn = modal.querySelector('.csv-relationship-cancel-btn');
+    const saveBtn = modal.querySelector('.csv-relationship-save-btn');
+    const foreignFileSelect = modal.querySelector('#rel-foreign-file');
+    const foreignColumnSelect = modal.querySelector('#rel-foreign-column');
+
+    closeBtn.addEventListener('click', () => this.closeRelationshipEditor());
+    cancelBtn.addEventListener('click', () => this.closeRelationshipEditor());
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay) this.closeRelationshipEditor();
+    });
+
+    saveBtn.addEventListener('click', () => this.saveRelationship());
+
+    foreignFileSelect.addEventListener('change', async (e) => {
+      await this.loadForeignColumns(e.target.value, foreignColumnSelect);
+    });
+
+    // Load CSV files for the foreign file dropdown
+    await this.loadCsvFiles(foreignFileSelect, existingRelationship?.foreignFile);
+
+    // If editing and has foreign file, load its columns
+    if (existingRelationship?.foreignFile) {
+      await this.loadForeignColumns(existingRelationship.foreignFile, foreignColumnSelect, existingRelationship.foreignColumn);
+    }
+
+    // Focus the name input
+    modal.querySelector('#rel-name').focus();
+  }
+
+  /**
+   * Load CSV files for the foreign file dropdown
+   * @param {HTMLSelectElement} selectElement - The select element to populate
+   * @param {string|null} selectedValue - Value to pre-select
+   */
+  async loadCsvFiles(selectElement, selectedValue = null) {
+    try {
+      const csvFiles = await invoke('list_csv_files');
+
+      // Filter out current file and build options
+      const options = csvFiles
+        .filter(file => file.path !== this.filePath)
+        .map(file => {
+          const selected = file.path === selectedValue ? 'selected' : '';
+          const displayName = file.name || file.path.split('/').pop();
+          return `<option value="${this.escapeHtml(file.path)}" ${selected}>${this.escapeHtml(displayName)}</option>`;
+        });
+
+      selectElement.innerHTML = `
+        <option value="">Select CSV file...</option>
+        ${options.join('')}
+      `;
+
+      if (options.length === 0) {
+        selectElement.innerHTML = `
+          <option value="">No other CSV files found</option>
+        `;
+      }
+    } catch (error) {
+      console.error('Error loading CSV files:', error);
+      selectElement.innerHTML = `
+        <option value="">Error loading files</option>
+      `;
+    }
+  }
+
+  /**
+   * Load columns from a foreign CSV file
+   * @param {string} filePath - Path to the foreign CSV file
+   * @param {HTMLSelectElement} selectElement - The select element to populate
+   * @param {string|null} selectedValue - Value to pre-select
+   */
+  async loadForeignColumns(filePath, selectElement, selectedValue = null) {
+    if (!filePath) {
+      selectElement.innerHTML = `<option value="">Select foreign file first...</option>`;
+      selectElement.disabled = true;
+      return;
+    }
+
+    selectElement.innerHTML = `<option value="">Loading columns...</option>`;
+    selectElement.disabled = true;
+
+    try {
+      // Read the foreign CSV to get its headers
+      const foreignData = await invoke('read_csv_data', {
+        path: filePath,
+        maxRows: 1 // We only need headers
+      });
+
+      const options = foreignData.headers.map(header => {
+        const selected = header === selectedValue ? 'selected' : '';
+        return `<option value="${this.escapeHtml(header)}" ${selected}>${this.escapeHtml(header)}</option>`;
+      });
+
+      selectElement.innerHTML = `
+        <option value="">Select column...</option>
+        ${options.join('')}
+      `;
+      selectElement.disabled = false;
+
+    } catch (error) {
+      console.error('Error loading foreign columns:', error);
+      selectElement.innerHTML = `<option value="">Error loading columns</option>`;
+      selectElement.disabled = true;
+    }
+  }
+
+  /**
+   * Save the relationship from the modal form
+   */
+  async saveRelationship() {
+    const modal = this.relationshipModal?.querySelector('.csv-relationship-modal');
+    if (!modal) return;
+
+    // Get form values
+    const name = modal.querySelector('#rel-name').value.trim();
+    const localColumn = modal.querySelector('#rel-local-column').value;
+    const foreignFile = modal.querySelector('#rel-foreign-file').value;
+    const foreignColumn = modal.querySelector('#rel-foreign-column').value;
+    const cardinality = modal.querySelector('#rel-cardinality').value;
+
+    // Validate
+    if (!name) {
+      alert('Please enter a relationship name');
+      return;
+    }
+    if (!localColumn) {
+      alert('Please select a local column');
+      return;
+    }
+    if (!foreignFile) {
+      alert('Please select a foreign file');
+      return;
+    }
+    if (!foreignColumn) {
+      alert('Please select a foreign column');
+      return;
+    }
+
+    // Create relationship object
+    const relationship = {
+      name,
+      localColumn,
+      foreignFile,
+      foreignColumn,
+      cardinality
+    };
+
+    console.log('Saving relationship:', relationship);
+
+    // Update schema
+    if (!this.state.schema) {
+      console.error('No schema available');
+      return;
+    }
+
+    // Initialize relationships array if needed
+    if (!this.state.schema.relationships) {
+      this.state.schema.relationships = [];
+    }
+
+    if (this.relationshipEditIndex !== null) {
+      // Update existing relationship
+      this.state.schema.relationships[this.relationshipEditIndex] = relationship;
+    } else {
+      // Add new relationship
+      this.state.schema.relationships.push(relationship);
+    }
+
+    // Mark as dirty and save schema
+    this.state.isDirty = true;
+    this.updateSaveButtonState();
+    this.updateDirtyIndicator();
+
+    // Save schema to backend
+    await this.saveSchema();
+
+    // Close modal and refresh sidebar
+    this.closeRelationshipEditor();
+    this.refreshSchemaSidebar();
+  }
+
+  /**
+   * Delete a relationship by index
+   * @param {number} index - Index of the relationship to delete
+   */
+  async deleteRelationship(index) {
+    if (!this.state.schema?.relationships) return;
+
+    const relationship = this.state.schema.relationships[index];
+    if (!relationship) return;
+
+    // Confirm deletion
+    const confirmed = confirm(`Delete relationship "${relationship.name || 'Unnamed'}"?`);
+    if (!confirmed) return;
+
+    console.log('Deleting relationship at index:', index);
+
+    // Remove from array
+    this.state.schema.relationships.splice(index, 1);
+
+    // Mark as dirty and save
+    this.state.isDirty = true;
+    this.updateSaveButtonState();
+    this.updateDirtyIndicator();
+
+    // Save schema to backend
+    await this.saveSchema();
+
+    // Refresh sidebar
+    this.refreshSchemaSidebar();
+  }
+
+  /**
+   * Close the relationship editor modal
+   */
+  closeRelationshipEditor() {
+    if (this.relationshipModal) {
+      this.relationshipModal.remove();
+      this.relationshipModal = null;
+      this.relationshipEditIndex = null;
+    }
+  }
+
+  /**
+   * Set up event handlers for relationship buttons in sidebar
+   * Called after sidebar content is refreshed
+   */
+  setupRelationshipHandlers() {
+    if (!this.schemaSidebar) return;
+
+    // Add relationship buttons
+    const addBtns = this.schemaSidebar.querySelectorAll('.csv-add-relationship-btn, .csv-add-relationship-btn-empty');
+    addBtns.forEach(btn => {
+      btn.addEventListener('click', () => this.openRelationshipEditor());
+    });
+
+    // Edit relationship buttons
+    const editBtns = this.schemaSidebar.querySelectorAll('.csv-edit-relationship-btn');
+    editBtns.forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        const index = parseInt(e.currentTarget.dataset.index, 10);
+        this.openRelationshipEditor(index);
+      });
+    });
+
+    // Delete relationship buttons
+    const deleteBtns = this.schemaSidebar.querySelectorAll('.csv-delete-relationship-btn');
+    deleteBtns.forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        const index = parseInt(e.currentTarget.dataset.index, 10);
+        this.deleteRelationship(index);
+      });
+    });
   }
 }
