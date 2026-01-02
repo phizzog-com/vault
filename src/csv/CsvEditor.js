@@ -847,7 +847,7 @@ export class CsvEditor {
   }
 
   /**
-   * Handle keyboard events (placeholder - full implementation in csv-4.4)
+   * Handle keyboard events for navigation and editing
    * @param {KeyboardEvent} e
    */
   handleKeydown(e) {
@@ -862,9 +862,366 @@ export class CsvEditor {
         e.preventDefault();
         this.save();
       }
+      return;
     }
 
-    // Full keyboard navigation implementation in csv-4.4
+    // Undo: Cmd/Ctrl + Z (when not editing - CodeMirror handles its own undo)
+    if ((e.metaKey || e.ctrlKey) && e.key === 'z' && !e.shiftKey) {
+      if (!this.state.editingCell) {
+        e.preventDefault();
+        this.undo();
+      }
+      return;
+    }
+
+    // Redo: Cmd/Ctrl + Shift + Z or Cmd/Ctrl + Y
+    if ((e.metaKey || e.ctrlKey) && (e.key === 'y' || (e.key === 'z' && e.shiftKey))) {
+      if (!this.state.editingCell) {
+        e.preventDefault();
+        this.redo();
+      }
+      return;
+    }
+
+    // If currently editing, let CodeMirror handle all other keys
+    // (CodeMirror already handles Enter, Escape, Tab, Shift+Tab via its keymap)
+    if (this.state.editingCell) {
+      return;
+    }
+
+    // Navigation and editing keys only apply when not editing
+    const { selectedCell } = this.state;
+    const headers = this.state.data?.headers || [];
+    const rows = this.state.workingRows || [];
+    const numCols = headers.length;
+    const numRows = rows.length;
+
+    // No data to navigate
+    if (numCols === 0 || numRows === 0) {
+      return;
+    }
+
+    switch (e.key) {
+      case 'ArrowUp':
+        e.preventDefault();
+        if (selectedCell && selectedCell.row > 0) {
+          this.selectCell(selectedCell.row - 1, selectedCell.col);
+        } else if (!selectedCell) {
+          // Select first cell if nothing selected
+          this.selectCell(0, 0);
+        }
+        break;
+
+      case 'ArrowDown':
+        e.preventDefault();
+        if (selectedCell && selectedCell.row < numRows - 1) {
+          this.selectCell(selectedCell.row + 1, selectedCell.col);
+        } else if (!selectedCell) {
+          this.selectCell(0, 0);
+        }
+        break;
+
+      case 'ArrowLeft':
+        e.preventDefault();
+        if (selectedCell && selectedCell.col > 0) {
+          this.selectCell(selectedCell.row, selectedCell.col - 1);
+        } else if (!selectedCell) {
+          this.selectCell(0, 0);
+        }
+        break;
+
+      case 'ArrowRight':
+        e.preventDefault();
+        if (selectedCell && selectedCell.col < numCols - 1) {
+          this.selectCell(selectedCell.row, selectedCell.col + 1);
+        } else if (!selectedCell) {
+          this.selectCell(0, 0);
+        }
+        break;
+
+      case 'Tab':
+        e.preventDefault();
+        if (selectedCell) {
+          if (e.shiftKey) {
+            // Shift+Tab: Move to previous cell with row wrap
+            this.moveToPreviousCell(selectedCell.row, selectedCell.col);
+          } else {
+            // Tab: Move to next cell with row wrap
+            this.moveToNextCell(selectedCell.row, selectedCell.col);
+          }
+        } else {
+          // Select first cell if nothing selected
+          this.selectCell(0, 0);
+        }
+        break;
+
+      case 'Enter':
+        e.preventDefault();
+        if (selectedCell) {
+          this.startEditing(selectedCell.row, selectedCell.col);
+        } else {
+          // Select and edit first cell
+          this.selectCell(0, 0);
+          this.startEditing(0, 0);
+        }
+        break;
+
+      case 'Delete':
+      case 'Backspace':
+        // Clear cell content without entering edit mode
+        if (selectedCell) {
+          e.preventDefault();
+          this.clearCell(selectedCell.row, selectedCell.col);
+        }
+        break;
+
+      default:
+        // For printable characters, start editing and insert the character
+        if (selectedCell && e.key.length === 1 && !e.metaKey && !e.ctrlKey) {
+          e.preventDefault();
+          this.startEditingWithInitialValue(selectedCell.row, selectedCell.col, e.key);
+        }
+        break;
+    }
+  }
+
+  /**
+   * Move selection to next cell with row wrap
+   * @param {number} row - Current row
+   * @param {number} col - Current column
+   */
+  moveToNextCell(row, col) {
+    const headers = this.state.data?.headers || [];
+    const rows = this.state.workingRows || [];
+    const numCols = headers.length;
+    const numRows = rows.length;
+
+    let nextRow = row;
+    let nextCol = col + 1;
+
+    // Wrap to next row if at end of columns
+    if (nextCol >= numCols) {
+      nextCol = 0;
+      nextRow = row + 1;
+    }
+
+    // Check if within bounds
+    if (nextRow < numRows) {
+      this.selectCell(nextRow, nextCol);
+    }
+    // If at last cell, stay there (don't wrap to beginning)
+  }
+
+  /**
+   * Move selection to previous cell with row wrap
+   * @param {number} row - Current row
+   * @param {number} col - Current column
+   */
+  moveToPreviousCell(row, col) {
+    const headers = this.state.data?.headers || [];
+    const numCols = headers.length;
+
+    let prevRow = row;
+    let prevCol = col - 1;
+
+    // Wrap to previous row if at start of columns
+    if (prevCol < 0) {
+      prevCol = numCols - 1;
+      prevRow = row - 1;
+    }
+
+    // Check if within bounds
+    if (prevRow >= 0) {
+      this.selectCell(prevRow, prevCol);
+    }
+    // If at first cell, stay there (don't wrap to end)
+  }
+
+  /**
+   * Clear cell content
+   * @param {number} row - Row index
+   * @param {number} col - Column index
+   */
+  clearCell(row, col) {
+    const currentValue = this.state.workingRows[row]?.[col] ?? '';
+
+    if (currentValue !== '') {
+      // Save for undo
+      this.saveUndoState();
+
+      // Clear the cell
+      if (this.state.workingRows[row]) {
+        this.state.workingRows[row][col] = '';
+      }
+
+      // Update the display
+      const cellElement = this.tableElement?.querySelector(`td[data-row="${row}"][data-col="${col}"]`);
+      if (cellElement) {
+        const textSpan = cellElement.querySelector('.csv-cell-text');
+        if (textSpan) {
+          textSpan.textContent = '';
+        }
+        cellElement.title = '';
+      }
+
+      // Check dirty state
+      this.checkDirty();
+
+      console.log('Cell cleared:', { row, col });
+    }
+  }
+
+  /**
+   * Start editing with an initial value (for typing to replace)
+   * @param {number} row - Row index
+   * @param {number} col - Column index
+   * @param {string} initialValue - Initial character to insert
+   */
+  startEditingWithInitialValue(row, col, initialValue) {
+    // Start editing normally first
+    this.startEditing(row, col);
+
+    // Then replace content with the initial value
+    if (this.cellEditor) {
+      this.cellEditor.dispatch({
+        changes: {
+          from: 0,
+          to: this.cellEditor.state.doc.length,
+          insert: initialValue
+        },
+        selection: { anchor: initialValue.length }
+      });
+    }
+  }
+
+  /**
+   * Save current state for undo
+   */
+  saveUndoState() {
+    // Initialize undo stack if needed
+    if (!this.undoStack) {
+      this.undoStack = [];
+    }
+    if (!this.redoStack) {
+      this.redoStack = [];
+    }
+
+    // Deep copy current working rows
+    const currentState = this.state.workingRows.map(row => [...row]);
+    this.undoStack.push(currentState);
+
+    // Clear redo stack on new action
+    this.redoStack = [];
+
+    // Limit undo history to 50 states
+    if (this.undoStack.length > 50) {
+      this.undoStack.shift();
+    }
+  }
+
+  /**
+   * Undo last change
+   */
+  undo() {
+    if (!this.undoStack || this.undoStack.length === 0) {
+      console.log('Nothing to undo');
+      return;
+    }
+
+    // Save current state to redo stack
+    if (!this.redoStack) {
+      this.redoStack = [];
+    }
+    const currentState = this.state.workingRows.map(row => [...row]);
+    this.redoStack.push(currentState);
+
+    // Restore previous state
+    const previousState = this.undoStack.pop();
+    this.state.workingRows = previousState;
+
+    // Re-render table
+    this.refreshTable();
+
+    // Check dirty state
+    this.checkDirty();
+
+    console.log('Undo performed');
+  }
+
+  /**
+   * Redo last undone change
+   */
+  redo() {
+    if (!this.redoStack || this.redoStack.length === 0) {
+      console.log('Nothing to redo');
+      return;
+    }
+
+    // Save current state to undo stack
+    if (!this.undoStack) {
+      this.undoStack = [];
+    }
+    const currentState = this.state.workingRows.map(row => [...row]);
+    this.undoStack.push(currentState);
+
+    // Restore redo state
+    const redoState = this.redoStack.pop();
+    this.state.workingRows = redoState;
+
+    // Re-render table
+    this.refreshTable();
+
+    // Check dirty state
+    this.checkDirty();
+
+    console.log('Redo performed');
+  }
+
+  /**
+   * Refresh the table display after data changes
+   */
+  refreshTable() {
+    if (!this.tableContainer) return;
+
+    // Store current selection
+    const { selectedCell } = this.state;
+
+    // Re-render table
+    if (this.tableElement) {
+      this.tableElement.remove();
+    }
+    this.tableElement = this.renderTable();
+    this.tableContainer.appendChild(this.tableElement);
+
+    // Re-attach table event handlers
+    if (this.tableElement && this.tableElement.tagName === 'TABLE') {
+      this.tableElement.addEventListener('click', (e) => {
+        const cell = e.target.closest('.csv-cell');
+        if (cell) {
+          const row = parseInt(cell.dataset.row, 10);
+          const col = parseInt(cell.dataset.col, 10);
+          this.selectCell(row, col);
+        }
+      });
+
+      this.tableElement.addEventListener('dblclick', (e) => {
+        const cell = e.target.closest('.csv-cell');
+        if (cell) {
+          const row = parseInt(cell.dataset.row, 10);
+          const col = parseInt(cell.dataset.col, 10);
+          this.startEditing(row, col);
+        }
+      });
+    }
+
+    // Restore selection if still valid
+    if (selectedCell) {
+      const numRows = this.state.workingRows.length;
+      const numCols = this.state.data?.headers?.length || 0;
+      if (selectedCell.row < numRows && selectedCell.col < numCols) {
+        this.selectCell(selectedCell.row, selectedCell.col);
+      }
+    }
   }
 
   /**
