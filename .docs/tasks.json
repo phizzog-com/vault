@@ -5241,7 +5241,7 @@
       "phase": "Phase 7: Polish and Performance",
       "task": "Import/Export Enhancements (Premium)",
       "name": "Implement advanced import/export features",
-      "passes": false,
+      "passes": true,
       "instructions": [
         "Implement drag-and-drop CSV import",
         "Implement encoding detection (UTF-8, Latin-1, Windows-1252)",
@@ -5265,7 +5265,7 @@
       "phase": "Phase 7: Polish and Performance",
       "task": "Rust Unit Tests",
       "name": "Write Rust unit tests for CSV module",
-      "passes": false,
+      "passes": true,
       "instructions": [
         "Create src-tauri/src/csv/tests.rs",
         "Write tests for infer_data_type (all type variants)",

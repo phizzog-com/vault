@@ -11,8 +11,9 @@ use sha2::{Sha256, Digest};
 use std::collections::HashMap;
 
 use crate::csv::types::{
-    ColumnMetadata, ColumnSchema, CsvData, CsvError, CsvRow, CsvSchema, DataType,
-    DatasetMetadata, FormatHint, NumericStats, SemanticRole,
+    Cardinality, ColumnAiContext, ColumnMetadata, ColumnSchema, CsvAiContext, CsvData, CsvError,
+    CsvRow, CsvSchema, DataType, DatasetMetadata, FormatHint, NumericStats, Relationship,
+    RelationshipAiContext, SemanticRole,
 };
 
 // ============================================================================
@@ -1177,6 +1178,312 @@ pub fn generate_description(name: &str, data_type: &DataType, role: &SemanticRol
     }
 }
 
+// ============================================================================
+// AI Context Generation
+// ============================================================================
+
+/// Default maximum number of sample rows for AI context
+const DEFAULT_MAX_SAMPLE_ROWS: usize = 10;
+
+/// Generate AI-optimized context from a CSV schema and data.
+///
+/// This function creates a structured context format optimized for LLM consumption,
+/// including schema summaries, column descriptions, sample data as markdown,
+/// and relationship information.
+///
+/// # Arguments
+/// * `path` - Path to the CSV file
+/// * `schema` - The CSV schema with column definitions
+/// * `data` - The parsed CSV data
+/// * `max_sample_rows` - Maximum number of sample rows to include (default: 10)
+///
+/// # Returns
+/// * `CsvAiContext` - AI-optimized context for the CSV file
+pub fn generate_ai_context(
+    path: &str,
+    schema: &CsvSchema,
+    data: &CsvData,
+    max_sample_rows: Option<usize>,
+) -> CsvAiContext {
+    let max_rows = max_sample_rows.unwrap_or(DEFAULT_MAX_SAMPLE_ROWS);
+
+    // Generate schema summary
+    let schema_summary = generate_schema_summary(path, data, schema);
+
+    // Convert columns to AI context format
+    let columns: Vec<ColumnAiContext> = schema
+        .columns
+        .iter()
+        .map(column_to_ai_context)
+        .collect();
+
+    // Generate sample data as markdown table
+    let sample_data = generate_sample_data_markdown(data, max_rows);
+
+    // Convert relationships to AI context format
+    let relationships: Vec<RelationshipAiContext> = schema
+        .relationships
+        .iter()
+        .map(relationship_to_ai_context)
+        .collect();
+
+    CsvAiContext {
+        file_path: path.to_string(),
+        description: schema.metadata.description.clone(),
+        schema_summary,
+        columns,
+        sample_data,
+        relationships,
+    }
+}
+
+/// Generate a human-readable schema summary for AI context.
+///
+/// # Arguments
+/// * `path` - Path to the CSV file
+/// * `data` - The parsed CSV data
+/// * `schema` - The CSV schema
+///
+/// # Returns
+/// * A markdown-formatted summary string
+fn generate_schema_summary(path: &str, data: &CsvData, schema: &CsvSchema) -> String {
+    // Extract file name from path
+    let file_name = std::path::Path::new(path)
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or(path);
+
+    // Count columns by semantic role
+    let mut role_counts: HashMap<&str, usize> = HashMap::new();
+    for col in &schema.columns {
+        let role_name = semantic_role_to_string(&col.semantic_role);
+        *role_counts.entry(role_name).or_insert(0) += 1;
+    }
+
+    // Build role summary
+    let role_summary: Vec<String> = role_counts
+        .iter()
+        .filter(|(_, count)| **count > 0)
+        .map(|(role, count)| format!("{} {}", count, role))
+        .collect();
+
+    let role_str = if role_summary.is_empty() {
+        String::new()
+    } else {
+        format!(" ({})", role_summary.join(", "))
+    };
+
+    format!(
+        "**{}**: {} rows, {} columns{}",
+        file_name,
+        data.total_rows,
+        schema.columns.len(),
+        role_str
+    )
+}
+
+/// Convert a ColumnSchema to ColumnAiContext.
+///
+/// Transforms the internal column schema representation into a human-readable
+/// format optimized for AI consumption.
+///
+/// # Arguments
+/// * `column` - The column schema to convert
+///
+/// # Returns
+/// * `ColumnAiContext` - AI-friendly column representation
+fn column_to_ai_context(column: &ColumnSchema) -> ColumnAiContext {
+    ColumnAiContext {
+        name: column.display_name.clone().unwrap_or_else(|| column.name.clone()),
+        data_type: data_type_to_string(&column.data_type),
+        role: semantic_role_to_string(&column.semantic_role).to_string(),
+        description: column.description.clone(),
+        examples: column.metadata.examples.clone(),
+    }
+}
+
+/// Convert a DataType enum to a human-readable string.
+///
+/// # Arguments
+/// * `data_type` - The data type to convert
+///
+/// # Returns
+/// * A human-readable string describing the data type
+fn data_type_to_string(data_type: &DataType) -> String {
+    match data_type {
+        DataType::Text => "text".to_string(),
+        DataType::Integer => "integer".to_string(),
+        DataType::Decimal { precision } => {
+            match precision {
+                Some(p) => format!("decimal (precision: {})", p),
+                None => "decimal".to_string(),
+            }
+        }
+        DataType::Currency { code } => format!("currency ({})", code),
+        DataType::Date { format } => format!("date (format: {})", format),
+        DataType::DateTime { format } => format!("datetime (format: {})", format),
+        DataType::Boolean => "boolean".to_string(),
+        DataType::Percentage => "percentage".to_string(),
+        DataType::Enum { values } => {
+            if values.len() <= 5 {
+                format!("enum [{}]", values.join(", "))
+            } else {
+                format!("enum ({} values)", values.len())
+            }
+        }
+    }
+}
+
+/// Convert a SemanticRole enum to a human-readable string.
+///
+/// # Arguments
+/// * `role` - The semantic role to convert
+///
+/// # Returns
+/// * A static string describing the semantic role
+fn semantic_role_to_string(role: &SemanticRole) -> &'static str {
+    match role {
+        SemanticRole::Identifier => "identifier",
+        SemanticRole::Dimension => "dimension",
+        SemanticRole::Measure => "measure",
+        SemanticRole::Temporal => "temporal",
+        SemanticRole::Reference { .. } => "reference",
+        SemanticRole::Descriptive => "descriptive",
+        SemanticRole::Unknown => "unknown",
+    }
+}
+
+/// Convert a Relationship to RelationshipAiContext.
+///
+/// Transforms the internal relationship representation into a human-readable
+/// format for AI consumption.
+///
+/// # Arguments
+/// * `relationship` - The relationship to convert
+///
+/// # Returns
+/// * `RelationshipAiContext` - AI-friendly relationship representation
+fn relationship_to_ai_context(relationship: &Relationship) -> RelationshipAiContext {
+    let cardinality_str = cardinality_to_string(&relationship.cardinality);
+
+    let description = format!(
+        "{}: {} -> {}.{} ({})",
+        relationship.name,
+        relationship.local_column,
+        relationship.foreign_file,
+        relationship.foreign_column,
+        cardinality_str
+    );
+
+    let foreign_reference = format!(
+        "{}.{}",
+        relationship.foreign_file,
+        relationship.foreign_column
+    );
+
+    RelationshipAiContext {
+        description,
+        local_column: relationship.local_column.clone(),
+        foreign_reference,
+    }
+}
+
+/// Convert a Cardinality enum to a human-readable string.
+///
+/// # Arguments
+/// * `cardinality` - The cardinality type to convert
+///
+/// # Returns
+/// * A static string describing the cardinality
+fn cardinality_to_string(cardinality: &Cardinality) -> &'static str {
+    match cardinality {
+        Cardinality::OneToOne => "one-to-one",
+        Cardinality::OneToMany => "one-to-many",
+        Cardinality::ManyToOne => "many-to-one",
+        Cardinality::ManyToMany => "many-to-many",
+    }
+}
+
+/// Generate sample data as a markdown table.
+///
+/// Creates a properly formatted markdown table from the CSV data,
+/// limited to the specified maximum number of rows.
+///
+/// # Arguments
+/// * `data` - The parsed CSV data
+/// * `max_rows` - Maximum number of sample rows to include
+///
+/// # Returns
+/// * A markdown-formatted table string
+fn generate_sample_data_markdown(data: &CsvData, max_rows: usize) -> String {
+    if data.headers.is_empty() {
+        return String::new();
+    }
+
+    let mut markdown = String::new();
+
+    // Header row
+    markdown.push_str("| ");
+    markdown.push_str(&data.headers.join(" | "));
+    markdown.push_str(" |\n");
+
+    // Separator row
+    markdown.push_str("| ");
+    let separators: Vec<&str> = data.headers.iter().map(|_| "---").collect();
+    markdown.push_str(&separators.join(" | "));
+    markdown.push_str(" |\n");
+
+    // Data rows (limited to max_rows)
+    let rows_to_show = data.rows.iter().take(max_rows);
+    for row in rows_to_show {
+        markdown.push_str("| ");
+        // Escape pipe characters in cell values and truncate long values
+        let escaped_cells: Vec<String> = row
+            .iter()
+            .map(|cell| {
+                let escaped = cell.replace('|', "\\|");
+                if escaped.len() > 50 {
+                    format!("{}...", &escaped[..47])
+                } else {
+                    escaped
+                }
+            })
+            .collect();
+        markdown.push_str(&escaped_cells.join(" | "));
+        markdown.push_str(" |\n");
+    }
+
+    // Add truncation notice if applicable
+    if data.rows.len() > max_rows {
+        markdown.push_str(&format!(
+            "\n*Showing {} of {} rows*",
+            max_rows,
+            data.rows.len()
+        ));
+    }
+
+    markdown
+}
+
+/// Compute a SHA256 hash of a file's contents.
+///
+/// # Arguments
+/// * `path` - Path to the file
+///
+/// # Returns
+/// * `Result<String, CsvError>` - The hex-encoded SHA256 hash or an error
+pub async fn compute_hash(path: &std::path::Path) -> Result<String, CsvError> {
+    let content = tokio::fs::read(path).await.map_err(|e| CsvError::ReadError {
+        message: format!("Failed to read file for hashing '{}': {}", path.display(), e),
+    })?;
+
+    let mut hasher = Sha256::new();
+    hasher.update(&content);
+    let hash = format!("{:x}", hasher.finalize());
+
+    Ok(hash)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -2019,5 +2326,736 @@ mod tests {
 
         // status should have numeric stats for currency column
         assert!(schema.columns[3].metadata.numeric_stats.is_some());
+    }
+
+    // ========================================================================
+    // AI Context Generation Tests
+    // ========================================================================
+
+    #[test]
+    fn test_generate_ai_context_basic() {
+        let data = CsvData {
+            headers: vec!["id".to_string(), "name".to_string(), "amount".to_string()],
+            rows: vec![
+                vec!["1".to_string(), "Alice".to_string(), "100.50".to_string()],
+                vec!["2".to_string(), "Bob".to_string(), "200.75".to_string()],
+            ],
+            total_rows: 2,
+            truncated: false,
+        };
+
+        let schema = infer_schema("test.csv", &data, None);
+        let context = generate_ai_context("test.csv", &schema, &data, None);
+
+        assert_eq!(context.file_path, "test.csv");
+        assert_eq!(context.columns.len(), 3);
+        assert!(!context.schema_summary.is_empty());
+        assert!(!context.sample_data.is_empty());
+    }
+
+    #[test]
+    fn test_generate_ai_context_markdown_table() {
+        let data = CsvData {
+            headers: vec!["col1".to_string(), "col2".to_string()],
+            rows: vec![
+                vec!["a".to_string(), "b".to_string()],
+                vec!["c".to_string(), "d".to_string()],
+            ],
+            total_rows: 2,
+            truncated: false,
+        };
+
+        let markdown = generate_sample_data_markdown(&data, 10);
+
+        // Check that markdown contains table elements
+        assert!(markdown.contains("| col1 | col2 |"));
+        assert!(markdown.contains("| --- | --- |"));
+        assert!(markdown.contains("| a | b |"));
+        assert!(markdown.contains("| c | d |"));
+    }
+
+    #[test]
+    fn test_generate_ai_context_markdown_table_truncation() {
+        let data = CsvData {
+            headers: vec!["id".to_string()],
+            rows: vec![
+                vec!["1".to_string()],
+                vec!["2".to_string()],
+                vec!["3".to_string()],
+                vec!["4".to_string()],
+                vec!["5".to_string()],
+            ],
+            total_rows: 5,
+            truncated: false,
+        };
+
+        let markdown = generate_sample_data_markdown(&data, 2);
+
+        // Should show only 2 rows
+        assert!(markdown.contains("| 1 |"));
+        assert!(markdown.contains("| 2 |"));
+        assert!(!markdown.contains("| 3 |"));
+        // Should show truncation notice
+        assert!(markdown.contains("Showing 2 of 5 rows"));
+    }
+
+    #[test]
+    fn test_generate_ai_context_markdown_escapes_pipes() {
+        let data = CsvData {
+            headers: vec!["value".to_string()],
+            rows: vec![vec!["a|b|c".to_string()]],
+            total_rows: 1,
+            truncated: false,
+        };
+
+        let markdown = generate_sample_data_markdown(&data, 10);
+
+        // Pipes should be escaped
+        assert!(markdown.contains(r"a\|b\|c"));
+    }
+
+    #[test]
+    fn test_generate_ai_context_markdown_truncates_long_values() {
+        let data = CsvData {
+            headers: vec!["long_text".to_string()],
+            rows: vec![vec!["a".repeat(100)]], // 100 character string
+            total_rows: 1,
+            truncated: false,
+        };
+
+        let markdown = generate_sample_data_markdown(&data, 10);
+
+        // Long values should be truncated with ellipsis
+        assert!(markdown.contains("..."));
+        // Should not contain the full 100 character string
+        assert!(!markdown.contains(&"a".repeat(100)));
+    }
+
+    #[test]
+    fn test_data_type_to_string() {
+        assert_eq!(data_type_to_string(&DataType::Text), "text");
+        assert_eq!(data_type_to_string(&DataType::Integer), "integer");
+        assert_eq!(data_type_to_string(&DataType::Boolean), "boolean");
+        assert_eq!(data_type_to_string(&DataType::Percentage), "percentage");
+
+        assert_eq!(
+            data_type_to_string(&DataType::Decimal { precision: Some(2) }),
+            "decimal (precision: 2)"
+        );
+        assert_eq!(
+            data_type_to_string(&DataType::Decimal { precision: None }),
+            "decimal"
+        );
+
+        assert_eq!(
+            data_type_to_string(&DataType::Currency { code: "USD".to_string() }),
+            "currency (USD)"
+        );
+
+        assert_eq!(
+            data_type_to_string(&DataType::Date { format: "YYYY-MM-DD".to_string() }),
+            "date (format: YYYY-MM-DD)"
+        );
+
+        assert_eq!(
+            data_type_to_string(&DataType::DateTime { format: "YYYY-MM-DD HH:mm:ss".to_string() }),
+            "datetime (format: YYYY-MM-DD HH:mm:ss)"
+        );
+
+        // Enum with few values shows them all
+        assert_eq!(
+            data_type_to_string(&DataType::Enum { values: vec!["A".to_string(), "B".to_string()] }),
+            "enum [A, B]"
+        );
+
+        // Enum with many values shows count
+        assert_eq!(
+            data_type_to_string(&DataType::Enum {
+                values: vec!["A".to_string(), "B".to_string(), "C".to_string(), "D".to_string(), "E".to_string(), "F".to_string()]
+            }),
+            "enum (6 values)"
+        );
+    }
+
+    #[test]
+    fn test_semantic_role_to_string() {
+        assert_eq!(semantic_role_to_string(&SemanticRole::Identifier), "identifier");
+        assert_eq!(semantic_role_to_string(&SemanticRole::Dimension), "dimension");
+        assert_eq!(semantic_role_to_string(&SemanticRole::Measure), "measure");
+        assert_eq!(semantic_role_to_string(&SemanticRole::Temporal), "temporal");
+        assert_eq!(semantic_role_to_string(&SemanticRole::Descriptive), "descriptive");
+        assert_eq!(semantic_role_to_string(&SemanticRole::Unknown), "unknown");
+        assert_eq!(
+            semantic_role_to_string(&SemanticRole::Reference {
+                target_file: "other.csv".to_string(),
+                target_column: "id".to_string(),
+            }),
+            "reference"
+        );
+    }
+
+    #[test]
+    fn test_cardinality_to_string() {
+        assert_eq!(cardinality_to_string(&Cardinality::OneToOne), "one-to-one");
+        assert_eq!(cardinality_to_string(&Cardinality::OneToMany), "one-to-many");
+        assert_eq!(cardinality_to_string(&Cardinality::ManyToOne), "many-to-one");
+        assert_eq!(cardinality_to_string(&Cardinality::ManyToMany), "many-to-many");
+    }
+
+    #[test]
+    fn test_column_to_ai_context() {
+        let column = ColumnSchema {
+            name: "customer_id".to_string(),
+            display_name: Some("Customer ID".to_string()),
+            description: "Unique customer identifier".to_string(),
+            data_type: DataType::Integer,
+            semantic_role: SemanticRole::Identifier,
+            format: None,
+            metadata: ColumnMetadata {
+                nullable: false,
+                unique: true,
+                examples: vec!["1".to_string(), "2".to_string(), "3".to_string()],
+                min_value: Some("1".to_string()),
+                max_value: Some("100".to_string()),
+                distinct_count: Some(100),
+                non_null_count: Some(100),
+                numeric_stats: None,
+            },
+        };
+
+        let context = column_to_ai_context(&column);
+
+        assert_eq!(context.name, "Customer ID"); // Uses display_name
+        assert_eq!(context.data_type, "integer");
+        assert_eq!(context.role, "identifier");
+        assert_eq!(context.description, "Unique customer identifier");
+        assert_eq!(context.examples, vec!["1", "2", "3"]);
+    }
+
+    #[test]
+    fn test_column_to_ai_context_no_display_name() {
+        let column = ColumnSchema {
+            name: "customer_id".to_string(),
+            display_name: None,
+            description: "Unique customer identifier".to_string(),
+            data_type: DataType::Integer,
+            semantic_role: SemanticRole::Identifier,
+            format: None,
+            metadata: ColumnMetadata::default(),
+        };
+
+        let context = column_to_ai_context(&column);
+
+        assert_eq!(context.name, "customer_id"); // Falls back to name
+    }
+
+    #[test]
+    fn test_relationship_to_ai_context() {
+        let relationship = Relationship {
+            name: "Order Customer".to_string(),
+            local_column: "customer_id".to_string(),
+            foreign_file: "customers.csv".to_string(),
+            foreign_column: "id".to_string(),
+            cardinality: Cardinality::ManyToOne,
+        };
+
+        let context = relationship_to_ai_context(&relationship);
+
+        assert_eq!(context.local_column, "customer_id");
+        assert_eq!(context.foreign_reference, "customers.csv.id");
+        assert!(context.description.contains("Order Customer"));
+        assert!(context.description.contains("many-to-one"));
+    }
+
+    #[test]
+    fn test_generate_schema_summary() {
+        let data = CsvData {
+            headers: vec!["id".to_string(), "name".to_string(), "amount".to_string()],
+            rows: vec![
+                vec!["1".to_string(), "Alice".to_string(), "100".to_string()],
+            ],
+            total_rows: 100,
+            truncated: true,
+        };
+
+        let schema = infer_schema("/path/to/orders.csv", &data, None);
+        let summary = generate_schema_summary("/path/to/orders.csv", &data, &schema);
+
+        assert!(summary.contains("orders.csv"));
+        assert!(summary.contains("100 rows"));
+        assert!(summary.contains("3 columns"));
+    }
+
+    #[test]
+    fn test_generate_ai_context_with_relationships() {
+        let data = CsvData {
+            headers: vec!["order_id".to_string(), "customer_id".to_string()],
+            rows: vec![
+                vec!["1".to_string(), "100".to_string()],
+            ],
+            total_rows: 1,
+            truncated: false,
+        };
+
+        let mut schema = infer_schema("orders.csv", &data, None);
+        schema.relationships = vec![
+            Relationship {
+                name: "Order Customer".to_string(),
+                local_column: "customer_id".to_string(),
+                foreign_file: "customers.csv".to_string(),
+                foreign_column: "id".to_string(),
+                cardinality: Cardinality::ManyToOne,
+            },
+        ];
+
+        let context = generate_ai_context("orders.csv", &schema, &data, None);
+
+        assert_eq!(context.relationships.len(), 1);
+        assert_eq!(context.relationships[0].local_column, "customer_id");
+        assert_eq!(context.relationships[0].foreign_reference, "customers.csv.id");
+    }
+
+    #[test]
+    fn test_generate_ai_context_column_descriptions_included() {
+        let data = CsvData {
+            headers: vec!["customer_id".to_string(), "total_amount".to_string()],
+            rows: vec![
+                vec!["1".to_string(), "$100.00".to_string()],
+                vec!["2".to_string(), "$200.00".to_string()],
+            ],
+            total_rows: 2,
+            truncated: false,
+        };
+
+        let schema = infer_schema("orders.csv", &data, None);
+        let context = generate_ai_context("orders.csv", &schema, &data, None);
+
+        // Verify column descriptions are present
+        assert!(!context.columns[0].description.is_empty());
+        assert!(!context.columns[1].description.is_empty());
+
+        // Descriptions should be meaningful
+        assert!(context.columns[0].description.contains("Customer Id"));
+        assert!(context.columns[1].description.contains("Total Amount"));
+    }
+
+    #[test]
+    fn test_generate_ai_context_empty_data() {
+        let data = CsvData {
+            headers: vec!["col1".to_string()],
+            rows: vec![],
+            total_rows: 0,
+            truncated: false,
+        };
+
+        let schema = infer_schema("empty.csv", &data, None);
+        let context = generate_ai_context("empty.csv", &schema, &data, None);
+
+        // Should still work with empty data
+        assert_eq!(context.file_path, "empty.csv");
+        assert_eq!(context.columns.len(), 1);
+        assert!(context.schema_summary.contains("0 rows"));
+    }
+
+    #[tokio::test]
+    async fn test_compute_hash_file_not_found() {
+        let result = compute_hash(std::path::Path::new("/nonexistent/file.csv")).await;
+
+        assert!(result.is_err());
+        match result {
+            Err(CsvError::ReadError { message }) => {
+                assert!(message.contains("Failed to read file for hashing"));
+            }
+            _ => panic!("Expected ReadError"),
+        }
+    }
+
+    // ========================================================================
+    // Single Column CSV Tests
+    // ========================================================================
+
+    #[test]
+    fn test_parse_single_column_csv() {
+        let content = "name\nAlice\nBob\nCharlie";
+        let result = parse_csv_content(content, None).unwrap();
+
+        assert_eq!(result.headers.len(), 1);
+        assert_eq!(result.headers[0], "name");
+        assert_eq!(result.rows.len(), 3);
+        assert_eq!(result.rows[0], vec!["Alice"]);
+        assert_eq!(result.rows[1], vec!["Bob"]);
+        assert_eq!(result.rows[2], vec!["Charlie"]);
+    }
+
+    #[test]
+    fn test_parse_single_column_numeric() {
+        let content = "value\n100\n200\n300";
+        let result = parse_csv_content(content, None).unwrap();
+
+        assert_eq!(result.headers.len(), 1);
+        assert_eq!(result.headers[0], "value");
+        assert_eq!(result.rows.len(), 3);
+    }
+
+    #[test]
+    fn test_infer_schema_single_column() {
+        let data = CsvData {
+            headers: vec!["amount".to_string()],
+            rows: vec![
+                vec!["100.50".to_string()],
+                vec!["200.75".to_string()],
+                vec!["150.25".to_string()],
+            ],
+            total_rows: 3,
+            truncated: false,
+        };
+
+        let schema = infer_schema("single.csv", &data, None);
+
+        assert_eq!(schema.columns.len(), 1);
+        assert_eq!(schema.columns[0].name, "amount");
+        assert!(matches!(schema.columns[0].data_type, DataType::Decimal { .. }));
+        assert!(matches!(schema.columns[0].semantic_role, SemanticRole::Measure));
+    }
+
+    #[test]
+    fn test_single_column_with_empty_values() {
+        let data = CsvData {
+            headers: vec!["status".to_string()],
+            rows: vec![
+                vec!["Active".to_string()],
+                vec!["".to_string()],
+                vec!["Inactive".to_string()],
+                vec!["".to_string()],
+                vec!["Active".to_string()],
+            ],
+            total_rows: 5,
+            truncated: false,
+        };
+
+        let schema = infer_schema("status.csv", &data, None);
+
+        assert_eq!(schema.columns.len(), 1);
+        assert!(schema.columns[0].metadata.nullable);
+        assert_eq!(schema.columns[0].metadata.non_null_count, Some(3));
+    }
+
+    // ========================================================================
+    // Additional Boolean Detection Tests
+    // ========================================================================
+
+    #[test]
+    fn test_infer_boolean_on_off() {
+        let values: Vec<String> = vec!["on", "off", "on", "off", "on", "off", "on", "off", "on", "off"]
+            .into_iter()
+            .map(String::from)
+            .collect();
+        let result = infer_data_type(&values);
+        assert!(matches!(result, DataType::Boolean));
+    }
+
+    #[test]
+    fn test_infer_boolean_t_f() {
+        let values: Vec<String> = vec!["t", "f", "T", "F", "t", "f", "T", "F", "t", "f"]
+            .into_iter()
+            .map(String::from)
+            .collect();
+        let result = infer_data_type(&values);
+        assert!(matches!(result, DataType::Boolean));
+    }
+
+    #[test]
+    fn test_infer_boolean_y_n() {
+        let values: Vec<String> = vec!["y", "n", "Y", "N", "y", "n", "Y", "N", "y", "n"]
+            .into_iter()
+            .map(String::from)
+            .collect();
+        let result = infer_data_type(&values);
+        assert!(matches!(result, DataType::Boolean));
+    }
+
+    #[test]
+    fn test_infer_boolean_mixed_formats() {
+        // Test mixed boolean representations that should still be detected
+        let values: Vec<String> = vec!["true", "FALSE", "Yes", "no", "1", "0", "ON", "off", "T", "f"]
+            .into_iter()
+            .map(String::from)
+            .collect();
+        let result = infer_data_type(&values);
+        assert!(matches!(result, DataType::Boolean));
+    }
+
+    // ========================================================================
+    // Additional Edge Case Tests
+    // ========================================================================
+
+    #[test]
+    fn test_parse_csv_only_header_with_commas() {
+        // Edge case: header with quoted commas, no data rows
+        let content = r#""Name, Full","Address, Complete""#;
+        let result = parse_csv_content(content, None).unwrap();
+
+        assert_eq!(result.headers.len(), 2);
+        assert_eq!(result.headers[0], "Name, Full");
+        assert_eq!(result.headers[1], "Address, Complete");
+        assert_eq!(result.rows.len(), 0);
+    }
+
+    #[test]
+    fn test_infer_all_empty_column() {
+        // Column where every value is empty/whitespace
+        let values: Vec<String> = vec!["", "  ", "\t", ""]
+            .into_iter()
+            .map(String::from)
+            .collect();
+        let result = infer_data_type(&values);
+        assert!(matches!(result, DataType::Text));
+    }
+
+    #[test]
+    fn test_column_metadata_all_unique() {
+        let values: Vec<String> = vec!["a", "b", "c", "d", "e"]
+            .into_iter()
+            .map(String::from)
+            .collect();
+        let metadata = compute_column_metadata(&values, &DataType::Text);
+        assert!(metadata.unique);
+        assert_eq!(metadata.distinct_count, Some(5));
+    }
+
+    #[test]
+    fn test_column_metadata_with_duplicates() {
+        let values: Vec<String> = vec!["a", "a", "b", "b", "c"]
+            .into_iter()
+            .map(String::from)
+            .collect();
+        let metadata = compute_column_metadata(&values, &DataType::Text);
+        assert!(!metadata.unique);
+        assert_eq!(metadata.distinct_count, Some(3));
+    }
+
+    #[test]
+    fn test_infer_percentage_with_decimals() {
+        let values: Vec<String> = vec!["10.5%", "25.75%", "100.00%", "-5.25%"]
+            .into_iter()
+            .map(String::from)
+            .collect();
+        let result = infer_data_type(&values);
+        assert!(matches!(result, DataType::Percentage));
+    }
+
+    #[test]
+    fn test_infer_negative_percentage() {
+        let values: Vec<String> = vec!["-10%", "-25%", "-50%", "-100%"]
+            .into_iter()
+            .map(String::from)
+            .collect();
+        let result = infer_data_type(&values);
+        assert!(matches!(result, DataType::Percentage));
+    }
+
+    #[test]
+    fn test_infer_datetime_with_timezone() {
+        let values: Vec<String> = vec![
+            "2024-01-15T10:30:00Z",
+            "2024-02-20T14:45:30Z",
+            "2023-12-31T23:59:59Z",
+        ]
+        .into_iter()
+        .map(String::from)
+        .collect();
+        let result = infer_data_type(&values);
+        assert!(matches!(result, DataType::DateTime { .. }));
+    }
+
+    #[test]
+    fn test_infer_datetime_with_offset() {
+        let values: Vec<String> = vec![
+            "2024-01-15T10:30:00+05:00",
+            "2024-02-20T14:45:30-08:00",
+            "2023-12-31T23:59:59+00:00",
+        ]
+        .into_iter()
+        .map(String::from)
+        .collect();
+        let result = infer_data_type(&values);
+        assert!(matches!(result, DataType::DateTime { .. }));
+    }
+
+    #[test]
+    fn test_infer_decimal_with_commas() {
+        let values: Vec<String> = vec!["1,234.56", "2,500.00", "10,000.99"]
+            .into_iter()
+            .map(String::from)
+            .collect();
+        let result = infer_data_type(&values);
+        assert!(matches!(result, DataType::Decimal { .. }));
+    }
+
+    #[test]
+    fn test_infer_currency_negative_values() {
+        // Test that the system handles negative currency format without panicking
+        // The $-amount format is detected as currency
+        let values: Vec<String> = vec!["$-100.00", "$-50.25", "$-1,000.00"]
+            .into_iter()
+            .map(String::from)
+            .collect();
+        let result = infer_data_type(&values);
+        // $-amount format should be detected as USD currency
+        assert!(matches!(result, DataType::Currency { code } if code == "USD"));
+    }
+
+    #[test]
+    fn test_generate_ai_context_single_column() {
+        let data = CsvData {
+            headers: vec!["id".to_string()],
+            rows: vec![
+                vec!["1".to_string()],
+                vec!["2".to_string()],
+            ],
+            total_rows: 2,
+            truncated: false,
+        };
+
+        let schema = infer_schema("single.csv", &data, None);
+        let context = generate_ai_context("single.csv", &schema, &data, None);
+
+        assert_eq!(context.columns.len(), 1);
+        assert!(!context.sample_data.is_empty());
+    }
+
+    #[test]
+    fn test_parse_csv_with_newlines_in_quoted_fields() {
+        let content = "name,description\n\"Alice\",\"Line 1\nLine 2\"\n\"Bob\",\"Single line\"";
+        let result = parse_csv_content(content, None).unwrap();
+
+        assert_eq!(result.rows.len(), 2);
+        assert_eq!(result.rows[0][1], "Line 1\nLine 2");
+        assert_eq!(result.rows[1][1], "Single line");
+    }
+
+    #[test]
+    fn test_parse_csv_with_escaped_quotes() {
+        let content = "name,quote\n\"Alice\",\"He said \"\"Hello\"\"\"\n\"Bob\",\"Simple\"";
+        let result = parse_csv_content(content, None).unwrap();
+
+        assert_eq!(result.rows.len(), 2);
+        assert_eq!(result.rows[0][1], "He said \"Hello\"");
+    }
+
+    #[test]
+    fn test_infer_single_value_column() {
+        // Column with only one unique value - should not be enum
+        let values: Vec<String> = vec!["constant", "constant", "constant"]
+            .into_iter()
+            .map(String::from)
+            .collect();
+        let result = infer_data_type(&values);
+        // Single unique value doesn't qualify as enum (needs > 1 unique values)
+        assert!(matches!(result, DataType::Text));
+    }
+
+    #[test]
+    fn test_disambiguate_date_format_us() {
+        // When second component > 12, it must be day (MM/DD/YYYY)
+        let values: Vec<String> = vec!["01/25/2024", "02/28/2024", "12/15/2023"]
+            .into_iter()
+            .map(String::from)
+            .collect();
+        let result = infer_data_type(&values);
+        assert!(matches!(result, DataType::Date { format } if format == "MM/DD/YYYY"));
+    }
+
+    #[test]
+    fn test_infer_date_yyyy_slash_mm_dd() {
+        let values: Vec<String> = vec!["2024/01/15", "2024/02/20", "2023/12/31"]
+            .into_iter()
+            .map(String::from)
+            .collect();
+        let result = infer_data_type(&values);
+        assert!(matches!(result, DataType::Date { format } if format == "YYYY/MM/DD"));
+    }
+
+    // ========================================================================
+    // Schema Preservation Tests
+    // ========================================================================
+
+    #[test]
+    fn test_infer_schema_preserves_display_names() {
+        let data = CsvData {
+            headers: vec!["customer_id".to_string()],
+            rows: vec![vec!["1".to_string()]],
+            total_rows: 1,
+            truncated: false,
+        };
+
+        // First inference
+        let schema1 = infer_schema("test.csv", &data, None);
+
+        // Simulate user setting display name
+        let mut modified_schema = schema1.clone();
+        modified_schema.columns[0].display_name = Some("Customer Identifier".to_string());
+
+        // Re-infer with existing schema
+        let schema2 = infer_schema("test.csv", &data, Some(&modified_schema));
+
+        // Display name should be preserved
+        assert_eq!(
+            schema2.columns[0].display_name,
+            Some("Customer Identifier".to_string())
+        );
+    }
+
+    #[test]
+    fn test_infer_schema_preserves_relationships() {
+        let data = CsvData {
+            headers: vec!["order_id".to_string(), "customer_id".to_string()],
+            rows: vec![vec!["1".to_string(), "100".to_string()]],
+            total_rows: 1,
+            truncated: false,
+        };
+
+        // First inference
+        let mut schema1 = infer_schema("orders.csv", &data, None);
+
+        // Add a relationship
+        schema1.relationships = vec![Relationship {
+            name: "Order Customer".to_string(),
+            local_column: "customer_id".to_string(),
+            foreign_file: "customers.csv".to_string(),
+            foreign_column: "id".to_string(),
+            cardinality: Cardinality::ManyToOne,
+        }];
+
+        // Re-infer with existing schema
+        let schema2 = infer_schema("orders.csv", &data, Some(&schema1));
+
+        // Relationships should be preserved
+        assert_eq!(schema2.relationships.len(), 1);
+        assert_eq!(schema2.relationships[0].name, "Order Customer");
+    }
+
+    #[test]
+    fn test_infer_schema_preserves_metadata() {
+        let data = CsvData {
+            headers: vec!["id".to_string()],
+            rows: vec![vec!["1".to_string()]],
+            total_rows: 1,
+            truncated: false,
+        };
+
+        // First inference
+        let mut schema1 = infer_schema("test.csv", &data, None);
+
+        // Modify metadata
+        schema1.metadata.description = "Custom description".to_string();
+        schema1.metadata.tags = vec!["important".to_string(), "production".to_string()];
+
+        // Re-infer with existing schema
+        let schema2 = infer_schema("test.csv", &data, Some(&schema1));
+
+        // Metadata should be preserved
+        assert_eq!(schema2.metadata.description, "Custom description");
+        assert_eq!(schema2.metadata.tags.len(), 2);
     }
 }
