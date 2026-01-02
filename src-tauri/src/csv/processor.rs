@@ -6,8 +6,14 @@ use std::collections::HashSet;
 use std::path::Path;
 
 use regex::Regex;
+use sha2::{Sha256, Digest};
 
-use crate::csv::types::{CsvData, CsvError, CsvRow, DataType, FormatHint};
+use std::collections::HashMap;
+
+use crate::csv::types::{
+    ColumnMetadata, ColumnSchema, CsvData, CsvError, CsvRow, CsvSchema, DataType,
+    DatasetMetadata, FormatHint, NumericStats, SemanticRole,
+};
 
 // ============================================================================
 // Constants for Type Inference
@@ -586,6 +592,591 @@ pub fn infer_data_type_with_hint(values: &[String]) -> (DataType, Option<FormatH
     (data_type, format_hint)
 }
 
+// ============================================================================
+// Semantic Role Inference
+// ============================================================================
+
+/// Infer the semantic role of a column based on its name and data type.
+///
+/// Uses pattern matching on column names to determine the semantic purpose
+/// of the column, with data type as a fallback for ambiguous cases.
+///
+/// # Arguments
+/// * `name` - The column name to analyze
+/// * `data_type` - The inferred data type of the column
+///
+/// # Returns
+/// * `SemanticRole` - The inferred semantic role
+///
+/// # Detection Order (name-based, most specific first)
+/// 1. Identifier: ends with _id, id, _key, key, _uuid, uuid, _code
+/// 2. Temporal: ends with _at, _date, _time, or contains date/time/timestamp
+/// 3. Measure: contains amount, total, count, price, revenue, cost, sum, qty, quantity
+/// 4. Dimension: contains category, type, region, status, state, country, city, segment
+/// 5. Descriptive: contains note, comment, description, remarks, memo
+/// 6. Data type fallback (Currency/Decimal/Integer -> Measure, Date/DateTime -> Temporal, Enum -> Dimension)
+/// 7. Unknown: final fallback
+pub fn infer_semantic_role(name: &str, data_type: &DataType) -> SemanticRole {
+    let name_lower = name.to_lowercase();
+
+    // 1. Check for Identifier patterns (most specific)
+    if is_identifier_column(&name_lower) {
+        return SemanticRole::Identifier;
+    }
+
+    // 2. Check for Temporal patterns
+    if is_temporal_column(&name_lower) {
+        return SemanticRole::Temporal;
+    }
+
+    // 3. Check for Measure patterns
+    if is_measure_column(&name_lower) {
+        return SemanticRole::Measure;
+    }
+
+    // 4. Check for Dimension patterns
+    if is_dimension_column(&name_lower) {
+        return SemanticRole::Dimension;
+    }
+
+    // 5. Check for Descriptive patterns
+    if is_descriptive_column(&name_lower) {
+        return SemanticRole::Descriptive;
+    }
+
+    // 6. Fall back to data type inference
+    infer_role_from_data_type(data_type)
+}
+
+/// Check if column name suggests an identifier/primary key.
+fn is_identifier_column(name: &str) -> bool {
+    // Check suffix patterns (more specific)
+    let id_suffixes = ["_id", "_key", "_uuid", "_code"];
+    for suffix in id_suffixes {
+        if name.ends_with(suffix) {
+            return true;
+        }
+    }
+
+    // Check exact matches or simple endings
+    if name == "id" || name == "key" || name == "uuid" || name == "code" {
+        return true;
+    }
+
+    // Check if name ends with "id" (e.g., "customerid", "userid")
+    // but not words that happen to end in "id" (e.g., "paid", "valid")
+    if name.ends_with("id") && name.len() > 2 {
+        let prefix = &name[..name.len() - 2];
+        // Check if prefix ends with underscore or is alphanumeric (likely an ID)
+        if prefix.ends_with('_') || prefix.chars().all(|c| c.is_alphanumeric()) {
+            // Exclude common false positives
+            let false_positives = ["paid", "valid", "void", "grid", "fluid", "solid", "rapid"];
+            if !false_positives.contains(&name) {
+                return true;
+            }
+        }
+    }
+
+    false
+}
+
+/// Check if column name suggests a temporal/date field.
+fn is_temporal_column(name: &str) -> bool {
+    // Check suffix patterns
+    let temporal_suffixes = ["_at", "_date", "_time", "_datetime", "_timestamp"];
+    for suffix in temporal_suffixes {
+        if name.ends_with(suffix) {
+            return true;
+        }
+    }
+
+    // Check contains patterns
+    let temporal_keywords = ["date", "time", "timestamp", "datetime"];
+    for keyword in temporal_keywords {
+        if name.contains(keyword) {
+            return true;
+        }
+    }
+
+    // Check common temporal column names
+    let temporal_names = ["created", "updated", "modified", "deleted", "expired", "started", "ended"];
+    for temporal_name in temporal_names {
+        if name == temporal_name || name.starts_with(&format!("{}_", temporal_name)) {
+            return true;
+        }
+    }
+
+    false
+}
+
+/// Check if column name suggests a measure/numeric aggregation field.
+fn is_measure_column(name: &str) -> bool {
+    // Use word boundary matching to avoid false positives
+    // e.g., "count" should match but "country" should not
+    let measure_keywords = [
+        "amount", "total", "price", "revenue", "sum",
+        "qty", "quantity", "balance", "rate", "fee", "tax", "discount",
+        "profit", "margin", "value", "score", "weight", "height", "width",
+        "length", "size", "salary", "income", "expense", "budget",
+    ];
+
+    for keyword in measure_keywords {
+        if name.contains(keyword) {
+            return true;
+        }
+    }
+
+    // Special handling for "count" and "cost" to avoid false positives
+    // (e.g., "country" contains "count", "accosting" contains "cost")
+    if contains_word(name, "count") || contains_word(name, "cost") || contains_word(name, "age") {
+        return true;
+    }
+
+    false
+}
+
+/// Check if a word appears in a name at word boundaries.
+/// Words are separated by underscores or are at the start/end of the string.
+fn contains_word(name: &str, word: &str) -> bool {
+    // Check exact match
+    if name == word {
+        return true;
+    }
+
+    // Check for word at start (e.g., "count_total" matches "count")
+    if name.starts_with(&format!("{}_", word)) {
+        return true;
+    }
+
+    // Check for word at end (e.g., "item_count" matches "count")
+    if name.ends_with(&format!("_{}", word)) {
+        return true;
+    }
+
+    // Check for word in middle (e.g., "item_count_total" matches "count")
+    if name.contains(&format!("_{}_", word)) {
+        return true;
+    }
+
+    false
+}
+
+/// Check if column name suggests a dimension/categorical field.
+fn is_dimension_column(name: &str) -> bool {
+    let dimension_keywords = [
+        "category", "type", "region", "status", "state", "country", "city",
+        "segment", "group", "class", "tier", "level", "department", "division",
+        "brand", "vendor", "supplier", "channel", "source", "medium", "campaign",
+        "gender", "industry", "sector",
+    ];
+
+    for keyword in dimension_keywords {
+        if name.contains(keyword) {
+            return true;
+        }
+    }
+
+    false
+}
+
+/// Check if column name suggests a descriptive/text field.
+fn is_descriptive_column(name: &str) -> bool {
+    let descriptive_keywords = [
+        "note", "comment", "description", "remarks", "memo", "summary",
+        "detail", "info", "text", "content", "body", "message",
+    ];
+
+    for keyword in descriptive_keywords {
+        if name.contains(keyword) {
+            return true;
+        }
+    }
+
+    // Check for "name" separately to avoid matching "filename", etc.
+    // Only match if "name" is the full name or at a word boundary
+    if name == "name" || name.ends_with("_name") || name.starts_with("name_") {
+        return true;
+    }
+
+    false
+}
+
+/// Infer semantic role from data type when name patterns don't match.
+fn infer_role_from_data_type(data_type: &DataType) -> SemanticRole {
+    match data_type {
+        // Numeric types default to Measure
+        DataType::Currency { .. } => SemanticRole::Measure,
+        DataType::Decimal { .. } => SemanticRole::Measure,
+        DataType::Integer => SemanticRole::Measure,
+        DataType::Percentage => SemanticRole::Measure,
+
+        // Date/time types default to Temporal
+        DataType::Date { .. } => SemanticRole::Temporal,
+        DataType::DateTime { .. } => SemanticRole::Temporal,
+
+        // Enum types default to Dimension
+        DataType::Enum { .. } => SemanticRole::Dimension,
+
+        // Boolean could be either, default to Dimension
+        DataType::Boolean => SemanticRole::Dimension,
+
+        // Text is Unknown
+        DataType::Text => SemanticRole::Unknown,
+    }
+}
+
+// ============================================================================
+// Schema Inference
+// ============================================================================
+
+/// Maximum number of sample values to collect for column metadata
+const MAX_SAMPLE_VALUES: usize = 5;
+
+/// Infer a complete CSV schema from parsed data.
+///
+/// This function combines type inference, semantic role detection, and statistics
+/// calculation to generate a full schema for a CSV file.
+///
+/// # Arguments
+/// * `path` - Path to the CSV file (used for source_file in schema)
+/// * `data` - Parsed CSV data with headers and rows
+/// * `existing` - Optional existing schema to preserve user-edited descriptions
+///
+/// # Returns
+/// * `CsvSchema` - Complete schema with column definitions and metadata
+pub fn infer_schema(path: &str, data: &CsvData, existing: Option<&CsvSchema>) -> CsvSchema {
+    // Build a map of existing column descriptions for preservation
+    let existing_descriptions: HashMap<String, String> = existing
+        .map(|schema| {
+            schema
+                .columns
+                .iter()
+                .map(|col| (col.name.clone(), col.description.clone()))
+                .collect()
+        })
+        .unwrap_or_default();
+
+    // Build a map of existing display names for preservation
+    let existing_display_names: HashMap<String, Option<String>> = existing
+        .map(|schema| {
+            schema
+                .columns
+                .iter()
+                .map(|col| (col.name.clone(), col.display_name.clone()))
+                .collect()
+        })
+        .unwrap_or_default();
+
+    // Extract column values for each header
+    let column_values: Vec<Vec<String>> = (0..data.headers.len())
+        .map(|col_idx| {
+            data.rows
+                .iter()
+                .map(|row| row.get(col_idx).cloned().unwrap_or_default())
+                .collect()
+        })
+        .collect();
+
+    // Generate column schemas
+    let columns: Vec<ColumnSchema> = data
+        .headers
+        .iter()
+        .enumerate()
+        .map(|(idx, name)| {
+            let values = &column_values[idx];
+
+            // Infer data type and format hint
+            let (data_type, format_hint) = infer_data_type_with_hint(values);
+
+            // Infer semantic role
+            let semantic_role = infer_semantic_role(name, &data_type);
+
+            // Compute column metadata (statistics)
+            let metadata = compute_column_metadata(values, &data_type);
+
+            // Check if user has edited the description
+            let description = if let Some(existing_desc) = existing_descriptions.get(name) {
+                // Check if it's a user-edited description (not auto-generated)
+                let auto_generated = generate_description(name, &data_type, &semantic_role);
+                if existing_desc != &auto_generated && !existing_desc.is_empty() {
+                    // User has edited, preserve it
+                    existing_desc.clone()
+                } else {
+                    // Auto-generated or empty, regenerate
+                    auto_generated
+                }
+            } else {
+                generate_description(name, &data_type, &semantic_role)
+            };
+
+            // Preserve display name if it exists
+            let display_name = existing_display_names
+                .get(name)
+                .cloned()
+                .flatten();
+
+            ColumnSchema {
+                name: name.clone(),
+                display_name,
+                description,
+                data_type,
+                semantic_role,
+                format: format_hint,
+                metadata,
+            }
+        })
+        .collect();
+
+    // Compute content hash (simple hash of headers + row count for now)
+    let mut hasher = Sha256::new();
+    hasher.update(format!("{:?}-{}", data.headers, data.total_rows).as_bytes());
+    let content_hash = format!("{:x}", hasher.finalize());
+
+    // Get current timestamp
+    let updated_at = chrono::Utc::now().to_rfc3339();
+
+    // Preserve existing relationships and metadata if available
+    let relationships = existing
+        .map(|s| s.relationships.clone())
+        .unwrap_or_default();
+
+    let metadata = existing
+        .map(|s| s.metadata.clone())
+        .unwrap_or_else(|| DatasetMetadata {
+            description: format!(
+                "CSV file with {} columns and {} rows",
+                data.headers.len(),
+                data.total_rows
+            ),
+            tags: Vec::new(),
+            source: None,
+            owner: None,
+            notes: None,
+        });
+
+    CsvSchema {
+        version: 1,
+        source_file: path.to_string(),
+        content_hash,
+        updated_at,
+        columns,
+        relationships,
+        metadata,
+        read_only: false,
+    }
+}
+
+/// Compute column metadata including statistics from column values.
+///
+/// # Arguments
+/// * `values` - All values from the column
+/// * `data_type` - The inferred data type of the column
+///
+/// # Returns
+/// * `ColumnMetadata` - Statistics and metadata for the column
+pub fn compute_column_metadata(values: &[String], data_type: &DataType) -> ColumnMetadata {
+    // Filter non-empty values
+    let non_empty: Vec<&str> = values
+        .iter()
+        .map(|s| s.trim())
+        .filter(|s| !s.is_empty())
+        .collect();
+
+    let non_null_count = non_empty.len();
+    let nullable = non_null_count < values.len();
+
+    // Calculate unique values
+    let unique_values: HashSet<&str> = non_empty.iter().copied().collect();
+    let unique_count = unique_values.len();
+    let unique = unique_count == non_null_count && non_null_count > 0;
+
+    // Collect sample values (max 5 unique non-empty values)
+    let mut samples: Vec<String> = unique_values
+        .iter()
+        .take(MAX_SAMPLE_VALUES)
+        .map(|s| s.to_string())
+        .collect();
+    samples.sort();
+
+    // Calculate numeric statistics if applicable
+    let (min_value, max_value, numeric_stats) = compute_numeric_stats(&non_empty, data_type);
+
+    ColumnMetadata {
+        nullable,
+        unique,
+        examples: samples,
+        min_value,
+        max_value,
+        distinct_count: Some(unique_count),
+        non_null_count: Some(non_null_count),
+        numeric_stats,
+    }
+}
+
+/// Compute numeric statistics for numeric column types.
+///
+/// # Arguments
+/// * `values` - Non-empty string values from the column
+/// * `data_type` - The data type of the column
+///
+/// # Returns
+/// * Tuple of (min_value as string, max_value as string, NumericStats if numeric)
+fn compute_numeric_stats(
+    values: &[&str],
+    data_type: &DataType,
+) -> (Option<String>, Option<String>, Option<NumericStats>) {
+    // Only compute for numeric types
+    let is_numeric = matches!(
+        data_type,
+        DataType::Integer | DataType::Decimal { .. } | DataType::Currency { .. } | DataType::Percentage
+    );
+
+    if !is_numeric || values.is_empty() {
+        return (None, None, None);
+    }
+
+    // Parse numeric values
+    let parsed: Vec<f64> = values
+        .iter()
+        .filter_map(|v| parse_numeric_value(v, data_type))
+        .collect();
+
+    if parsed.is_empty() {
+        return (None, None, None);
+    }
+
+    let min = parsed.iter().cloned().fold(f64::INFINITY, f64::min);
+    let max = parsed.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
+    let sum: f64 = parsed.iter().sum();
+    let mean = sum / parsed.len() as f64;
+
+    let stats = NumericStats {
+        min,
+        max,
+        mean,
+        sum,
+    };
+
+    // Format min/max as strings for display
+    let min_str = format_numeric_value(min, data_type);
+    let max_str = format_numeric_value(max, data_type);
+
+    (Some(min_str), Some(max_str), Some(stats))
+}
+
+/// Parse a string value to f64 based on data type.
+fn parse_numeric_value(value: &str, data_type: &DataType) -> Option<f64> {
+    let cleaned = match data_type {
+        DataType::Currency { .. } => {
+            // Remove currency symbols and commas
+            value
+                .replace(['$', '£', '\u{20AC}'], "")
+                .replace("USD", "")
+                .replace("EUR", "")
+                .replace("GBP", "")
+                .replace(',', "")
+                .trim()
+                .to_string()
+        }
+        DataType::Percentage => {
+            // Remove % and commas
+            value.replace('%', "").replace(',', "").trim().to_string()
+        }
+        DataType::Integer | DataType::Decimal { .. } => {
+            // Remove commas
+            value.replace(',', "").trim().to_string()
+        }
+        _ => value.to_string(),
+    };
+
+    cleaned.parse::<f64>().ok()
+}
+
+/// Format a numeric value back to string based on data type.
+fn format_numeric_value(value: f64, data_type: &DataType) -> String {
+    match data_type {
+        DataType::Integer => format!("{}", value as i64),
+        DataType::Decimal { precision } => {
+            let prec = precision.unwrap_or(2) as usize;
+            format!("{:.prec$}", value, prec = prec)
+        }
+        DataType::Currency { code } => {
+            format!("{} {:.2}", code, value)
+        }
+        DataType::Percentage => {
+            format!("{:.2}%", value)
+        }
+        _ => format!("{}", value),
+    }
+}
+
+/// Generate a default description for a column based on its characteristics.
+///
+/// # Arguments
+/// * `name` - Column name
+/// * `data_type` - Inferred data type
+/// * `role` - Inferred semantic role
+///
+/// # Returns
+/// * Human-readable description string
+pub fn generate_description(name: &str, data_type: &DataType, role: &SemanticRole) -> String {
+    // Convert name to human-readable format
+    let readable_name = name
+        .replace('_', " ")
+        .split_whitespace()
+        .map(|word| {
+            let mut chars = word.chars();
+            match chars.next() {
+                None => String::new(),
+                Some(first) => first.to_uppercase().chain(chars).collect(),
+            }
+        })
+        .collect::<Vec<_>>()
+        .join(" ");
+
+    let type_desc = match data_type {
+        DataType::Text => "text",
+        DataType::Integer => "integer",
+        DataType::Decimal { .. } => "decimal number",
+        DataType::Currency { code } => return format!("{} in {} currency", readable_name, code),
+        DataType::Date { format } => return format!("{} date ({})", readable_name, format),
+        DataType::DateTime { format } => return format!("{} timestamp ({})", readable_name, format),
+        DataType::Boolean => "boolean flag",
+        DataType::Percentage => "percentage",
+        DataType::Enum { values } => {
+            if values.len() <= 5 {
+                return format!(
+                    "{} category with values: {}",
+                    readable_name,
+                    values.join(", ")
+                );
+            } else {
+                return format!(
+                    "{} category with {} possible values",
+                    readable_name,
+                    values.len()
+                );
+            }
+        }
+    };
+
+    let role_desc = match role {
+        SemanticRole::Identifier => "unique identifier",
+        SemanticRole::Dimension => "categorical dimension",
+        SemanticRole::Measure => "numeric measure",
+        SemanticRole::Temporal => "temporal field",
+        SemanticRole::Reference { .. } => "foreign key reference",
+        SemanticRole::Descriptive => "descriptive text",
+        SemanticRole::Unknown => type_desc,
+    };
+
+    if matches!(role, SemanticRole::Unknown) {
+        format!("{} ({})", readable_name, type_desc)
+    } else {
+        format!("{} - {} ({})", readable_name, role_desc, type_desc)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1028,5 +1619,405 @@ mod tests {
         assert!(meets_threshold(90, 100));
         assert!(meets_threshold(95, 100));
         assert!(!meets_threshold(89, 100));
+    }
+
+    // ========================================================================
+    // Semantic Role Inference Tests
+    // ========================================================================
+
+    #[test]
+    fn test_infer_semantic_role_customer_id() {
+        // Testing criteria: customer_id detected as Identifier
+        let role = infer_semantic_role("customer_id", &DataType::Integer);
+        assert!(matches!(role, SemanticRole::Identifier));
+    }
+
+    #[test]
+    fn test_infer_semantic_role_created_at() {
+        // Testing criteria: created_at detected as Temporal
+        let role = infer_semantic_role("created_at", &DataType::Text);
+        assert!(matches!(role, SemanticRole::Temporal));
+    }
+
+    #[test]
+    fn test_infer_semantic_role_total_amount() {
+        // Testing criteria: total_amount detected as Measure
+        let role = infer_semantic_role("total_amount", &DataType::Decimal { precision: Some(2) });
+        assert!(matches!(role, SemanticRole::Measure));
+    }
+
+    #[test]
+    fn test_infer_semantic_role_product_category() {
+        // Testing criteria: product_category detected as Dimension
+        let role = infer_semantic_role("product_category", &DataType::Text);
+        assert!(matches!(role, SemanticRole::Dimension));
+    }
+
+    #[test]
+    fn test_infer_semantic_role_identifier_variations() {
+        // Test various identifier patterns
+        assert!(matches!(infer_semantic_role("id", &DataType::Integer), SemanticRole::Identifier));
+        assert!(matches!(infer_semantic_role("user_id", &DataType::Integer), SemanticRole::Identifier));
+        assert!(matches!(infer_semantic_role("order_key", &DataType::Text), SemanticRole::Identifier));
+        assert!(matches!(infer_semantic_role("uuid", &DataType::Text), SemanticRole::Identifier));
+        assert!(matches!(infer_semantic_role("product_uuid", &DataType::Text), SemanticRole::Identifier));
+        assert!(matches!(infer_semantic_role("sku_code", &DataType::Text), SemanticRole::Identifier));
+        assert!(matches!(infer_semantic_role("userid", &DataType::Integer), SemanticRole::Identifier));
+    }
+
+    #[test]
+    fn test_infer_semantic_role_identifier_false_positives() {
+        // These should NOT be detected as identifiers
+        assert!(!matches!(infer_semantic_role("paid", &DataType::Boolean), SemanticRole::Identifier));
+        assert!(!matches!(infer_semantic_role("valid", &DataType::Boolean), SemanticRole::Identifier));
+    }
+
+    #[test]
+    fn test_infer_semantic_role_temporal_variations() {
+        // Test various temporal patterns
+        assert!(matches!(infer_semantic_role("updated_at", &DataType::Text), SemanticRole::Temporal));
+        assert!(matches!(infer_semantic_role("birth_date", &DataType::Date { format: "YYYY-MM-DD".to_string() }), SemanticRole::Temporal));
+        assert!(matches!(infer_semantic_role("start_time", &DataType::Text), SemanticRole::Temporal));
+        assert!(matches!(infer_semantic_role("created_datetime", &DataType::Text), SemanticRole::Temporal));
+        assert!(matches!(infer_semantic_role("event_timestamp", &DataType::Text), SemanticRole::Temporal));
+        assert!(matches!(infer_semantic_role("order_date", &DataType::Text), SemanticRole::Temporal));
+    }
+
+    #[test]
+    fn test_infer_semantic_role_measure_variations() {
+        // Test various measure patterns
+        assert!(matches!(infer_semantic_role("price", &DataType::Decimal { precision: Some(2) }), SemanticRole::Measure));
+        assert!(matches!(infer_semantic_role("unit_price", &DataType::Currency { code: "USD".to_string() }), SemanticRole::Measure));
+        assert!(matches!(infer_semantic_role("total_revenue", &DataType::Decimal { precision: Some(2) }), SemanticRole::Measure));
+        assert!(matches!(infer_semantic_role("item_count", &DataType::Integer), SemanticRole::Measure));
+        assert!(matches!(infer_semantic_role("order_total", &DataType::Currency { code: "USD".to_string() }), SemanticRole::Measure));
+        assert!(matches!(infer_semantic_role("shipping_cost", &DataType::Decimal { precision: Some(2) }), SemanticRole::Measure));
+        assert!(matches!(infer_semantic_role("qty", &DataType::Integer), SemanticRole::Measure));
+        assert!(matches!(infer_semantic_role("quantity", &DataType::Integer), SemanticRole::Measure));
+    }
+
+    #[test]
+    fn test_infer_semantic_role_dimension_variations() {
+        // Test various dimension patterns
+        assert!(matches!(infer_semantic_role("customer_type", &DataType::Text), SemanticRole::Dimension));
+        assert!(matches!(infer_semantic_role("region", &DataType::Text), SemanticRole::Dimension));
+        assert!(matches!(infer_semantic_role("order_status", &DataType::Enum { values: vec![] }), SemanticRole::Dimension));
+        assert!(matches!(infer_semantic_role("country", &DataType::Text), SemanticRole::Dimension));
+        assert!(matches!(infer_semantic_role("city", &DataType::Text), SemanticRole::Dimension));
+        assert!(matches!(infer_semantic_role("customer_segment", &DataType::Text), SemanticRole::Dimension));
+        assert!(matches!(infer_semantic_role("membership_tier", &DataType::Text), SemanticRole::Dimension));
+    }
+
+    #[test]
+    fn test_infer_semantic_role_descriptive_variations() {
+        // Test various descriptive patterns
+        assert!(matches!(infer_semantic_role("notes", &DataType::Text), SemanticRole::Descriptive));
+        assert!(matches!(infer_semantic_role("order_notes", &DataType::Text), SemanticRole::Descriptive));
+        assert!(matches!(infer_semantic_role("product_description", &DataType::Text), SemanticRole::Descriptive));
+        assert!(matches!(infer_semantic_role("customer_comment", &DataType::Text), SemanticRole::Descriptive));
+        assert!(matches!(infer_semantic_role("internal_memo", &DataType::Text), SemanticRole::Descriptive));
+        assert!(matches!(infer_semantic_role("name", &DataType::Text), SemanticRole::Descriptive));
+        assert!(matches!(infer_semantic_role("product_name", &DataType::Text), SemanticRole::Descriptive));
+        assert!(matches!(infer_semantic_role("customer_name", &DataType::Text), SemanticRole::Descriptive));
+    }
+
+    #[test]
+    fn test_infer_semantic_role_data_type_fallback() {
+        // When name doesn't match any pattern, fall back to data type
+        assert!(matches!(
+            infer_semantic_role("xyz", &DataType::Currency { code: "USD".to_string() }),
+            SemanticRole::Measure
+        ));
+        assert!(matches!(
+            infer_semantic_role("foo", &DataType::Date { format: "YYYY-MM-DD".to_string() }),
+            SemanticRole::Temporal
+        ));
+        assert!(matches!(
+            infer_semantic_role("bar", &DataType::DateTime { format: "YYYY-MM-DD HH:mm:ss".to_string() }),
+            SemanticRole::Temporal
+        ));
+        assert!(matches!(
+            infer_semantic_role("baz", &DataType::Enum { values: vec!["A".to_string(), "B".to_string()] }),
+            SemanticRole::Dimension
+        ));
+        assert!(matches!(
+            infer_semantic_role("qux", &DataType::Integer),
+            SemanticRole::Measure
+        ));
+        assert!(matches!(
+            infer_semantic_role("quux", &DataType::Decimal { precision: Some(2) }),
+            SemanticRole::Measure
+        ));
+        assert!(matches!(
+            infer_semantic_role("corge", &DataType::Boolean),
+            SemanticRole::Dimension
+        ));
+    }
+
+    #[test]
+    fn test_infer_semantic_role_unknown_fallback() {
+        // Plain text with no recognizable pattern should be Unknown
+        let role = infer_semantic_role("xyz", &DataType::Text);
+        assert!(matches!(role, SemanticRole::Unknown));
+    }
+
+    #[test]
+    fn test_infer_semantic_role_case_insensitive() {
+        // Should work regardless of case
+        assert!(matches!(infer_semantic_role("CUSTOMER_ID", &DataType::Integer), SemanticRole::Identifier));
+        assert!(matches!(infer_semantic_role("Created_At", &DataType::Text), SemanticRole::Temporal));
+        assert!(matches!(infer_semantic_role("TOTAL_AMOUNT", &DataType::Decimal { precision: Some(2) }), SemanticRole::Measure));
+        assert!(matches!(infer_semantic_role("Product_Category", &DataType::Text), SemanticRole::Dimension));
+    }
+
+    #[test]
+    fn test_infer_semantic_role_name_priority_over_data_type() {
+        // Name-based detection should take priority over data type fallback
+        // Even if data type suggests Measure, if name suggests Identifier, use Identifier
+        let role = infer_semantic_role("customer_id", &DataType::Integer);
+        assert!(matches!(role, SemanticRole::Identifier));
+
+        // Even if data type is Date, if name doesn't match temporal pattern,
+        // temporal patterns in name should still take precedence
+        let role = infer_semantic_role("created_at", &DataType::Text);
+        assert!(matches!(role, SemanticRole::Temporal));
+    }
+
+    // ========================================================================
+    // Schema Inference Tests
+    // ========================================================================
+
+    #[test]
+    fn test_infer_schema_basic() {
+        let data = CsvData {
+            headers: vec!["id".to_string(), "name".to_string(), "amount".to_string()],
+            rows: vec![
+                vec!["1".to_string(), "Alice".to_string(), "100.50".to_string()],
+                vec!["2".to_string(), "Bob".to_string(), "200.75".to_string()],
+                vec!["3".to_string(), "Charlie".to_string(), "150.25".to_string()],
+            ],
+            total_rows: 3,
+            truncated: false,
+        };
+
+        let schema = infer_schema("test.csv", &data, None);
+
+        assert_eq!(schema.version, 1);
+        assert_eq!(schema.source_file, "test.csv");
+        assert_eq!(schema.columns.len(), 3);
+        assert!(!schema.read_only);
+
+        // Check id column
+        assert_eq!(schema.columns[0].name, "id");
+        assert!(matches!(schema.columns[0].semantic_role, SemanticRole::Identifier));
+
+        // Check name column
+        assert_eq!(schema.columns[1].name, "name");
+        assert!(matches!(schema.columns[1].semantic_role, SemanticRole::Descriptive));
+
+        // Check amount column
+        assert_eq!(schema.columns[2].name, "amount");
+        assert!(matches!(schema.columns[2].data_type, DataType::Decimal { .. }));
+    }
+
+    #[test]
+    fn test_infer_schema_preserves_user_descriptions() {
+        let data = CsvData {
+            headers: vec!["customer_id".to_string(), "total_amount".to_string()],
+            rows: vec![
+                vec!["1".to_string(), "100.00".to_string()],
+                vec!["2".to_string(), "200.00".to_string()],
+            ],
+            total_rows: 2,
+            truncated: false,
+        };
+
+        // First inference
+        let schema1 = infer_schema("test.csv", &data, None);
+
+        // Simulate user editing the description
+        let mut modified_schema = schema1.clone();
+        modified_schema.columns[0].description = "Custom user description for customer ID".to_string();
+
+        // Re-infer with existing schema
+        let schema2 = infer_schema("test.csv", &data, Some(&modified_schema));
+
+        // User description should be preserved
+        assert_eq!(
+            schema2.columns[0].description,
+            "Custom user description for customer ID"
+        );
+
+        // Auto-generated description should be regenerated (since it wasn't edited)
+        // The second column should have an auto-generated description
+        assert!(schema2.columns[1].description.contains("Total Amount"));
+    }
+
+    #[test]
+    fn test_compute_column_metadata_integers() {
+        let values: Vec<String> = vec!["100", "200", "300", "400", "500"]
+            .into_iter()
+            .map(String::from)
+            .collect();
+
+        let metadata = compute_column_metadata(&values, &DataType::Integer);
+
+        assert_eq!(metadata.non_null_count, Some(5));
+        assert_eq!(metadata.distinct_count, Some(5));
+        assert!(metadata.unique);
+        assert!(!metadata.nullable);
+        assert!(metadata.numeric_stats.is_some());
+
+        let stats = metadata.numeric_stats.unwrap();
+        assert_eq!(stats.min, 100.0);
+        assert_eq!(stats.max, 500.0);
+        assert_eq!(stats.sum, 1500.0);
+        assert_eq!(stats.mean, 300.0);
+    }
+
+    #[test]
+    fn test_compute_column_metadata_with_nulls() {
+        let values: Vec<String> = vec!["100", "", "200", "", "300"]
+            .into_iter()
+            .map(String::from)
+            .collect();
+
+        let metadata = compute_column_metadata(&values, &DataType::Integer);
+
+        assert_eq!(metadata.non_null_count, Some(3));
+        assert_eq!(metadata.distinct_count, Some(3));
+        assert!(metadata.nullable);
+        assert!(metadata.numeric_stats.is_some());
+
+        let stats = metadata.numeric_stats.unwrap();
+        assert_eq!(stats.min, 100.0);
+        assert_eq!(stats.max, 300.0);
+    }
+
+    #[test]
+    fn test_compute_column_metadata_currency() {
+        let values: Vec<String> = vec!["$50.00", "$100.00", "$150.00"]
+            .into_iter()
+            .map(String::from)
+            .collect();
+
+        let metadata = compute_column_metadata(&values, &DataType::Currency { code: "USD".to_string() });
+
+        assert!(metadata.numeric_stats.is_some());
+        let stats = metadata.numeric_stats.unwrap();
+        assert_eq!(stats.min, 50.0);
+        assert_eq!(stats.max, 150.0);
+        assert_eq!(stats.sum, 300.0);
+        assert_eq!(stats.mean, 100.0);
+    }
+
+    #[test]
+    fn test_compute_column_metadata_samples() {
+        let values: Vec<String> = vec!["apple", "banana", "cherry", "date", "elderberry", "fig", "grape"]
+            .into_iter()
+            .map(String::from)
+            .collect();
+
+        let metadata = compute_column_metadata(&values, &DataType::Text);
+
+        // Should only have max 5 samples
+        assert!(metadata.examples.len() <= 5);
+        assert_eq!(metadata.distinct_count, Some(7));
+    }
+
+    #[test]
+    fn test_generate_description_identifier() {
+        let desc = generate_description("customer_id", &DataType::Integer, &SemanticRole::Identifier);
+        assert!(desc.contains("Customer Id"));
+        assert!(desc.contains("unique identifier"));
+    }
+
+    #[test]
+    fn test_generate_description_currency() {
+        let desc = generate_description("order_total", &DataType::Currency { code: "USD".to_string() }, &SemanticRole::Measure);
+        assert!(desc.contains("Order Total"));
+        assert!(desc.contains("USD"));
+    }
+
+    #[test]
+    fn test_generate_description_enum() {
+        let desc = generate_description(
+            "status",
+            &DataType::Enum { values: vec!["Active".to_string(), "Inactive".to_string(), "Pending".to_string()] },
+            &SemanticRole::Dimension,
+        );
+        assert!(desc.contains("Status"));
+        assert!(desc.contains("Active"));
+        assert!(desc.contains("Inactive"));
+        assert!(desc.contains("Pending"));
+    }
+
+    #[test]
+    fn test_generate_description_date() {
+        let desc = generate_description(
+            "created_at",
+            &DataType::Date { format: "YYYY-MM-DD".to_string() },
+            &SemanticRole::Temporal,
+        );
+        assert!(desc.contains("Created At"));
+        assert!(desc.contains("YYYY-MM-DD"));
+    }
+
+    #[test]
+    fn test_numeric_stats_percentage() {
+        let values: Vec<String> = vec!["10%", "20%", "30%", "40%"]
+            .into_iter()
+            .map(String::from)
+            .collect();
+
+        let metadata = compute_column_metadata(&values, &DataType::Percentage);
+
+        assert!(metadata.numeric_stats.is_some());
+        let stats = metadata.numeric_stats.unwrap();
+        assert_eq!(stats.min, 10.0);
+        assert_eq!(stats.max, 40.0);
+        assert_eq!(stats.mean, 25.0);
+    }
+
+    #[test]
+    fn test_infer_schema_with_mixed_types() {
+        let data = CsvData {
+            headers: vec![
+                "order_id".to_string(),
+                "customer_name".to_string(),
+                "order_date".to_string(),
+                "total_amount".to_string(),
+                "status".to_string(),
+            ],
+            rows: vec![
+                vec!["1".to_string(), "Alice".to_string(), "2024-01-15".to_string(), "$100.00".to_string(), "Active".to_string()],
+                vec!["2".to_string(), "Bob".to_string(), "2024-01-16".to_string(), "$200.00".to_string(), "Pending".to_string()],
+                vec!["3".to_string(), "Charlie".to_string(), "2024-01-17".to_string(), "$150.00".to_string(), "Active".to_string()],
+            ],
+            total_rows: 3,
+            truncated: false,
+        };
+
+        let schema = infer_schema("orders.csv", &data, None);
+
+        // Verify column count
+        assert_eq!(schema.columns.len(), 5);
+
+        // order_id should be Identifier
+        assert!(matches!(schema.columns[0].semantic_role, SemanticRole::Identifier));
+
+        // customer_name should be Descriptive
+        assert!(matches!(schema.columns[1].semantic_role, SemanticRole::Descriptive));
+
+        // order_date should be Temporal
+        assert!(matches!(schema.columns[2].semantic_role, SemanticRole::Temporal));
+        assert!(matches!(schema.columns[2].data_type, DataType::Date { .. }));
+
+        // total_amount should be Measure with Currency type
+        assert!(matches!(schema.columns[3].semantic_role, SemanticRole::Measure));
+        assert!(matches!(schema.columns[3].data_type, DataType::Currency { .. }));
+
+        // status should have numeric stats for currency column
+        assert!(schema.columns[3].metadata.numeric_stats.is_some());
     }
 }

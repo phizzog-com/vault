@@ -4475,7 +4475,7 @@
       "phase": "Phase 1: Rust Core",
       "task": "CSV Processor",
       "name": "Implement semantic role inference",
-      "passes": false,
+      "passes": true,
       "instructions": [
         "Implement infer_semantic_role(name, data_type) function",
         "Detect Identifier: ends with _id, uuid, key",
@@ -4499,7 +4499,7 @@
       "phase": "Phase 1: Rust Core",
       "task": "CSV Processor",
       "name": "Implement schema inference and statistics",
-      "passes": false,
+      "passes": true,
       "instructions": [
         "Implement infer_schema(path, data, existing) function",
         "Implement compute_column_metadata(values, data_type) for stats",

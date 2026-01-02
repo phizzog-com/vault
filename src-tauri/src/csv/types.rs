@@ -168,6 +168,24 @@ pub struct ColumnMetadata {
     pub max_value: Option<String>,
     /// Count of distinct values
     pub distinct_count: Option<usize>,
+    /// Count of non-null (non-empty) values
+    pub non_null_count: Option<usize>,
+    /// Statistics for numeric columns
+    pub numeric_stats: Option<NumericStats>,
+}
+
+/// Statistics for numeric columns
+#[derive(Debug, Clone, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct NumericStats {
+    /// Minimum numeric value
+    pub min: f64,
+    /// Maximum numeric value
+    pub max: f64,
+    /// Mean (average) value
+    pub mean: f64,
+    /// Sum of all values
+    pub sum: f64,
 }
 
 /// Dataset-level metadata
@@ -414,6 +432,8 @@ impl Default for ColumnMetadata {
             min_value: None,
             max_value: None,
             distinct_count: None,
+            non_null_count: None,
+            numeric_stats: None,
         }
     }
 }
