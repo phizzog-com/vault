@@ -67,7 +67,16 @@ export async function getBundledServers(vaultPath, bundlePath = null) {
   if (!bundlePath) {
     try {
       const { resourceDir } = await import('@tauri-apps/api/path');
-      bundlePath = await resourceDir();
+      const resDir = await resourceDir();
+
+      // On macOS production, externalBin sidecars are in Contents/MacOS/
+      // but resourceDir() returns Contents/Resources/
+      if (resDir.includes('/Contents/Resources')) {
+        bundlePath = resDir.replace('/Contents/Resources', '/Contents/MacOS');
+        console.log('[bundledServers] Production macOS detected, using MacOS directory for sidecars');
+      } else {
+        bundlePath = resDir;
+      }
     } catch (e) {
       console.warn('Could not get bundle path from Tauri:', e);
       // Fallback for development - binaries are in src-tauri/target/debug

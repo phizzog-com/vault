@@ -1931,7 +1931,7 @@ function rebuildEditorHeader(fileName = 'Welcome to Vault') {
         <button id="sidebar-toggle" class="editor-control-btn" onclick="toggleSidebar()" title="Toggle Sidebar">
           ${icons.panelLeft()}
         </button>
-        <button id="split-view-btn" class="editor-control-btn" onclick="toggleSplitView()" title="Split View (Cmd+\\)">
+        <button id="split-view-btn" class="editor-control-btn${paneManager?.isSplit ? ' active' : ''}" onclick="toggleSplitView()" title="Split View (Cmd+\\)">
           ${icons.columns2()}
         </button>
         <button id="zen-mode-btn" class="editor-control-btn" onclick="toggleZenMode()" title="Zen Mode (Cmd+Option+Z)">
@@ -2076,30 +2076,30 @@ function showWelcomeScreen() {
         <div class="welcome-header">
           <h1>Welcome to Vault</h1>
           <img src="/vault-logo-transparent.png" alt="Vault Logo" class="welcome-logo" />
-          <h2 class="welcome-tagline">The local-first knowledge engine built for performance, privacy, and longevity</h2>
+          <h2 class="welcome-tagline">A local-first notes app that brings together everything you've saved, highlighted, or written — private, fast, AI-ready.</h2>
         </div>
         
         <div class="features-section">
           <div class="feature-cards">
             <div class="feature-card">
-              <div class="feature-icon">${icons.fileLock({ size: 32 })}</div>
+              <div class="feature-icon">${icons.lock({ size: 32 })}</div>
               <h3>Private</h3>
               <h4>SECURE BY DESIGN</h4>
-              <p>No Cloud. No Tracking. No BS. Every note stays local as plain Markdown. Total control, total privacy.</p>
+              <p>Plain Markdown with total control. Your thoughts never leave your machine unless you say so. Zero telemetry. Zero lock-in.</p>
             </div>
 
             <div class="feature-card">
-              <div class="feature-icon">${icons.sparkles({ size: 32 })}</div>
+              <div class="feature-icon">${icons.zap({ size: 32 })}</div>
               <h3>Blazing Fast</h3>
               <h4>NATIVE PERFORMANCE</h4>
-              <p>Locally powered personal knowledge vault & context engine with instant search, zero lag. Built for flow state.</p>
+              <p>Native desktop performance that keeps pace with how you think. Built for professionals who refuse to wait.</p>
             </div>
 
             <div class="feature-card">
-              <div class="feature-icon">${icons.messageCircleCode({ size: 32 })}</div>
+              <div class="feature-icon">${icons.settings({ size: 32 })}</div>
               <h3>AI-Ready</h3>
               <h4>PROGRESSIVE CONTEXT</h4>
-              <p>Each note, highlight, and connection strengthens your AI context. Watch your intelligence amplify over time.</p>
+              <p>Every note and highlight compounds into deeper AI context. You control what to share, nothing is sent automatically.</p>
             </div>
           </div>
         </div>
@@ -3277,7 +3277,7 @@ async function initializeApp() {
               <button class="chat-toggle-btn editor-control-btn${window.chatPanel?.isVisible ? ' active' : ''}" onclick="toggleChatPanel()" title="AI Chat (Cmd+Shift+C)">
                 ${icons.messageSquare()}
               </button>
-              <button id="split-view-btn" class="editor-control-btn" onclick="toggleSplitView()" title="Split View">
+              <button id="split-view-btn" class="editor-control-btn${paneManager?.isSplit ? ' active' : ''}" onclick="toggleSplitView()" title="Split View">
                 ${icons.columns2()}
               </button>
               <div class="editor-menu-container">
