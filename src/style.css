@@ -235,11 +235,42 @@ body {
 /* Sidebar */
 .sidebar {
   width: var(--sidebar-width);
+  min-width: 180px;
+  max-width: 400px;
   background-color: var(--bg-secondary);
   border-right: 1px solid rgba(233, 233, 231, 0.6);
   display: flex;
   flex-direction: column;
   position: relative;
+  flex-shrink: 0;
+}
+
+/* Sidebar resize handle */
+.sidebar-resize-handle {
+  position: absolute;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  cursor: col-resize;
+  background: transparent;
+  z-index: 10;
+  transition: background-color 0.2s;
+}
+
+.sidebar-resize-handle:hover {
+  background-color: rgba(59, 130, 246, 0.3);
+}
+
+.sidebar-resize-handle.dragging {
+  background-color: rgba(59, 130, 246, 0.5);
+}
+
+body.resizing-sidebar {
+  user-select: none;
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
 }
 
 .sidebar-header {

@@ -386,6 +386,7 @@ pub struct FileChangeEvent {
 /// Types of file changes
 #[derive(Debug, Clone, Serialize, Type)]
 #[serde(rename_all = "camelCase")]
+#[allow(dead_code)]
 pub enum FileChangeType {
     /// File content was modified
     Modified,
@@ -410,6 +411,7 @@ pub struct CsvLoadProgress {
 /// Phases of CSV loading
 #[derive(Debug, Clone, Serialize, Type)]
 #[serde(rename_all = "camelCase")]
+#[allow(dead_code)]
 pub enum LoadPhase {
     /// Parsing CSV content
     Parsing,

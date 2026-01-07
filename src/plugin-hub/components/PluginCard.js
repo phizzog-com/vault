@@ -109,18 +109,14 @@ class PluginCard {
     renderBadges() {
         const badges = [];
 
-        // Built-in badge for bundled plugins
-        if (this.plugin.isBundled) {
+        // Built-in badge for bundled plugins and Readwise
+        if (this.plugin.isBundled || this.plugin.id === 'readwise') {
             badges.push('<span class="bundled-badge">Built-in</span>');
         }
 
-        // Freemium badge: has premium features but doesn't require license for basic use
-        if (this.plugin.hasPremiumFeatures && !this.plugin.requiresLicense) {
-            badges.push('<span class="badge-freemium">Free + Premium</span>');
-        }
-        // Premium badge: requires license to use at all
-        else if (this.plugin.requiresLicense) {
-            badges.push('<span class="premium-badge">Premium</span>');
+        // Coming soon badge
+        if (this.plugin.comingSoon) {
+            badges.push('<span class="coming-soon-badge">Coming soon</span>');
         }
 
         return badges.join('');

@@ -12,7 +12,7 @@ import EntitlementManager from '../services/entitlement-manager.js';
 const BUNDLED_PLUGINS = {
   'pacasdb': {
     id: 'pacasdb',
-    name: 'PACASDB Premium',
+    name: 'PACASDB',
     version: '1.0.0',
     author: 'Vault Team',
     description: 'Semantic search and cognitive memory for your vault. Enables AI-powered note discovery, related notes, and intelligent context tracking.',
@@ -25,16 +25,17 @@ const BUNDLED_PLUGINS = {
     homepage: null,
     category: 'Premium',
     tags: ['semantic-search', 'ai', 'premium', 'cognitive-memory'],
-    isBundled: true,  // Mark as bundled - cannot be uninstalled
-    requiresLicense: true,  // Requires premium license to enable
+    isBundled: true,
+    requiresLicense: false,
+    comingSoon: true,
   },
   'csv-support': {
     id: 'csv-support',
     name: 'CSV Editor Pro',
     version: '1.0.0',
     author: 'Vault Team',
-    description: 'View and edit CSV files with a powerful tabular interface. Free tier includes editing, row/column operations, and 10K row support. Premium adds schema inference, AI context generation, and unlimited rows.',
-    enabled: true,  // Free tier on by default
+    description: 'View and edit CSV files with a powerful tabular interface. Includes editing, row/column operations, schema inference, AI context generation, and unlimited rows.',
+    enabled: true,
     installed: true,
     permissions: ['vault:read', 'vault:write'],
     settings: [],
@@ -42,10 +43,9 @@ const BUNDLED_PLUGINS = {
     icon: null,
     homepage: null,
     category: 'Data',
-    tags: ['csv', 'spreadsheet', 'data', 'editor', 'freemium'],
-    isBundled: true,  // Mark as bundled - cannot be uninstalled
-    requiresLicense: false,  // Free tier available without license
-    hasPremiumFeatures: true,  // Has premium features available for upgrade
+    tags: ['csv', 'spreadsheet', 'data', 'editor'],
+    isBundled: true,
+    requiresLicense: false,
   }
 };
 

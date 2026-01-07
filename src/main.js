@@ -2076,7 +2076,7 @@ function showWelcomeScreen() {
         <div class="welcome-header">
           <h1>Welcome to Vault</h1>
           <img src="/vault-logo-transparent.png" alt="Vault Logo" class="welcome-logo" />
-          <h2 class="welcome-tagline">Transform Your Knowledge Into Superhuman Intelligence</h2>
+          <h2 class="welcome-tagline">The local-first knowledge engine built for performance, privacy, and longevity</h2>
         </div>
         
         <div class="features-section">
@@ -2097,7 +2097,7 @@ function showWelcomeScreen() {
 
             <div class="feature-card">
               <div class="feature-icon">${icons.messageCircleCode({ size: 32 })}</div>
-              <h3>Agent-Ready</h3>
+              <h3>AI-Ready</h3>
               <h4>PROGRESSIVE CONTEXT</h4>
               <p>Each note, highlight, and connection strengthens your AI context. Watch your intelligence amplify over time.</p>
             </div>
@@ -3130,6 +3130,74 @@ ${message}
   }
 }
 
+// Sidebar resize functionality
+function setupSidebarResize() {
+  const sidebar = document.querySelector('.sidebar');
+  const resizeHandle = document.getElementById('sidebar-resize-handle');
+
+  if (!sidebar || !resizeHandle) {
+    console.warn('Sidebar resize: elements not found');
+    return;
+  }
+
+  let isResizing = false;
+  let startX = 0;
+  let startWidth = 0;
+  const minWidth = 180;
+  const maxWidth = 400;
+
+  const handleResizeStart = (e) => {
+    isResizing = true;
+    startX = e.clientX;
+    startWidth = sidebar.offsetWidth;
+    resizeHandle.classList.add('dragging');
+    document.body.style.cursor = 'col-resize';
+    document.body.classList.add('resizing-sidebar');
+
+    document.addEventListener('mousemove', handleResizeMove);
+    document.addEventListener('mouseup', handleResizeEnd);
+    e.preventDefault();
+  };
+
+  const handleResizeMove = (e) => {
+    if (!isResizing) return;
+
+    const deltaX = e.clientX - startX;
+    const newWidth = Math.max(minWidth, Math.min(maxWidth, startWidth + deltaX));
+
+    sidebar.style.width = `${newWidth}px`;
+  };
+
+  const handleResizeEnd = () => {
+    isResizing = false;
+    resizeHandle.classList.remove('dragging');
+    document.body.style.cursor = '';
+    document.body.classList.remove('resizing-sidebar');
+
+    document.removeEventListener('mousemove', handleResizeMove);
+    document.removeEventListener('mouseup', handleResizeEnd);
+
+    // Persist the width for this vault
+    const newWidth = sidebar.offsetWidth;
+    if (window.currentVaultPath) {
+      localStorage.setItem(`sidebar-width-${window.currentVaultPath}`, newWidth);
+    }
+  };
+
+  resizeHandle.addEventListener('mousedown', handleResizeStart);
+
+  // Restore saved width for current vault
+  if (window.currentVaultPath) {
+    const savedWidth = localStorage.getItem(`sidebar-width-${window.currentVaultPath}`);
+    if (savedWidth) {
+      const width = parseInt(savedWidth, 10);
+      if (width >= minWidth && width <= maxWidth) {
+        sidebar.style.width = `${width}px`;
+      }
+    }
+  }
+}
+
 // Initialize everything
 async function initializeApp() {
   if (appInitialized) {
@@ -3192,6 +3260,7 @@ async function initializeApp() {
               <button id="create-vault" class="secondary-button" onclick="window.createVault()">Create Vault</button>
             </div>
           </div>
+          <div class="sidebar-resize-handle" id="sidebar-resize-handle"></div>
         </div>
         <div class="editor-container">
           <div class="editor-header" id="editor-header" data-tauri-drag-region>
@@ -3719,7 +3788,10 @@ async function initializeApp() {
         vaultSync.stop();
       }
     });
-    
+
+    // Set up sidebar resize functionality
+    setupSidebarResize();
+
   } else {
     console.error('❌ No #app element found');
   }

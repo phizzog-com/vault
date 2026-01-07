@@ -210,8 +210,8 @@ export class PluginHub {
     }
     
     // Number keys for view switching (without modifiers)
-    if (e.key >= '1' && e.key <= '4' && !e.ctrlKey && !e.metaKey && !e.altKey) {
-      const views = ['discover', 'installed', 'permissions', 'resources'];
+    if (e.key >= '1' && e.key <= '2' && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      const views = ['discover', 'installed'];
       const index = parseInt(e.key) - 1;
       if (views[index]) {
         e.preventDefault();
@@ -357,9 +357,7 @@ export class PluginHub {
   renderNavigation() {
     const views = [
       { id: 'discover', label: 'Discover', icon: icons.search({ size: 16 }), hotkey: '1' },
-      { id: 'installed', label: 'Installed', icon: icons.package({ size: 16 }), hotkey: '2' },
-      { id: 'permissions', label: 'Permissions', icon: icons.lock({ size: 16 }), hotkey: '3' },
-      { id: 'resources', label: 'Resources', icon: icons.chartBar({ size: 16 }), hotkey: '4' }
+      { id: 'installed', label: 'Installed', icon: icons.package({ size: 16 }), hotkey: '2' }
     ];
     
     return views.map(view => `
@@ -426,9 +424,7 @@ export class PluginHub {
   getViewClassName(viewId) {
     const viewMap = {
       'discover': 'DiscoverView',
-      'installed': 'InstalledView', 
-      'permissions': 'PermissionsView',
-      'resources': 'ResourcesView'
+      'installed': 'InstalledView'
     };
     return viewMap[viewId] || 'InstalledView';
   }
@@ -445,12 +441,6 @@ export class PluginHub {
           break;
         case 'InstalledView':
           module = await import('./views/InstalledView.js');
-          break;
-        case 'PermissionsView':
-          module = await import('./views/PermissionsView.js');
-          break;
-        case 'ResourcesView':
-          module = await import('./views/ResourcesView.js');
           break;
         default:
           module = await import('./views/InstalledView.js');

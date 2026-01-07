@@ -122,25 +122,6 @@ pub async fn save_schema(csv_path: &Path, schema: &CsvSchema) -> Result<(), CsvE
     Ok(())
 }
 
-/// Deletes the schema file for a CSV file.
-///
-/// # Arguments
-/// * `csv_path` - Path to the CSV file (not the schema file)
-///
-/// # Returns
-/// Ok(()) on success or if schema doesn't exist
-pub async fn delete_schema(csv_path: &Path) -> Result<(), CsvError> {
-    let path = schema_path(csv_path);
-
-    if fs::try_exists(&path).await.unwrap_or(false) {
-        fs::remove_file(&path).await.map_err(|e| CsvError::WriteError {
-            message: format!("Failed to delete schema file: {}", e),
-        })?;
-    }
-
-    Ok(())
-}
-
 // ============================================================================
 // File Discovery Functions
 // ============================================================================
@@ -261,52 +242,6 @@ async fn create_file_info(root: &Path, path: &Path) -> Result<CsvFileInfo, CsvEr
         modified_at,
         has_schema,
     })
-}
-
-// ============================================================================
-// Schema Version/Migration
-// ============================================================================
-
-/// Current schema version
-pub const CURRENT_SCHEMA_VERSION: u32 = 1;
-
-/// Migrates a schema to the current version if needed.
-///
-/// Currently only supports version 1, but this function provides
-/// a migration path for future schema changes.
-///
-/// # Arguments
-/// * `schema` - The schema to migrate
-///
-/// # Returns
-/// The migrated schema (may be unchanged if already current version)
-pub fn migrate_schema(mut schema: CsvSchema) -> CsvSchema {
-    // Version 1 is the only version currently, no migrations needed
-    if schema.version < CURRENT_SCHEMA_VERSION {
-        // Future: Add migration logic here
-        // For now, just update the version
-        schema.version = CURRENT_SCHEMA_VERSION;
-    }
-    schema
-}
-
-/// Validates that a schema is compatible with the current version.
-///
-/// # Arguments
-/// * `schema` - The schema to validate
-///
-/// # Returns
-/// Ok(()) if valid, Err if incompatible
-pub fn validate_schema_version(schema: &CsvSchema) -> Result<(), CsvError> {
-    if schema.version > CURRENT_SCHEMA_VERSION {
-        return Err(CsvError::SchemaParseError {
-            message: format!(
-                "Schema version {} is newer than supported version {}. Please update the application.",
-                schema.version, CURRENT_SCHEMA_VERSION
-            ),
-        });
-    }
-    Ok(())
 }
 
 #[cfg(test)]

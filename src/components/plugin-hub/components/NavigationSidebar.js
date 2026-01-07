@@ -3,9 +3,7 @@ import { usePluginContext } from '../contexts/PluginContext';
 
 const views = [
   { id: 'discover', label: 'Discover', icon: '🔍', hotkey: '1' },
-  { id: 'installed', label: 'Installed', icon: '📦', hotkey: '2' },
-  { id: 'permissions', label: 'Permissions', icon: '🔒', hotkey: '3' },
-  { id: 'resources', label: 'Resources', icon: '📊', hotkey: '4' }
+  { id: 'installed', label: 'Installed', icon: '📦', hotkey: '2' }
 ];
 
 export function NavigationSidebar() {

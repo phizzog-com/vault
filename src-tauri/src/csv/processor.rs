@@ -1465,25 +1465,6 @@ fn generate_sample_data_markdown(data: &CsvData, max_rows: usize) -> String {
     markdown
 }
 
-/// Compute a SHA256 hash of a file's contents.
-///
-/// # Arguments
-/// * `path` - Path to the file
-///
-/// # Returns
-/// * `Result<String, CsvError>` - The hex-encoded SHA256 hash or an error
-pub async fn compute_hash(path: &std::path::Path) -> Result<String, CsvError> {
-    let content = tokio::fs::read(path).await.map_err(|e| CsvError::ReadError {
-        message: format!("Failed to read file for hashing '{}': {}", path.display(), e),
-    })?;
-
-    let mut hasher = Sha256::new();
-    hasher.update(&content);
-    let hash = format!("{:x}", hasher.finalize());
-
-    Ok(hash)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
