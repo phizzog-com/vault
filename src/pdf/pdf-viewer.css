@@ -94,14 +94,23 @@
   margin: 0 8px;
 }
 
-/* PDF viewer scrollable area - serves as container for pdfViewer */
-.pdf-viewer {
+/* PDF viewer wrapper - takes up remaining flex space */
+.pdf-viewer-wrapper {
   flex: 1;
-  overflow-y: auto;
-  overflow-x: auto;
+  position: relative;
+  overflow: hidden;
+}
+
+/* PDF viewer scrollable area - must be absolutely positioned for PDF.js PDFViewer */
+.pdf-viewer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  overflow: auto;
   padding: 20px;
   background-color: #e5e5e5;
-  position: relative;
 }
 
 /* PDF.js PDFViewer container styling */

@@ -25,6 +25,7 @@ export class PDFViewerWrapper {
     this.container = containerElement
     this.eventBus = null
     this.viewer = null
+    this.viewerElement = null
     this.pdfDocument = null
   }
 
@@ -38,12 +39,22 @@ export class PDFViewerWrapper {
       return
     }
 
+    // PDF.js PDFViewer requires a specific DOM structure:
+    // <container>
+    //   <div class="pdfViewer"></div>
+    // </container>
+    // Create the viewer element inside the container
+    this.viewerElement = document.createElement('div')
+    this.viewerElement.className = 'pdfViewer'
+    this.container.appendChild(this.viewerElement)
+
     // Create event bus for internal PDF.js communication
     this.eventBus = new EventBus()
 
     // Create viewer with virtualization enabled
     this.viewer = new PDFViewer({
       container: this.container,
+      viewer: this.viewerElement,
       eventBus: this.eventBus,
       textLayerMode: 2,           // Enable text layer for selection
       annotationMode: 0,          // Disable built-in annotations (we use our own highlights)
@@ -56,15 +67,54 @@ export class PDFViewerWrapper {
   }
 
   /**
+   * Wait until the container is actually attached to the DOM and has layout
+   * @private
+   */
+  _waitForLayout() {
+    return new Promise((resolve) => {
+      const check = () => {
+        // Check if container is in document and has layout (offsetParent is set)
+        if (this.container.offsetParent !== null ||
+            document.body.contains(this.container) && this.container.offsetWidth > 0) {
+          resolve()
+        } else {
+          requestAnimationFrame(check)
+        }
+      }
+      check()
+    })
+  }
+
+  /**
    * Load a PDF document
    * @param {Object} pdfData - PDF data object (url, data, etc.)
+   * @param {string|number} initialScale - Initial scale: 'page-width', 'page-fit', or number (default 'page-width')
    * @returns {Promise<number>} Number of pages in the document
    */
-  async loadDocument(pdfData) {
+  async loadDocument(pdfData, initialScale = 'page-width') {
     const loadingTask = pdfjsLib.getDocument(pdfData)
     this.pdfDocument = await loadingTask.promise
     this.viewer.setDocument(this.pdfDocument)
-    return this.pdfDocument.numPages
+
+    // Wait for pages to be initialized
+    return new Promise((resolve) => {
+      const onPagesInit = async () => {
+        this.eventBus.off('pagesinit', onPagesInit)
+
+        // Wait until container is actually in the DOM with layout
+        await this._waitForLayout()
+
+        // Set initial scale - this triggers the first render
+        if (typeof initialScale === 'string') {
+          this.viewer.currentScaleValue = initialScale
+        } else {
+          this.viewer.currentScale = initialScale
+        }
+        resolve(this.pdfDocument.numPages)
+      }
+
+      this.eventBus.on('pagesinit', onPagesInit)
+    })
   }
 
   /**
@@ -120,5 +170,12 @@ export class PDFViewerWrapper {
     if (this.pdfDocument) {
       this.pdfDocument.destroy()
     }
+    if (this.viewerElement && this.viewerElement.parentNode) {
+      this.viewerElement.parentNode.removeChild(this.viewerElement)
+    }
+    this.viewerElement = null
+    this.viewer = null
+    this.pdfDocument = null
+    this.eventBus = null
   }
 }

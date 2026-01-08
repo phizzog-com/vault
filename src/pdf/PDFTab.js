@@ -56,16 +56,26 @@ export class PDFTab {
     this.toolbar = this.createToolbar()
     this.container.appendChild(this.toolbar)
 
-    // Create viewer container
+    // Create wrapper for viewer (needed for flex layout with absolute positioned viewer)
+    const viewerWrapper = document.createElement('div')
+    viewerWrapper.className = 'pdf-viewer-wrapper'
+    this.container.appendChild(viewerWrapper)
+
+    // Create viewer container (must be absolutely positioned for PDF.js)
     this.viewerContainer = document.createElement('div')
     this.viewerContainer.className = 'pdf-viewer'
-    this.container.appendChild(this.viewerContainer)
-
-    // Initialize PDF
-    await this.initializePDF()
+    viewerWrapper.appendChild(this.viewerContainer)
 
     // Set up keyboard shortcuts
     this.setupKeyboardShortcuts()
+
+    // Initialize PDF AFTER returning container (so it can be attached to DOM first)
+    // Use setTimeout to ensure this runs after the container is in the DOM
+    setTimeout(() => {
+      this.initializePDF().catch(error => {
+        console.error('Error initializing PDF:', error)
+      })
+    }, 0)
 
     return this.container
   }
