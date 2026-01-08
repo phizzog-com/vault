@@ -1,86 +1,86 @@
 // PDFTab.js: Integration with the existing tab system for PDF viewing
 // Creates PDF viewer instances that work seamlessly with TabManager
+// Uses PDFViewerWrapper for virtualized rendering
 
-import { convertFileSrc, invoke } from '@tauri-apps/api/core';
-import { basename } from '@tauri-apps/api/path';
-import { 
-  loadPDF, 
-  renderAllPages, 
-  zoomIn, 
-  zoomOut,
-  getCurrentScale,
-  getCurrentPDF,
-  getHighlights
-} from './PDFViewer.js';
-import { 
+import { invoke } from '@tauri-apps/api/core'
+import { basename } from '@tauri-apps/api/path'
+import { PDFViewerWrapper } from './PDFViewerWrapper.js'
+import {
   initHighlightManager,
   loadHighlights,
   saveHighlights,
-  extractHighlightsToMarkdown
-} from './PDFHighlightManager.js';
-import windowContext from '../contexts/WindowContext.js';
+  extractHighlightsToMarkdown,
+  cleanupHighlightManager,
+  getHighlights
+} from './PDFHighlightManager.js'
+import windowContext from '../contexts/WindowContext.js'
 
 // Import CSS for PDF viewer
-import './pdf-viewer.css';
+import './pdf-viewer.css'
 
 /**
  * PDFTab class - Represents a PDF viewer tab
+ * Uses PDF.js PDFViewer for virtualized rendering
  */
 export class PDFTab {
   constructor(pdfPath, tabManager, paneId) {
-    console.log(`Creating PDF tab for: ${pdfPath}`);
-    
-    this.pdfPath = pdfPath;
-    this.tabManager = tabManager;
-    this.paneId = paneId;
-    this.container = null;
-    this.toolbar = null;
-    this.viewerContainer = null;
-    this.pageCounter = null;
-    this.currentPage = 1;
-    this.totalPages = 0;
-    this.fileName = '';
+    console.log(`Creating PDF tab for: ${pdfPath}`)
+
+    this.pdfPath = pdfPath
+    this.tabManager = tabManager
+    this.paneId = paneId
+    this.container = null
+    this.toolbar = null
+    this.viewerContainer = null
+    this.pageCounter = null
+    this.currentPage = 1
+    this.totalPages = 0
+    this.fileName = ''
+    this.viewerWrapper = null
   }
-  
+
   /**
    * Create and return the tab content
    * @returns {Promise<HTMLElement>} The container element for the PDF viewer
    */
   async createContent() {
     // Create main container
-    this.container = document.createElement('div');
-    this.container.className = 'pdf-container';
-    this.container.id = `pdf-container-${Date.now()}`;
-    
+    this.container = document.createElement('div')
+    this.container.className = 'pdf-container'
+    this.container.id = `pdf-container-${Date.now()}`
+
     // Get filename for display
-    this.fileName = await basename(this.pdfPath);
-    
-    // Create toolbar
-    this.toolbar = this.createToolbar();
-    this.container.appendChild(this.toolbar);
-    
+    this.fileName = await basename(this.pdfPath)
+
+    // Create toolbar (with placeholder zoom level until viewer is ready)
+    this.toolbar = this.createToolbar()
+    this.container.appendChild(this.toolbar)
+
     // Create viewer container
-    this.viewerContainer = document.createElement('div');
-    this.viewerContainer.className = 'pdf-viewer';
-    this.container.appendChild(this.viewerContainer);
-    
+    this.viewerContainer = document.createElement('div')
+    this.viewerContainer.className = 'pdf-viewer'
+    this.container.appendChild(this.viewerContainer)
+
     // Initialize PDF
-    await this.initializePDF();
-    
+    await this.initializePDF()
+
     // Set up keyboard shortcuts
-    this.setupKeyboardShortcuts();
-    
-    return this.container;
+    this.setupKeyboardShortcuts()
+
+    return this.container
   }
-  
+
   /**
    * Create the toolbar matching editor header style
    * @returns {HTMLElement} Toolbar element
    */
   createToolbar() {
-    const toolbar = document.createElement('div');
-    toolbar.className = 'editor-header pdf-toolbar';
-    
+    const toolbar = document.createElement('div')
+    toolbar.className = 'editor-header pdf-toolbar'
+
+    // Use a placeholder zoom level; will be updated after viewer initializes
+    const zoomLevel = this.viewerWrapper ? Math.round(this.viewerWrapper.currentScale * 100) : 150
+
     toolbar.innerHTML = `
       <div class="editor-header-left">
         <button class="editor-control-btn pdf-prev-btn" title="Previous Page">
@@ -95,7 +95,7 @@ export class PDFTab {
           </svg>
         </button>
       </div>
-      
+
       <div class="editor-header-center pdf-toolbar-center">
         <span class="pdf-filename">${this.fileName}</span>
         <div class="pdf-zoom-controls">
@@ -105,7 +105,7 @@ export class PDFTab {
               <line x1="8" y1="11" x2="14" y2="11"></line>
             </svg>
           </button>
-          <span class="pdf-zoom-level">${Math.round(getCurrentScale() * 100)}%</span>
+          <span class="pdf-zoom-level">${zoomLevel}%</span>
           <button class="editor-control-btn pdf-zoom-in-btn" title="Zoom In">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <circle cx="11" cy="11" r="8"></circle>
@@ -150,206 +150,222 @@ export class PDFTab {
         </button>
         <span class="pdf-highlight-count">0 highlights</span>
       </div>
-      
+
       <div class="editor-header-right">
       </div>
-    `;
-    
+    `
+
     // Cache frequently used elements
-    this.pageCounter = toolbar.querySelector('.pdf-page-counter');
-    this.highlightCounter = toolbar.querySelector('.pdf-highlight-count');
-    
+    this.pageCounter = toolbar.querySelector('.pdf-page-counter')
+    this.highlightCounter = toolbar.querySelector('.pdf-highlight-count')
+
     // Bind event handlers
-    toolbar.querySelector('.pdf-prev-btn').addEventListener('click', () => this.previousPage());
-    toolbar.querySelector('.pdf-next-btn').addEventListener('click', () => this.nextPage());
-    toolbar.querySelector('.pdf-zoom-out-btn').addEventListener('click', () => this.handleZoomOut());
-    toolbar.querySelector('.pdf-zoom-in-btn').addEventListener('click', () => this.handleZoomIn());
-    toolbar.querySelector('.pdf-highlight-btn').addEventListener('click', () => this.highlightSelection());
-    toolbar.querySelector('.pdf-undo-btn').addEventListener('click', () => window.dispatchEvent(new CustomEvent('pdf-undo-highlight')));
-    toolbar.querySelector('.pdf-redo-btn').addEventListener('click', () => window.dispatchEvent(new CustomEvent('pdf-redo-highlight')));
-    toolbar.querySelector('.pdf-extract-btn').addEventListener('click', () => this.extractHighlights());
-    toolbar.querySelector('.pdf-clear-highlights-btn').addEventListener('click', () => this.clearAllHighlights());
-    
-    return toolbar;
+    toolbar.querySelector('.pdf-prev-btn').addEventListener('click', () => this.previousPage())
+    toolbar.querySelector('.pdf-next-btn').addEventListener('click', () => this.nextPage())
+    toolbar.querySelector('.pdf-zoom-out-btn').addEventListener('click', () => this.handleZoomOut())
+    toolbar.querySelector('.pdf-zoom-in-btn').addEventListener('click', () => this.handleZoomIn())
+    toolbar.querySelector('.pdf-highlight-btn').addEventListener('click', () => this.highlightSelection())
+    toolbar.querySelector('.pdf-undo-btn').addEventListener('click', () => window.dispatchEvent(new CustomEvent('pdf-undo-highlight')))
+    toolbar.querySelector('.pdf-redo-btn').addEventListener('click', () => window.dispatchEvent(new CustomEvent('pdf-redo-highlight')))
+    toolbar.querySelector('.pdf-extract-btn').addEventListener('click', () => this.extractHighlights())
+    toolbar.querySelector('.pdf-clear-highlights-btn').addEventListener('click', () => this.clearAllHighlights())
+
+    return toolbar
   }
-  
+
   /**
-   * Initialize PDF loading and rendering
+   * Initialize PDF loading and rendering using PDFViewerWrapper
    */
   async initializePDF() {
     try {
       // Get the vault path from the WindowContext
-      const vaultPath = windowContext.vaultPath || '';
-      
+      const vaultPath = windowContext.vaultPath || ''
+
       // Construct the full path
-      const fullPath = vaultPath ? 
-        `${vaultPath}/${this.pdfPath}` : 
-        this.pdfPath;
-      
-      // Convert file path for Tauri
-      const assetUrl = convertFileSrc(fullPath);
-      console.log(`Original PDF path: ${this.pdfPath}`);
-      console.log(`Vault path: ${vaultPath}`);
-      console.log(`Full PDF path: ${fullPath}`);
-      console.log(`Loading PDF from Tauri URL: ${assetUrl}`);
-      
-      // Skip fetch test as it causes CORS issues with asset:// protocol
-      
-      // Load PDF - pass both URL and file path for Tauri file reading
-      this.totalPages = await loadPDF(assetUrl, fullPath);
-      this.updatePageCounter();
-      
+      const fullPath = vaultPath ?
+        `${vaultPath}/${this.pdfPath}` :
+        this.pdfPath
+
+      console.log(`Original PDF path: ${this.pdfPath}`)
+      console.log(`Vault path: ${vaultPath}`)
+      console.log(`Full PDF path: ${fullPath}`)
+
+      // Read PDF file via Tauri
+      let pdfData
+      try {
+        console.log('Reading PDF file via Tauri API...')
+        const base64Data = await invoke('read_file_base64', { path: fullPath })
+        console.log('Base64 data received, length:', base64Data.length)
+
+        // Convert base64 to Uint8Array
+        const binaryString = atob(base64Data)
+        const bytes = new Uint8Array(binaryString.length)
+        for (let i = 0; i < binaryString.length; i++) {
+          bytes[i] = binaryString.charCodeAt(i)
+        }
+        pdfData = { data: bytes }
+        console.log('PDF file read successfully, size:', bytes.length)
+      } catch (readError) {
+        console.error('Failed to read file via Tauri:', readError)
+        throw new Error(`Failed to read PDF file: ${readError.message}`)
+      }
+
+      // Initialize the viewer wrapper
+      this.viewerWrapper = new PDFViewerWrapper(this.viewerContainer)
+      await this.viewerWrapper.initialize()
+
+      // Load the document
+      this.totalPages = await this.viewerWrapper.loadDocument(pdfData)
+      this.updatePageCounter()
+      this.updateZoomLevel()
+
       // Load existing highlights
-      await loadHighlights(this.pdfPath);
-      
-      // Render all pages
-      await renderAllPages(this.viewerContainer);
-      
-      // Initialize highlight manager
-      initHighlightManager(this.viewerContainer, this.pdfPath);
-      
+      await loadHighlights(this.pdfPath)
+
+      // Initialize highlight manager with viewerWrapper reference
+      initHighlightManager(this.viewerContainer, this.pdfPath, this.viewerWrapper)
+
       // Update highlight count after loading
-      this.updateHighlightCount();
-      
+      this.updateHighlightCount()
+
       // Scroll to top
-      this.viewerContainer.scrollTop = 0;
-      
-      console.log('PDF initialized successfully');
+      this.viewerContainer.scrollTop = 0
+
+      console.log('PDF initialized successfully with virtualization')
     } catch (error) {
-      console.error('Error initializing PDF:', error);
+      console.error('Error initializing PDF:', error)
       this.viewerContainer.innerHTML = `
         <div class="pdf-error">
           <p>Error loading PDF: ${error.message}</p>
         </div>
-      `;
+      `
     }
   }
-  
+
   /**
    * Navigate to previous page
    */
   previousPage() {
     if (this.currentPage > 1) {
-      this.currentPage--;
-      this.scrollToPage(this.currentPage);
-      this.updatePageCounter();
+      this.currentPage--
+      this.scrollToPage(this.currentPage)
+      this.updatePageCounter()
     }
   }
-  
+
   /**
    * Navigate to next page
    */
   nextPage() {
     if (this.currentPage < this.totalPages) {
-      this.currentPage++;
-      this.scrollToPage(this.currentPage);
-      this.updatePageCounter();
+      this.currentPage++
+      this.scrollToPage(this.currentPage)
+      this.updatePageCounter()
     }
   }
-  
+
   /**
    * Scroll to a specific page
    * @param {number} pageNum - Page number to scroll to
    */
   scrollToPage(pageNum) {
-    const pageElement = this.viewerContainer.querySelector(`[data-page-number="${pageNum}"]`);
+    // Try both selectors for compatibility
+    const pageElement = this.viewerContainer.querySelector(`[data-page-number="${pageNum}"]`)
     if (pageElement) {
-      pageElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      pageElement.scrollIntoView({ behavior: 'smooth', block: 'center' })
     }
   }
-  
+
   /**
    * Update page counter display
    */
   updatePageCounter() {
     if (this.pageCounter) {
-      this.pageCounter.textContent = `Page ${this.currentPage} / ${this.totalPages}`;
+      this.pageCounter.textContent = `Page ${this.currentPage} / ${this.totalPages}`
     }
   }
-  
+
   /**
-   * Handle zoom in
+   * Handle zoom in - uses CSS transform for instant feedback
    */
-  async handleZoomIn() {
-    const scrollRatio = this.viewerContainer.scrollTop / this.viewerContainer.scrollHeight;
-    await zoomIn(this.viewerContainer);
-    this.updateZoomLevel();
-    // Restore scroll position proportionally
-    this.viewerContainer.scrollTop = scrollRatio * this.viewerContainer.scrollHeight;
+  handleZoomIn() {
+    if (this.viewerWrapper) {
+      this.viewerWrapper.setScale(this.viewerWrapper.currentScale * 1.2)
+      this.updateZoomLevel()
+    }
   }
-  
+
   /**
-   * Handle zoom out
+   * Handle zoom out - uses CSS transform for instant feedback
    */
-  async handleZoomOut() {
-    const scrollRatio = this.viewerContainer.scrollTop / this.viewerContainer.scrollHeight;
-    await zoomOut(this.viewerContainer);
-    this.updateZoomLevel();
-    // Restore scroll position proportionally
-    this.viewerContainer.scrollTop = scrollRatio * this.viewerContainer.scrollHeight;
+  handleZoomOut() {
+    if (this.viewerWrapper) {
+      this.viewerWrapper.setScale(this.viewerWrapper.currentScale / 1.2)
+      this.updateZoomLevel()
+    }
   }
-  
+
   /**
    * Update zoom level display
    */
   updateZoomLevel() {
-    const zoomElement = this.toolbar.querySelector('.pdf-zoom-level');
-    if (zoomElement) {
-      zoomElement.textContent = `${Math.round(getCurrentScale() * 100)}%`;
+    const zoomElement = this.toolbar.querySelector('.pdf-zoom-level')
+    if (zoomElement && this.viewerWrapper) {
+      zoomElement.textContent = `${Math.round(this.viewerWrapper.currentScale * 100)}%`
     }
   }
-  
+
   /**
    * Highlight the current text selection
    */
   highlightSelection() {
-    window.dispatchEvent(new CustomEvent('pdf-highlight-selection'));
+    window.dispatchEvent(new CustomEvent('pdf-highlight-selection'))
   }
-  
+
   /**
    * Update the highlight count display
    */
   updateHighlightCount() {
     if (this.highlightCounter) {
-      const highlights = getHighlights();
-      let totalHighlights = 0;
-      
+      const highlights = getHighlights()
+      let totalHighlights = 0
+
       Object.values(highlights).forEach(pageHighlights => {
         if (Array.isArray(pageHighlights)) {
-          totalHighlights += pageHighlights.length;
+          totalHighlights += pageHighlights.length
         }
-      });
-      
-      this.highlightCounter.textContent = `${totalHighlights} highlight${totalHighlights !== 1 ? 's' : ''}`;
+      })
+
+      this.highlightCounter.textContent = `${totalHighlights} highlight${totalHighlights !== 1 ? 's' : ''}`
     }
   }
-  
+
   /**
    * Clear all highlights
    */
   clearAllHighlights() {
-    const highlights = getHighlights();
-    let totalHighlights = 0;
-    
+    const highlights = getHighlights()
+    let totalHighlights = 0
+
     Object.values(highlights).forEach(pageHighlights => {
       if (Array.isArray(pageHighlights)) {
-        totalHighlights += pageHighlights.length;
+        totalHighlights += pageHighlights.length
       }
-    });
-    
+    })
+
     if (totalHighlights === 0) {
-      alert('No highlights to clear.');
-      return;
+      alert('No highlights to clear.')
+      return
     }
-    
-    const confirmClear = confirm('Are you sure you want to clear all highlights? This action can be undone with Cmd+Z.');
+
+    const confirmClear = confirm('Are you sure you want to clear all highlights? This action can be undone with Cmd+Z.')
     if (confirmClear) {
-      window.dispatchEvent(new CustomEvent('pdf-clear-all-highlights'));
+      window.dispatchEvent(new CustomEvent('pdf-clear-all-highlights'))
       // Update the highlight count after clearing
-      this.updateHighlightCount();
+      this.updateHighlightCount()
     }
   }
-  
+
   /**
    * Extract highlights to markdown file
    * If text is selected, highlight it first before extracting
@@ -357,36 +373,36 @@ export class PDFTab {
   async extractHighlights() {
     try {
       // Check if there's text selected and no highlights yet - if so, highlight the selection first
-      const selection = window.getSelection();
+      const selection = window.getSelection()
       if (selection && selection.toString().trim() && selection.rangeCount > 0) {
         // Check if this selection is within the PDF viewer
-        const range = selection.getRangeAt(0);
-        const pdfContainer = range.commonAncestorContainer.closest?.('.pdf-viewer-container') || 
-                           range.commonAncestorContainer.parentElement?.closest?.('.pdf-viewer-container');
-        
+        const range = selection.getRangeAt(0)
+        const pdfContainer = range.commonAncestorContainer.closest?.('.pdf-viewer-container') ||
+                           range.commonAncestorContainer.parentElement?.closest?.('.pdf-viewer-container')
+
         if (pdfContainer) {
-          console.log('Creating highlight from selected text before extraction');
+          console.log('Creating highlight from selected text before extraction')
           // Create highlight from selection
-          window.dispatchEvent(new CustomEvent('pdf-highlight-selection'));
-          
+          window.dispatchEvent(new CustomEvent('pdf-highlight-selection'))
+
           // Wait a moment for the highlight to be created
-          await new Promise(resolve => setTimeout(resolve, 100));
+          await new Promise(resolve => setTimeout(resolve, 100))
         }
       }
-      
-      const markdownPath = await extractHighlightsToMarkdown(this.pdfPath);
-      console.log(`Highlights extracted to: ${markdownPath}`);
-      
+
+      const markdownPath = await extractHighlightsToMarkdown(this.pdfPath)
+      console.log(`Highlights extracted to: ${markdownPath}`)
+
       // Show success notification instead of auto-opening
-      alert(`Highlights extracted successfully!\nSaved to: ${markdownPath.split('/').pop()}`);
-      
+      alert(`Highlights extracted successfully!\nSaved to: ${markdownPath.split('/').pop()}`)
+
       // File will appear in the file tree for manual opening
     } catch (error) {
-      console.error('Error extracting highlights:', error);
-      alert(`Failed to extract highlights: ${error.message}`);
+      console.error('Error extracting highlights:', error)
+      alert(`Failed to extract highlights: ${error.message}`)
     }
   }
-  
+
   /**
    * Set up keyboard shortcuts for PDF navigation
    */
@@ -395,106 +411,116 @@ export class PDFTab {
     this.keyboardHandler = (e) => {
       // Only handle shortcuts when this PDF tab is active
       if (!this.container || !this.container.closest('.tab-content.active')) {
-        return;
+        return
       }
-      
+
       // Navigation shortcuts
       if (e.key === 'ArrowLeft') {
-        e.preventDefault();
-        this.previousPage();
+        e.preventDefault()
+        this.previousPage()
       } else if (e.key === 'ArrowRight') {
-        e.preventDefault();
-        this.nextPage();
+        e.preventDefault()
+        this.nextPage()
       }
-      
+
       // Zoom shortcuts
       else if (e.metaKey && e.key === '+') {
-        e.preventDefault();
-        this.handleZoomIn();
+        e.preventDefault()
+        this.handleZoomIn()
       } else if (e.metaKey && e.key === '-') {
-        e.preventDefault();
-        this.handleZoomOut();
+        e.preventDefault()
+        this.handleZoomOut()
       }
-      
+
       // Extract highlights
       else if (e.metaKey && e.shiftKey && e.key === 'e') {
-        e.preventDefault();
-        this.extractHighlights();
+        e.preventDefault()
+        this.extractHighlights()
       }
-      
+
       // Highlight selected text
       else if (e.metaKey && e.shiftKey && e.key === 'h') {
-        e.preventDefault();
+        e.preventDefault()
         // This will be handled by PDFHighlightManager
-        window.dispatchEvent(new CustomEvent('pdf-highlight-selection'));
+        window.dispatchEvent(new CustomEvent('pdf-highlight-selection'))
       }
-      
+
       // Undo highlight
       else if (e.metaKey && e.key === 'z' && !e.shiftKey) {
-        e.preventDefault();
-        window.dispatchEvent(new CustomEvent('pdf-undo-highlight'));
+        e.preventDefault()
+        window.dispatchEvent(new CustomEvent('pdf-undo-highlight'))
       }
-      
+
       // Redo highlight
       else if (e.metaKey && e.shiftKey && e.key === 'z') {
-        e.preventDefault();
-        window.dispatchEvent(new CustomEvent('pdf-redo-highlight'));
+        e.preventDefault()
+        window.dispatchEvent(new CustomEvent('pdf-redo-highlight'))
       }
-    };
-    
-    document.addEventListener('keydown', this.keyboardHandler);
+    }
+
+    document.addEventListener('keydown', this.keyboardHandler)
   }
-  
+
   /**
    * Clean up when tab is closed
    */
   destroy() {
-    console.log('Destroying PDF tab');
-    
+    console.log('Destroying PDF tab')
+
     // Remove keyboard event listener
     if (this.keyboardHandler) {
-      document.removeEventListener('keydown', this.keyboardHandler);
+      document.removeEventListener('keydown', this.keyboardHandler)
     }
-    
+
     // Save highlights before closing
     saveHighlights(this.pdfPath).catch(error => {
-      console.error('Error saving highlights on close:', error);
-    });
-    
+      console.error('Error saving highlights on close:', error)
+    })
+
+    // Clean up highlight manager
+    cleanupHighlightManager()
+
+    // Clean up viewer wrapper
+    if (this.viewerWrapper) {
+      this.viewerWrapper.destroy()
+      this.viewerWrapper = null
+    }
+
     // Clear container
     if (this.container) {
-      this.container.remove();
+      this.container.remove()
     }
   }
-  
+
   /**
    * Update scroll position to track current page
    */
   updateCurrentPage() {
-    const pages = this.viewerContainer.querySelectorAll('.pdf-page');
-    const containerRect = this.viewerContainer.getBoundingClientRect();
-    
+    // Support both .pdf-page (legacy) and .page (PDF.js) selectors
+    const pages = this.viewerContainer.querySelectorAll('.pdf-page, .pdfViewer .page')
+    const containerRect = this.viewerContainer.getBoundingClientRect()
+
     for (let i = 0; i < pages.length; i++) {
-      const pageRect = pages[i].getBoundingClientRect();
+      const pageRect = pages[i].getBoundingClientRect()
       // Check if page is in viewport
       if (pageRect.top < containerRect.top + containerRect.height / 2 &&
           pageRect.bottom > containerRect.top) {
-        const newPage = parseInt(pages[i].getAttribute('data-page-number'));
+        const newPage = parseInt(pages[i].getAttribute('data-page-number'))
         if (newPage !== this.currentPage) {
-          this.currentPage = newPage;
-          this.updatePageCounter();
+          this.currentPage = newPage
+          this.updatePageCounter()
         }
-        break;
+        break
       }
     }
   }
-  
+
   /**
    * Focus the PDF viewer
    */
   focus() {
     if (this.viewerContainer) {
-      this.viewerContainer.focus();
+      this.viewerContainer.focus()
     }
   }
 }

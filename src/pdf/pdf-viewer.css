@@ -1,4 +1,5 @@
 /* PDF Viewer Styles - Scoped to prevent conflicts with editor styles */
+/* Updated to support PDF.js PDFViewer component with virtualization */
 
 /* Main PDF container */
 .pdf-container {
@@ -93,21 +94,27 @@
   margin: 0 8px;
 }
 
-/* PDF viewer scrollable area */
+/* PDF viewer scrollable area - serves as container for pdfViewer */
 .pdf-viewer {
   flex: 1;
   overflow-y: auto;
   overflow-x: auto;
   padding: 20px;
   background-color: #e5e5e5;
+  position: relative;
+}
+
+/* PDF.js PDFViewer container styling */
+.pdf-viewer .pdfViewer {
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 20px;
 }
 
-/* Individual PDF page */
-.pdf-page {
+/* Individual PDF page - supports both legacy .pdf-page and PDF.js .page */
+.pdf-page,
+.pdfViewer .page {
   position: relative;
   background-color: white;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
@@ -116,22 +123,25 @@
   user-select: none; /* Prevent page selection, only allow text layer */
 }
 
-/* But allow selection within the page */
-.pdf-page .textLayer {
+/* Allow selection within the page - supports both selectors */
+.pdf-page .textLayer,
+.pdfViewer .page .textLayer {
   user-select: text !important;
   -webkit-user-select: text !important;
   -moz-user-select: text !important;
   -ms-user-select: text !important;
 }
 
-/* PDF canvas */
-.pdf-page canvas {
+/* PDF canvas - supports both selectors */
+.pdf-page canvas,
+.pdfViewer .page canvas {
   display: block;
   max-width: 100%;
   height: auto;
 }
 
 /* Text layer for selection - based on PDF.js official styles */
+/* REMOVED: mix-blend-mode: multiply causes software compositing issues */
 .textLayer {
   position: absolute;
   text-align: initial;
@@ -148,6 +158,7 @@
   forced-color-adjust: none;
   transform-origin: 0 0;
   z-index: 2;
+  font-family: sans-serif;
 }
 
 /* Text layer spans - make them transparent but selectable */
@@ -230,12 +241,6 @@
   background: rgba(0, 123, 255, 0.15);
 }
 
-/* Ensure text layer doesn't block canvas but allows selection */
-.textLayer {
-  mix-blend-mode: multiply;
-  font-family: sans-serif;
-}
-
 /* Remove any debug outlines from PDF.js */
 .textLayer .endOfContent,
 .textLayer .markedContent {
@@ -257,13 +262,15 @@
   outline: none !important;
 }
 
-/* Highlight overlays */
+/* Highlight overlays - works on both .pdf-page and .page */
 .pdf-highlight {
   position: absolute;
   background-color: rgba(255, 255, 0, 0.4);
   mix-blend-mode: multiply;
-  pointer-events: none;
+  pointer-events: none !important;
+  user-select: none !important;
   border-radius: 1px;
+  z-index: 3; /* Above text layer */
 }
 
 /* Error message styling */
@@ -295,7 +302,7 @@
   outline: none;
 }
 
-/* Hide PDF.js default UI elements if any appear */
+/* Hide PDF.js default annotation layer - we use our own highlights */
 .annotationLayer {
   display: none;
 }
@@ -305,8 +312,9 @@
   .pdf-viewer {
     padding: 10px;
   }
-  
-  .pdf-page {
+
+  .pdf-page,
+  .pdfViewer .page {
     margin-bottom: 10px;
   }
 }
@@ -316,36 +324,27 @@
   .pdf-toolbar {
     display: none;
   }
-  
+
   .pdf-viewer {
     background: white;
     padding: 0;
   }
-  
-  .pdf-page {
+
+  .pdf-page,
+  .pdfViewer .page {
     box-shadow: none;
     border: none;
     margin: 0;
     page-break-after: always;
   }
-  
+
   .pdf-highlight {
     background-color: rgba(255, 255, 0, 0.3);
   }
 }
 
-/* Smooth scrolling for page navigation */
-.pdf-viewer {
-  scroll-behavior: smooth;
-}
-
 /* Override any global pointer-events that might interfere */
-.pdf-page .textLayer * {
+.pdf-page .textLayer *,
+.pdfViewer .page .textLayer * {
   pointer-events: auto !important;
-}
-
-/* Ensure highlights don't interfere with text selection */
-.pdf-highlight {
-  pointer-events: none !important;
-  user-select: none !important;
 }

@@ -1,58 +1,177 @@
 // PDFHighlightManager.js: Manages text selection, highlighting, and persistence for PDFs
 // Handles highlight creation, storage, and extraction to markdown
+// Updated to work with PDFViewerWrapper's virtualized page rendering
 
-import { invoke } from '@tauri-apps/api/core';
-import { dirname, join, basename } from '@tauri-apps/api/path';
-import { 
-  getHighlights, 
-  setHighlights, 
-  addHighlight,
-  getCurrentScale
-} from './PDFViewer.js';
+import { invoke } from '@tauri-apps/api/core'
+import { dirname, join, basename } from '@tauri-apps/api/path'
 
-// Track current selection for highlighting
-let currentSelection = null;
-let pdfPath = null;
-let container = null;
+// Module state
+let currentSelection = null
+let pdfPath = null
+let container = null
+let viewerWrapper = null
+let highlights = {} // Structure: { pageNum: [{ bounds: [[x,y,w,h]], text: string }] }
 
 // Undo/redo history
-let highlightHistory = [];
-let historyIndex = -1;
-const MAX_HISTORY = 50;
+let highlightHistory = []
+let historyIndex = -1
+const MAX_HISTORY = 50
+
+// Event handler references for cleanup
+let mouseUpHandler = null
+let pageRenderedHandler = null
+
+/**
+ * Get current highlights
+ * @returns {Object} Current highlights object
+ */
+export function getHighlights() {
+  return highlights
+}
+
+/**
+ * Set highlights (used when loading from storage)
+ * @param {Object} newHighlights - Highlights object to set
+ */
+export function setHighlights(newHighlights) {
+  highlights = newHighlights
+  console.log('Highlights loaded:', Object.keys(highlights).length, 'pages with highlights')
+}
+
+/**
+ * Add a highlight to a specific page
+ * @param {number} pageNum - Page number
+ * @param {Object} highlight - Highlight object with bounds and text
+ */
+export function addHighlight(pageNum, highlight) {
+  if (!highlights[pageNum]) {
+    highlights[pageNum] = []
+  }
+  highlights[pageNum].push(highlight)
+  console.log(`Added highlight to page ${pageNum}: "${highlight.text.substring(0, 50)}..."`)
+}
+
+/**
+ * Clear all highlights from memory
+ */
+export function clearHighlightsMemory() {
+  highlights = {}
+  console.log('All highlights cleared from memory')
+}
 
 /**
  * Initialize the highlight manager for a PDF viewer
  * @param {HTMLElement} viewerContainer - The PDF viewer container
  * @param {string} filePath - Path to the PDF file
+ * @param {Object} wrapper - PDFViewerWrapper instance (optional, for scale info)
  */
-export function initHighlightManager(viewerContainer, filePath) {
-  console.log('Initializing highlight manager for:', filePath);
-  
-  container = viewerContainer;
-  pdfPath = filePath;
-  
+export function initHighlightManager(viewerContainer, filePath, wrapper = null) {
+  console.log('Initializing highlight manager for:', filePath)
+
+  container = viewerContainer
+  pdfPath = filePath
+  viewerWrapper = wrapper
+
   // Set up selection tracking
-  viewerContainer.addEventListener('mouseup', handleTextSelection);
-  
+  mouseUpHandler = handleTextSelection
+  viewerContainer.addEventListener('mouseup', mouseUpHandler)
+
   // Listen for highlight command
-  window.addEventListener('pdf-highlight-selection', highlightCurrentSelection);
-  
+  window.addEventListener('pdf-highlight-selection', highlightCurrentSelection)
+
   // Listen for undo/redo commands
-  window.addEventListener('pdf-undo-highlight', undoHighlight);
-  window.addEventListener('pdf-redo-highlight', redoHighlight);
-  window.addEventListener('pdf-clear-all-highlights', handleClearAllHighlights);
-  
+  window.addEventListener('pdf-undo-highlight', undoHighlight)
+  window.addEventListener('pdf-redo-highlight', redoHighlight)
+  window.addEventListener('pdf-clear-all-highlights', handleClearAllHighlights)
+
+  // Listen for page render events (for virtualized rendering)
+  pageRenderedHandler = handlePageRendered
+  window.addEventListener('pdf-page-rendered', pageRenderedHandler)
+
   // Track scroll for better selection handling
   viewerContainer.addEventListener('scroll', () => {
     // Update current page tracking in PDFTab
-    const pdfTab = viewerContainer.closest('.pdf-container');
+    const pdfTab = viewerContainer.closest('.pdf-container')
     if (pdfTab && pdfTab.__pdfTabInstance) {
-      pdfTab.__pdfTabInstance.updateCurrentPage();
+      pdfTab.__pdfTabInstance.updateCurrentPage()
     }
-  });
-  
+  })
+
   // Initialize history with current state
-  saveToHistory();
+  saveToHistory()
+}
+
+/**
+ * Clean up the highlight manager - remove all event listeners and clear state
+ */
+export function cleanupHighlightManager() {
+  console.log('Cleaning up highlight manager')
+
+  // Remove event listeners from container
+  if (container && mouseUpHandler) {
+    container.removeEventListener('mouseup', mouseUpHandler)
+  }
+
+  // Remove window event listeners
+  window.removeEventListener('pdf-highlight-selection', highlightCurrentSelection)
+  window.removeEventListener('pdf-undo-highlight', undoHighlight)
+  window.removeEventListener('pdf-redo-highlight', redoHighlight)
+  window.removeEventListener('pdf-clear-all-highlights', handleClearAllHighlights)
+
+  if (pageRenderedHandler) {
+    window.removeEventListener('pdf-page-rendered', pageRenderedHandler)
+  }
+
+  // Clear state
+  currentSelection = null
+  pdfPath = null
+  container = null
+  viewerWrapper = null
+  highlightHistory = []
+  historyIndex = -1
+}
+
+/**
+ * Handle page rendered events from PDFViewerWrapper
+ * Renders highlights for the newly rendered page
+ * @param {CustomEvent} event - pdf-page-rendered event
+ */
+function handlePageRendered(event) {
+  const { pageNumber, pageElement } = event.detail
+  renderHighlightsForPage(pageNumber, pageElement)
+}
+
+/**
+ * Render highlights for a specific page
+ * @param {number} pageNum - Page number
+ * @param {HTMLElement} pageElement - Page container element
+ */
+function renderHighlightsForPage(pageNum, pageElement) {
+  const pageHighlights = highlights[pageNum]
+  if (!pageHighlights || pageHighlights.length === 0) return
+
+  console.log(`Rendering ${pageHighlights.length} highlights for page ${pageNum}`)
+
+  // Clear any existing highlights on this page first
+  const existingHighlights = pageElement.querySelectorAll('.pdf-highlight')
+  existingHighlights.forEach(el => el.remove())
+
+  const scale = getCurrentScale()
+
+  pageHighlights.forEach((highlight) => {
+    renderHighlight(pageElement, highlight, pageNum, scale)
+  })
+}
+
+/**
+ * Get current scale from viewerWrapper or default
+ * @returns {number} Current scale
+ */
+function getCurrentScale() {
+  if (viewerWrapper && viewerWrapper.currentScale) {
+    return viewerWrapper.currentScale
+  }
+  return 1.5 // Default scale
 }
 
 /**
@@ -60,29 +179,29 @@ export function initHighlightManager(viewerContainer, filePath) {
  * @param {MouseEvent} event - Mouse up event
  */
 function handleTextSelection(event) {
-  const selection = window.getSelection();
-  
+  const selection = window.getSelection()
+
   if (selection.rangeCount === 0 || selection.isCollapsed) {
-    currentSelection = null;
-    return;
+    currentSelection = null
+    return
   }
-  
+
   // Get the selected range
-  const range = selection.getRangeAt(0);
-  
+  const range = selection.getRangeAt(0)
+
   // Check if selection is within the PDF viewer
   if (!container.contains(range.commonAncestorContainer)) {
-    currentSelection = null;
-    return;
+    currentSelection = null
+    return
   }
-  
+
   // Store current selection info
   currentSelection = {
     range: range,
     text: selection.toString().trim()
-  };
-  
-  console.log('Text selected:', currentSelection.text.substring(0, 50) + '...');
+  }
+
+  console.log('Text selected:', currentSelection.text.substring(0, 50) + '...')
 }
 
 /**
@@ -90,86 +209,86 @@ function handleTextSelection(event) {
  */
 async function highlightCurrentSelection() {
   if (!currentSelection || !currentSelection.text) {
-    console.log('No text selected to highlight');
-    return;
+    console.log('No text selected to highlight')
+    return
   }
-  
+
   try {
     // Get the page number from the selection
-    const pageElement = getPageElementFromNode(currentSelection.range.commonAncestorContainer);
+    const pageElement = getPageElementFromNode(currentSelection.range.commonAncestorContainer)
     if (!pageElement) {
-      console.error('Could not determine page for selection');
-      return;
+      console.error('Could not determine page for selection')
+      return
     }
-    
-    const pageNum = parseInt(pageElement.getAttribute('data-page-number'));
-    
+
+    const pageNum = parseInt(pageElement.getAttribute('data-page-number'))
+
     // Get bounding rectangles for the selection
-    const rects = Array.from(currentSelection.range.getClientRects());
-    
+    const rects = Array.from(currentSelection.range.getClientRects())
+
     // Convert to page-relative coordinates
-    const pageRect = pageElement.getBoundingClientRect();
-    const scale = getCurrentScale();
-    
+    const pageRect = pageElement.getBoundingClientRect()
+    const scale = getCurrentScale()
+
     const bounds = rects.map(rect => {
       return [
         (rect.left - pageRect.left) / scale,
         (rect.top - pageRect.top) / scale,
         rect.width / scale,
         rect.height / scale
-      ];
-    });
-    
+      ]
+    })
+
     // Create highlight object
     const highlight = {
       text: currentSelection.text,
       bounds: bounds,
       timestamp: new Date().toISOString()
-    };
-    
+    }
+
     // Save current state to history before making changes
-    saveToHistory();
-    
+    saveToHistory()
+
     // Add to highlights
-    addHighlight(pageNum, highlight);
-    
-    // Debug: Check highlights state after adding
-    const currentHighlights = getHighlights();
-    // console.log('Debug: After addHighlight, highlights state:', currentHighlights);
-    // console.log('Debug: Number of pages with highlights:', Object.keys(currentHighlights).length);
-    
+    addHighlight(pageNum, highlight)
+
     // Render the highlight immediately
-    renderHighlight(pageElement, highlight, pageNum);
-    
+    renderHighlight(pageElement, highlight, pageNum, scale)
+
     // Save highlights
-    await saveHighlights(pdfPath);
-    
+    await saveHighlights(pdfPath)
+
     // Update the highlight count in the toolbar
-    updateHighlightCountInToolbar();
-    
+    updateHighlightCountInToolbar()
+
     // Clear selection
-    window.getSelection().removeAllRanges();
-    currentSelection = null;
-    
-    console.log(`Highlighted text on page ${pageNum}`);
+    window.getSelection().removeAllRanges()
+    currentSelection = null
+
+    console.log(`Highlighted text on page ${pageNum}`)
   } catch (error) {
-    console.error('Error creating highlight:', error);
+    console.error('Error creating highlight:', error)
   }
 }
 
 /**
  * Get the page element containing a node
+ * Supports both legacy .pdf-page and PDF.js .page selectors
  * @param {Node} node - DOM node
  * @returns {HTMLElement|null} Page element or null
  */
 function getPageElementFromNode(node) {
-  let element = node.nodeType === Node.ELEMENT_NODE ? node : node.parentElement;
-  
-  while (element && !element.classList.contains('pdf-page')) {
-    element = element.parentElement;
+  let element = node.nodeType === Node.ELEMENT_NODE ? node : node.parentElement
+
+  // Check for both .pdf-page (legacy) and .page (PDF.js) classes
+  while (element) {
+    if (element.classList.contains('pdf-page') || element.classList.contains('page')) {
+      return element
+    }
+    element = element.parentElement
   }
-  
-  return element;
+
+  return null
 }
 
 /**
@@ -177,26 +296,25 @@ function getPageElementFromNode(node) {
  * @param {HTMLElement} pageElement - Page container element
  * @param {Object} highlight - Highlight object
  * @param {number} pageNum - Page number
+ * @param {number} scale - Current scale
  */
-function renderHighlight(pageElement, highlight, pageNum) {
-  const scale = getCurrentScale();
-  
-  highlight.bounds.forEach((rect, index) => {
-    const highlightDiv = document.createElement('div');
-    highlightDiv.className = 'pdf-highlight';
-    highlightDiv.style.position = 'absolute';
-    highlightDiv.style.left = `${rect[0] * scale}px`;
-    highlightDiv.style.top = `${rect[1] * scale}px`;
-    highlightDiv.style.width = `${rect[2] * scale}px`;
-    highlightDiv.style.height = `${rect[3] * scale}px`;
-    highlightDiv.style.backgroundColor = 'rgba(255, 255, 0, 0.4)'; // Yellow
-    highlightDiv.style.pointerEvents = 'none';
-    highlightDiv.style.mixBlendMode = 'multiply';
-    highlightDiv.setAttribute('data-page', pageNum);
-    highlightDiv.setAttribute('data-highlight-text', highlight.text);
-    
-    pageElement.appendChild(highlightDiv);
-  });
+function renderHighlight(pageElement, highlight, pageNum, scale) {
+  highlight.bounds.forEach((rect) => {
+    const highlightDiv = document.createElement('div')
+    highlightDiv.className = 'pdf-highlight'
+    highlightDiv.style.position = 'absolute'
+    highlightDiv.style.left = `${rect[0] * scale}px`
+    highlightDiv.style.top = `${rect[1] * scale}px`
+    highlightDiv.style.width = `${rect[2] * scale}px`
+    highlightDiv.style.height = `${rect[3] * scale}px`
+    highlightDiv.style.backgroundColor = 'rgba(255, 255, 0, 0.4)' // Yellow
+    highlightDiv.style.pointerEvents = 'none'
+    highlightDiv.style.mixBlendMode = 'multiply'
+    highlightDiv.setAttribute('data-page', pageNum)
+    highlightDiv.setAttribute('data-highlight-text', highlight.text)
+
+    pageElement.appendChild(highlightDiv)
+  })
 }
 
 /**
@@ -205,29 +323,26 @@ function renderHighlight(pageElement, highlight, pageNum) {
  */
 export async function saveHighlights(filePath) {
   try {
-    const highlights = getHighlights();
     if (Object.keys(highlights).length === 0) {
-      console.log('No highlights to save');
-      return;
+      console.log('No highlights to save')
+      return
     }
-    
+
     // Create highlights directory
-    const pdfDir = await dirname(filePath);
-    const highlightsDir = await join(pdfDir, '.gaimplan', 'pdf-highlights');
-    
-    // Directory will be created automatically when writing the file
-    
+    const pdfDir = await dirname(filePath)
+    const highlightsDir = await join(pdfDir, '.gaimplan', 'pdf-highlights')
+
     // Save highlights file
-    const pdfName = await basename(filePath);
-    const highlightsPath = await join(highlightsDir, `${pdfName}.json`);
-    
-    await invoke('write_file_content', { 
-      filePath: highlightsPath, 
-      content: JSON.stringify(highlights, null, 2) 
-    });
-    console.log(`Saved highlights to: ${highlightsPath}`);
+    const pdfName = await basename(filePath)
+    const highlightsPath = await join(highlightsDir, `${pdfName}.json`)
+
+    await invoke('write_file_content', {
+      filePath: highlightsPath,
+      content: JSON.stringify(highlights, null, 2)
+    })
+    console.log(`Saved highlights to: ${highlightsPath}`)
   } catch (error) {
-    console.error('Error saving highlights:', error);
+    console.error('Error saving highlights:', error)
   }
 }
 
@@ -237,25 +352,25 @@ export async function saveHighlights(filePath) {
  */
 export async function loadHighlights(filePath) {
   try {
-    const pdfDir = await dirname(filePath);
-    const pdfName = await basename(filePath);
-    const highlightsPath = await join(pdfDir, '.gaimplan', 'pdf-highlights', `${pdfName}.json`);
-    
+    const pdfDir = await dirname(filePath)
+    const pdfName = await basename(filePath)
+    const highlightsPath = await join(pdfDir, '.gaimplan', 'pdf-highlights', `${pdfName}.json`)
+
     try {
-      const content = await invoke('read_file_content', { filePath: highlightsPath });
-      const highlights = JSON.parse(content);
-      setHighlights(highlights);
-      console.log('Loaded highlights from:', highlightsPath);
+      const content = await invoke('read_file_content', { filePath: highlightsPath })
+      const loadedHighlights = JSON.parse(content)
+      setHighlights(loadedHighlights)
+      console.log('Loaded highlights from:', highlightsPath)
       // Update count after loading
-      updateHighlightCountInToolbar();
+      updateHighlightCountInToolbar()
     } catch (error) {
       // File doesn't exist or error reading
-      console.log('No existing highlights found');
-      setHighlights({});
+      console.log('No existing highlights found')
+      setHighlights({})
     }
   } catch (error) {
-    console.error('Error loading highlights:', error);
-    setHighlights({});
+    console.error('Error loading highlights:', error)
+    setHighlights({})
   }
 }
 
@@ -266,43 +381,41 @@ export async function loadHighlights(filePath) {
  */
 export async function extractHighlightsToMarkdown(filePath) {
   try {
-    // Get current highlights from memory (they should already be loaded and up-to-date)
-    const highlights = getHighlights();
-    const pdfName = await basename(filePath);
-    const pdfNameWithoutExt = pdfName.replace(/\.pdf$/i, '');
-    
+    const pdfName = await basename(filePath)
+    const pdfNameWithoutExt = pdfName.replace(/\.pdf$/i, '')
+
     // Prepare the markdown file path
-    const pdfDir = await dirname(filePath);
-    const markdownPath = await join(pdfDir, `${pdfNameWithoutExt}-highlights.md`);
-    
+    const pdfDir = await dirname(filePath)
+    const markdownPath = await join(pdfDir, `${pdfNameWithoutExt}-highlights.md`)
+
     // Check if file exists and has frontmatter
-    let existingFrontmatter = '';
-    let existingContent = '';
+    let existingFrontmatter = ''
+    let existingContent = ''
     try {
-      const existing = await invoke('read_file_content', { filePath: markdownPath });
-      
+      const existing = await invoke('read_file_content', { filePath: markdownPath })
+
       // Parse existing frontmatter if present
       if (existing.startsWith('---\n')) {
-        const frontmatterEnd = existing.indexOf('\n---\n', 4);
+        const frontmatterEnd = existing.indexOf('\n---\n', 4)
         if (frontmatterEnd !== -1) {
           // Extract frontmatter including the closing ---
-          existingFrontmatter = existing.substring(0, frontmatterEnd + 5);
+          existingFrontmatter = existing.substring(0, frontmatterEnd + 5)
           // Keep any content after frontmatter that isn't our generated highlights
-          const afterFrontmatter = existing.substring(frontmatterEnd + 5);
+          const afterFrontmatter = existing.substring(frontmatterEnd + 5)
           // Look for our marker to identify generated content
           if (!afterFrontmatter.includes('# PDF Highlights:')) {
-            existingContent = afterFrontmatter;
+            existingContent = afterFrontmatter
           }
         }
       }
     } catch (error) {
       // File doesn't exist, which is fine
-      console.log('No existing highlights file found, creating new one');
+      console.log('No existing highlights file found, creating new one')
     }
-    
+
     // Generate frontmatter if none exists
     if (!existingFrontmatter) {
-      const now = new Date();
+      const now = new Date()
       existingFrontmatter = `---
 title: "${pdfNameWithoutExt} Highlights"
 source: "${pdfName}"
@@ -310,78 +423,78 @@ created_at: ${now.toISOString()}
 updated_at: ${now.toISOString()}
 type: pdf-highlights
 tags: []
----`;
+---`
     } else {
       // Update the updated_at field in existing frontmatter
-      const now = new Date();
+      const now = new Date()
       existingFrontmatter = existingFrontmatter.replace(
         /updated_at:.*$/m,
         `updated_at: ${now.toISOString()}`
-      );
+      )
       // If no updated_at field exists, add it before the closing ---
       if (!existingFrontmatter.includes('updated_at:')) {
         existingFrontmatter = existingFrontmatter.replace(
           /\n---$/,
           `\nupdated_at: ${now.toISOString()}\n---`
-        );
+        )
       }
     }
-    
+
     // Generate highlights content
-    let highlightsContent = `\n# PDF Highlights: ${pdfName}\n\n`;
-    
+    let highlightsContent = `\n# PDF Highlights: ${pdfName}\n\n`
+
     if (Object.keys(highlights).length === 0) {
-      highlightsContent += '*No highlights found in this PDF.*\n';
+      highlightsContent += '*No highlights found in this PDF.*\n'
     } else {
       // Add summary
-      const totalHighlights = Object.values(highlights).reduce((sum, pageHighlights) => 
-        sum + (pageHighlights ? pageHighlights.length : 0), 0);
-      highlightsContent += `*Total highlights: ${totalHighlights}*\n\n`;
-      
+      const totalHighlights = Object.values(highlights).reduce((sum, pageHighlights) =>
+        sum + (pageHighlights ? pageHighlights.length : 0), 0)
+      highlightsContent += `*Total highlights: ${totalHighlights}*\n\n`
+
       // Sort pages numerically
-      const sortedPages = Object.keys(highlights).sort((a, b) => parseInt(a) - parseInt(b));
-      
+      const sortedPages = Object.keys(highlights).sort((a, b) => parseInt(a) - parseInt(b))
+
       for (const pageNum of sortedPages) {
-        const pageHighlights = highlights[pageNum];
-        
+        const pageHighlights = highlights[pageNum]
+
         if (pageHighlights && pageHighlights.length > 0) {
-          highlightsContent += `## Page ${pageNum}\n\n`;
-          
-          pageHighlights.forEach((highlight, index) => {
-            highlightsContent += `- "${highlight.text}"\n`;
-          });
-          
-          highlightsContent += '\n';
+          highlightsContent += `## Page ${pageNum}\n\n`
+
+          pageHighlights.forEach((highlight) => {
+            highlightsContent += `- "${highlight.text}"\n`
+          })
+
+          highlightsContent += '\n'
         }
       }
     }
-    
+
     // Add extraction metadata at the bottom
-    highlightsContent += `---\n\n`;
-    highlightsContent += `*Last extracted: ${new Date().toLocaleString()}*\n`;
-    highlightsContent += `*Source: ${pdfName}*\n`;
-    
+    highlightsContent += `---\n\n`
+    highlightsContent += `*Last extracted: ${new Date().toLocaleString()}*\n`
+    highlightsContent += `*Source: ${pdfName}*\n`
+
     // Combine everything: frontmatter at top, then any existing content, then highlights
-    const finalContent = existingFrontmatter + '\n' + 
-                        (existingContent ? existingContent + '\n' : '') + 
-                        highlightsContent;
-    
+    const finalContent = existingFrontmatter + '\n' +
+                        (existingContent ? existingContent + '\n' : '') +
+                        highlightsContent
+
     // Save the file
-    await invoke('write_file_content', { 
-      filePath: markdownPath, 
-      content: finalContent 
-    });
-    console.log(`Extracted highlights to: ${markdownPath}`);
-    
+    await invoke('write_file_content', {
+      filePath: markdownPath,
+      content: finalContent
+    })
+    console.log(`Extracted highlights to: ${markdownPath}`)
+
     // Emit event that file was updated
-    window.dispatchEvent(new CustomEvent('file-updated', { 
+    window.dispatchEvent(new CustomEvent('file-updated', {
       detail: { filePath: markdownPath }
-    }));
-    
-    return markdownPath;
+    }))
+
+    return markdownPath
   } catch (error) {
-    console.error('Error extracting highlights:', error);
-    throw error;
+    console.error('Error extracting highlights:', error)
+    throw error
   }
 }
 
@@ -389,18 +502,17 @@ tags: []
  * Update highlight count in the toolbar
  */
 function updateHighlightCountInToolbar() {
-  const highlightCounter = document.querySelector('.pdf-highlight-count');
+  const highlightCounter = document.querySelector('.pdf-highlight-count')
   if (highlightCounter) {
-    const highlights = getHighlights();
-    let totalHighlights = 0;
-    
+    let totalHighlights = 0
+
     Object.values(highlights).forEach(pageHighlights => {
       if (Array.isArray(pageHighlights)) {
-        totalHighlights += pageHighlights.length;
+        totalHighlights += pageHighlights.length
       }
-    });
-    
-    highlightCounter.textContent = `${totalHighlights} highlight${totalHighlights !== 1 ? 's' : ''}`;
+    })
+
+    highlightCounter.textContent = `${totalHighlights} highlight${totalHighlights !== 1 ? 's' : ''}`
   }
 }
 
@@ -408,19 +520,17 @@ function updateHighlightCountInToolbar() {
  * Save current highlights state to history
  */
 function saveToHistory() {
-  const currentHighlights = getHighlights();
-  
   // Remove any states after current index (when we add new state after undo)
-  highlightHistory = highlightHistory.slice(0, historyIndex + 1);
-  
+  highlightHistory = highlightHistory.slice(0, historyIndex + 1)
+
   // Add current state
-  highlightHistory.push(JSON.parse(JSON.stringify(currentHighlights)));
-  historyIndex++;
-  
+  highlightHistory.push(JSON.parse(JSON.stringify(highlights)))
+  historyIndex++
+
   // Limit history size
   if (highlightHistory.length > MAX_HISTORY) {
-    highlightHistory.shift();
-    historyIndex--;
+    highlightHistory.shift()
+    historyIndex--
   }
 }
 
@@ -429,26 +539,26 @@ function saveToHistory() {
  */
 async function undoHighlight() {
   if (historyIndex <= 0) {
-    console.log('Nothing to undo');
-    return;
+    console.log('Nothing to undo')
+    return
   }
-  
-  historyIndex--;
-  const previousState = highlightHistory[historyIndex];
-  
+
+  historyIndex--
+  const previousState = highlightHistory[historyIndex]
+
   // Apply the previous state
-  setHighlights(previousState);
-  
+  setHighlights(previousState)
+
   // Re-render all highlights
-  reRenderAllHighlights();
-  
+  reRenderAllHighlights()
+
   // Save to disk
-  await saveHighlights(pdfPath);
-  
+  await saveHighlights(pdfPath)
+
   // Update count
-  updateHighlightCountInToolbar();
-  
-  console.log('Undid highlight action');
+  updateHighlightCountInToolbar()
+
+  console.log('Undid highlight action')
 }
 
 /**
@@ -456,48 +566,52 @@ async function undoHighlight() {
  */
 async function redoHighlight() {
   if (historyIndex >= highlightHistory.length - 1) {
-    console.log('Nothing to redo');
-    return;
+    console.log('Nothing to redo')
+    return
   }
-  
-  historyIndex++;
-  const nextState = highlightHistory[historyIndex];
-  
+
+  historyIndex++
+  const nextState = highlightHistory[historyIndex]
+
   // Apply the next state
-  setHighlights(nextState);
-  
+  setHighlights(nextState)
+
   // Re-render all highlights
-  reRenderAllHighlights();
-  
+  reRenderAllHighlights()
+
   // Save to disk
-  await saveHighlights(pdfPath);
-  
+  await saveHighlights(pdfPath)
+
   // Update count
-  updateHighlightCountInToolbar();
-  
-  console.log('Redid highlight action');
+  updateHighlightCountInToolbar()
+
+  console.log('Redid highlight action')
 }
 
 /**
- * Re-render all highlights on all pages
+ * Re-render all highlights on all existing pages
+ * Only renders highlights for pages that are currently in the DOM
+ * (handles virtualized rendering gracefully)
  */
 function reRenderAllHighlights() {
   // Remove all existing highlight elements
   if (container) {
-    const existingHighlights = container.querySelectorAll('.pdf-highlight');
-    existingHighlights.forEach(el => el.remove());
+    const existingHighlights = container.querySelectorAll('.pdf-highlight')
+    existingHighlights.forEach(el => el.remove())
   }
-  
-  // Re-render highlights for each page
-  const highlights = getHighlights();
+
+  // Re-render highlights for each page that exists in the DOM
+  const scale = getCurrentScale()
   Object.entries(highlights).forEach(([pageNum, pageHighlights]) => {
-    const pageElement = container.querySelector(`[data-page-number="${pageNum}"]`);
-    if (pageElement && pageHighlights.length > 0) {
-      pageHighlights.forEach((highlight, index) => {
-        renderHighlight(pageElement, highlight, pageNum);
-      });
+    // Support both .pdf-page and .page selectors
+    const pageElement = container.querySelector(`[data-page-number="${pageNum}"]`)
+    if (pageElement && pageHighlights && pageHighlights.length > 0) {
+      pageHighlights.forEach((highlight) => {
+        renderHighlight(pageElement, highlight, pageNum, scale)
+      })
     }
-  });
+    // Silent skip if page doesn't exist (it's virtualized out)
+  })
 }
 
 /**
@@ -505,10 +619,10 @@ function reRenderAllHighlights() {
  */
 async function handleClearAllHighlights() {
   // Save current state to history first
-  saveToHistory();
-  
+  saveToHistory()
+
   // Clear all highlights
-  await clearAllHighlights();
+  await clearAllHighlights()
 }
 
 /**
@@ -517,32 +631,32 @@ async function handleClearAllHighlights() {
 export async function clearAllHighlights() {
   // Remove highlight elements from DOM
   if (container) {
-    const highlightElements = container.querySelectorAll('.pdf-highlight');
-    highlightElements.forEach(el => el.remove());
+    const highlightElements = container.querySelectorAll('.pdf-highlight')
+    highlightElements.forEach(el => el.remove())
   }
-  
+
   // Clear from memory
-  setHighlights({});
-  
+  setHighlights({})
+
   // Delete the highlight file completely
   if (pdfPath) {
     try {
-      const pdfDir = await dirname(pdfPath);
-      const highlightsDir = await join(pdfDir, '.gaimplan', 'pdf-highlights');
-      const pdfName = await basename(pdfPath);
-      const highlightsPath = await join(highlightsDir, `${pdfName}.json`);
-      
+      const pdfDir = await dirname(pdfPath)
+      const highlightsDir = await join(pdfDir, '.gaimplan', 'pdf-highlights')
+      const pdfName = await basename(pdfPath)
+      const highlightsPath = await join(highlightsDir, `${pdfName}.json`)
+
       // Delete the highlight file
-      await invoke('delete_file', { filePath: highlightsPath });
-      console.log(`Deleted highlight file: ${highlightsPath}`);
+      await invoke('delete_file', { filePath: highlightsPath })
+      console.log(`Deleted highlight file: ${highlightsPath}`)
     } catch (error) {
       // File might not exist, which is fine
-      console.log('No highlight file to delete or error deleting:', error);
+      console.log('No highlight file to delete or error deleting:', error)
     }
   }
-  
-  console.log('All highlights cleared');
-  
+
+  console.log('All highlights cleared')
+
   // Update the highlight count in the toolbar
-  updateHighlightCountInToolbar();
+  updateHighlightCountInToolbar()
 }
