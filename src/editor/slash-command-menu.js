@@ -18,22 +18,40 @@ import { StateField, StateEffect, Prec } from '@codemirror/state'
 import { syntaxTree } from '@codemirror/language'
 import { keymap } from '@codemirror/view'
 
+// Lucide SVG icons (14x14 for menu)
+const ICONS = {
+  h1: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12h8"/><path d="M4 18V6"/><path d="M12 18V6"/><path d="m17 12 3-2v8"/></svg>',
+  h2: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12h8"/><path d="M4 18V6"/><path d="M12 18V6"/><path d="M21 18h-4c0-4 4-3 4-6 0-1.5-2-2.5-4-1"/></svg>',
+  h3: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12h8"/><path d="M4 18V6"/><path d="M12 18V6"/><path d="M17.5 10.5c1.7-1 3.5 0 3.5 1.5a2 2 0 0 1-2 2"/><path d="M17 17.5c2 1.5 4 .3 4-1.5a2 2 0 0 0-2-2"/></svg>',
+  bold: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 4h8a4 4 0 0 1 4 4 4 4 0 0 1-4 4H6z"/><path d="M6 12h9a4 4 0 0 1 4 4 4 4 0 0 1-4 4H6z"/></svg>',
+  italic: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="4" x2="10" y2="4"/><line x1="14" y1="20" x2="5" y2="20"/><line x1="15" y1="4" x2="9" y2="20"/></svg>',
+  highlight: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 11-6 6v3h9l3-3"/><path d="m22 12-4.6 4.6a2 2 0 0 1-2.8 0l-5.2-5.2a2 2 0 0 1 0-2.8L14 4"/></svg>',
+  list: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>',
+  listOrdered: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="10" y1="6" x2="21" y2="6"/><line x1="10" y1="12" x2="21" y2="12"/><line x1="10" y1="18" x2="21" y2="18"/><path d="M4 6h1v4"/><path d="M4 10h2"/><path d="M6 18H4c0-1 2-2 2-3s-1-1.5-2-1"/></svg>',
+  task: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><path d="m9 12 2 2 4-4"/></svg>',
+  quote: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21c3 0 7-1 7-8V5c0-1.25-.756-2.017-2-2H4c-1.25 0-2 .75-2 1.972V11c0 1.25.75 2 2 2 1 0 1 0 1 1v1c0 1-1 2-2 2s-1 .008-1 1.031V21z"/><path d="M15 21c3 0 7-1 7-8V5c0-1.25-.757-2.017-2-2h-4c-1.25 0-2 .75-2 1.972V11c0 1.25.75 2 2 2h.75c0 2.25.25 4-2.75 4v3z"/></svg>',
+  code: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>',
+  divider: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="12" x2="21" y2="12"/></svg>',
+  image: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>',
+  link: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>',
+}
+
 // Slash commands configuration
 const SLASH_COMMANDS = [
-  { id: 'h1', aliases: ['heading1'], label: 'Heading 1', icon: 'H1', insert: '# ' },
-  { id: 'h2', aliases: ['heading2'], label: 'Heading 2', icon: 'H2', insert: '## ' },
-  { id: 'h3', aliases: ['heading3'], label: 'Heading 3', icon: 'H3', insert: '### ' },
-  { id: 'bold', aliases: ['strong', 'b'], label: 'Bold', icon: 'B', insert: '****', cursorOffset: 2 },
-  { id: 'italic', aliases: ['emphasis', 'em', 'i'], label: 'Italic', icon: 'I', insert: '**', cursorOffset: 1 },
-  { id: 'highlight', aliases: ['mark', 'hl'], label: 'Highlight', icon: 'H', insert: '====', cursorOffset: 2 },
-  { id: 'bullet', aliases: ['list', 'ul'], label: 'Bullet List', icon: '\u2022', insert: '- ' },
-  { id: 'numbered', aliases: ['num', 'ol'], label: 'Numbered List', icon: '1.', insert: '1. ' },
-  { id: 'task', aliases: ['todo', 'checkbox'], label: 'Task', icon: '\u2610', insert: '- [ ] ' },
-  { id: 'quote', aliases: ['blockquote'], label: 'Quote', icon: '\u275D', insert: '> ' },
-  { id: 'code', aliases: ['codeblock'], label: 'Code Block', icon: '</>', insert: '```\n\n```', cursorOffset: 4 },
-  { id: 'divider', aliases: ['hr', 'line'], label: 'Divider', icon: '\u2014', insert: '---\n' },
-  { id: 'image', aliases: ['img', 'picture'], label: 'Image', icon: '\uD83D\uDDBC', insert: '![]()', cursorOffset: 2 },
-  { id: 'link', aliases: ['url', 'href'], label: 'Link', icon: '\uD83D\uDD17', insert: '[]()', cursorOffset: 1 },
+  { id: 'h1', aliases: ['heading1'], label: 'Heading 1', icon: ICONS.h1, insert: '# ' },
+  { id: 'h2', aliases: ['heading2'], label: 'Heading 2', icon: ICONS.h2, insert: '## ' },
+  { id: 'h3', aliases: ['heading3'], label: 'Heading 3', icon: ICONS.h3, insert: '### ' },
+  { id: 'bold', aliases: ['strong', 'b'], label: 'Bold', icon: ICONS.bold, insert: '****', cursorOffset: 2 },
+  { id: 'italic', aliases: ['emphasis', 'em', 'i'], label: 'Italic', icon: ICONS.italic, insert: '**', cursorOffset: 1 },
+  { id: 'highlight', aliases: ['mark', 'hl'], label: 'Highlight', icon: ICONS.highlight, insert: '====', cursorOffset: 2 },
+  { id: 'bullet', aliases: ['list', 'ul'], label: 'Bullet List', icon: ICONS.list, insert: '- ' },
+  { id: 'numbered', aliases: ['num', 'ol'], label: 'Numbered List', icon: ICONS.listOrdered, insert: '1. ' },
+  { id: 'task', aliases: ['todo', 'checkbox'], label: 'Task', icon: ICONS.task, insert: '- [ ] ' },
+  { id: 'quote', aliases: ['blockquote'], label: 'Quote', icon: ICONS.quote, insert: '> ' },
+  { id: 'code', aliases: ['codeblock'], label: 'Code Block', icon: ICONS.code, insert: '```\n\n```', cursorOffset: 4 },
+  { id: 'divider', aliases: ['hr', 'line'], label: 'Divider', icon: ICONS.divider, insert: '---\n' },
+  { id: 'image', aliases: ['img', 'picture'], label: 'Image', icon: ICONS.image, insert: '![]()', cursorOffset: 2 },
+  { id: 'link', aliases: ['url', 'href'], label: 'Link', icon: ICONS.link, insert: '[]()', cursorOffset: 1 },
 ]
 
 // StateEffects for menu control
@@ -358,12 +376,10 @@ class SlashMenuWidget {
         justifyContent: 'center',
         backgroundColor: 'var(--bg-secondary, #f8f9fa)',
         borderRadius: '4px',
-        fontSize: '12px',
-        fontWeight: '600',
         color: 'var(--text-secondary, #6b6b6b)',
         flexShrink: '0'
       })
-      icon.textContent = cmd.icon
+      icon.innerHTML = cmd.icon
 
       const label = document.createElement('span')
       label.className = 'cm-slash-menu-label'

@@ -127,10 +127,9 @@ export class PDFTab {
         </div>
         <div class="editor-header-separator"></div>
         <button class="editor-control-btn pdf-highlight-btn" title="Highlight Selection (Cmd+Shift+H)">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M12 20h9"></path>
-            <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path>
-            <line x1="10" y1="11" x2="14" y2="15"></line>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="m9 11-6 6v3h9l3-3"/>
+            <path d="m22 12-4.6 4.6a2 2 0 0 1-2.8 0l-5.2-5.2a2 2 0 0 1 0-2.8L14 4"/>
           </svg>
         </button>
         <button class="editor-control-btn pdf-undo-btn" title="Undo (Cmd+Z)">
