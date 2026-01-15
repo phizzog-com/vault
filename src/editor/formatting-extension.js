@@ -572,6 +572,9 @@ export const inlineFormattingExtension = Prec.highest(ViewPlugin.fromClass(
 
           pos = line.to + 1
         }
+
+        // Process multi-line highlights that span across lines
+        this.processMultiLineHighlights(allDecorations, atomicDecorations, doc, from, to)
       }
 
       // Sort all decorations by position
@@ -1022,6 +1025,66 @@ export const inlineFormattingExtension = Prec.highest(ViewPlugin.fromClass(
         const fullMatch = match[0]
         const content = match[1]
         const startPos = lineStart + match.index
+        const endPos = startPos + fullMatch.length
+
+        // Hide the opening ==
+        const openReplace = Decoration.replace({})
+        decorations.push({
+          from: startPos,
+          to: startPos + 2,
+          decoration: openReplace
+        })
+        atomicDecorations.push({
+          from: startPos,
+          to: startPos + 2,
+          decoration: openReplace
+        })
+
+        // Apply highlight styling to the content (NOT atomic)
+        decorations.push({
+          from: startPos + 2,
+          to: endPos - 2,
+          decoration: Decoration.mark({ class: 'cm-highlight-formatted' })
+        })
+
+        // Hide the closing ==
+        const closeReplace = Decoration.replace({})
+        decorations.push({
+          from: endPos - 2,
+          to: endPos,
+          decoration: closeReplace
+        })
+        atomicDecorations.push({
+          from: endPos - 2,
+          to: endPos,
+          decoration: closeReplace
+        })
+      }
+    }
+
+    /**
+     * Process multi-line highlight formatting: ==text that spans
+     * multiple lines==
+     * This must be called separately from the per-line processing
+     * to handle patterns that cross line boundaries.
+     */
+    processMultiLineHighlights(decorations, atomicDecorations, doc, fromPos, toPos) {
+      const text = doc.sliceString(fromPos, toPos)
+      // Match ==...== allowing newlines in content
+      // Use non-greedy match and require at least one character
+      const highlightRegex = /==([\s\S]+?)==/g
+      let match
+
+      while ((match = highlightRegex.exec(text)) !== null) {
+        const fullMatch = match[0]
+        const content = match[1]
+
+        // Skip single-line highlights (already handled by processHighlightFormatting)
+        if (!content.includes('\n')) {
+          continue
+        }
+
+        const startPos = fromPos + match.index
         const endPos = startPos + fullMatch.length
 
         // Hide the opening ==

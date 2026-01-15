@@ -7,7 +7,7 @@ import windowContext from '../contexts/WindowContext.js';
 
 // Configure PDF.js worker - use local worker to avoid CDN issues
 // The worker is copied to public directory during build
-pdfjsLib.GlobalWorkerOptions.workerSrc = '/pdf.worker.js';
+pdfjsLib.GlobalWorkerOptions.workerSrc = '/pdf.worker.mjs';
 
 console.log('PDF.js worker configured successfully');
 

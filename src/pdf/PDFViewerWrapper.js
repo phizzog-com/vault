@@ -8,7 +8,7 @@ import { EventBus, PDFViewer } from 'pdfjs-dist/web/pdf_viewer'
 import 'pdfjs-dist/web/pdf_viewer.css'
 
 // Configure PDF.js worker - use local worker to avoid CDN issues
-pdfjsLib.GlobalWorkerOptions.workerSrc = '/pdf.worker.js'
+pdfjsLib.GlobalWorkerOptions.workerSrc = '/pdf.worker.mjs'
 
 /**
  * Wrapper around PDF.js PDFViewer that provides:

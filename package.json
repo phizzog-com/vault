@@ -40,7 +40,7 @@
     "@xterm/xterm": "^5.5.0",
     "date-fns": "^4.1.0",
     "fuse.js": "^6.6.2",
-    "pdfjs-dist": "^5.3.93",
+    "pdfjs-dist": "5.4.530",
     "zod": "^3.25.76"
   },
   "devDependencies": {

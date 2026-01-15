@@ -860,6 +860,18 @@ body.resizing-sidebar {
   border-color: var(--accent-hover);
 }
 
+/* PDF Highlight button - yellow to indicate highlight function */
+.pdf-highlight-btn {
+  background: rgba(255, 235, 59, 0.3);
+  border-color: rgba(255, 193, 7, 0.4);
+}
+
+.pdf-highlight-btn:hover {
+  background: rgba(255, 235, 59, 0.5);
+  border-color: rgba(255, 193, 7, 0.6);
+  color: var(--text-primary);
+}
+
 /* Editor Menu Dropdown */
 .editor-menu-container {
   position: relative;

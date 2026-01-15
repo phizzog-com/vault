@@ -15,13 +15,34 @@
 import { EditorView, ViewPlugin } from '@codemirror/view'
 import { keymap } from '@codemirror/view'
 
+// Lucide SVG icons (16x16, viewBox 0 0 24 24)
+const ICONS = {
+  bold: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 4h8a4 4 0 0 1 4 4 4 4 0 0 1-4 4H6z"/><path d="M6 12h9a4 4 0 0 1 4 4 4 4 0 0 1-4 4H6z"/></svg>',
+  italic: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="4" x2="10" y2="4"/><line x1="14" y1="20" x2="5" y2="20"/><line x1="15" y1="4" x2="9" y2="20"/></svg>',
+  highlight: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 11-6 6v3h9l3-3"/><path d="m22 12-4.6 4.6a2 2 0 0 1-2.8 0l-5.2-5.2a2 2 0 0 1 0-2.8L14 4"/></svg>',
+  list: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>',
+  task: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><path d="m9 12 2 2 4-4"/></svg>',
+  h1: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12h8"/><path d="M4 18V6"/><path d="M12 18V6"/><path d="m17 12 3-2v8"/></svg>',
+  h2: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12h8"/><path d="M4 18V6"/><path d="M12 18V6"/><path d="M21 18h-4c0-4 4-3 4-6 0-1.5-2-2.5-4-1"/></svg>',
+  h3: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12h8"/><path d="M4 18V6"/><path d="M12 18V6"/><path d="M17.5 10.5c1.7-1 3.5 0 3.5 1.5a2 2 0 0 1-2 2"/><path d="M17 17.5c2 1.5 4 .3 4-1.5a2 2 0 0 0-2-2"/></svg>',
+  strikethrough: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 4H9a3 3 0 0 0-2.83 4"/><path d="M14 12a4 4 0 0 1 0 8H6"/><line x1="4" y1="12" x2="20" y2="12"/></svg>',
+  code: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>',
+  link: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>',
+}
+
 // Toolbar buttons configuration
 const TOOLBAR_BUTTONS = [
-  { id: 'bold', label: 'B', title: 'Bold (Cmd+B)', marker: '**' },
-  { id: 'italic', label: 'I', title: 'Italic (Cmd+I)', marker: '*' },
-  { id: 'strikethrough', label: 'S', title: 'Strikethrough', marker: '~~' },
-  { id: 'code', label: '</>', title: 'Code (Cmd+`)', marker: '`' },
-  { id: 'link', label: '\uD83D\uDD17', title: 'Link (Cmd+K)', action: 'link' },
+  { id: 'bold', icon: ICONS.bold, title: 'Bold (Cmd+B)', marker: '**' },
+  { id: 'italic', icon: ICONS.italic, title: 'Italic (Cmd+I)', marker: '*' },
+  { id: 'highlight', icon: ICONS.highlight, title: 'Highlight (Cmd+Shift+H)', marker: '==' },
+  { id: 'bullet', icon: ICONS.list, title: 'Bullet List', prefix: '- ' },
+  { id: 'task', icon: ICONS.task, title: 'Task', prefix: '- [ ] ' },
+  { id: 'h1', icon: ICONS.h1, title: 'Heading 1', prefix: '# ' },
+  { id: 'h2', icon: ICONS.h2, title: 'Heading 2', prefix: '## ' },
+  { id: 'h3', icon: ICONS.h3, title: 'Heading 3', prefix: '### ' },
+  { id: 'strikethrough', icon: ICONS.strikethrough, title: 'Strikethrough', marker: '~~' },
+  { id: 'code', icon: ICONS.code, title: 'Code (Cmd+`)', marker: '`' },
+  { id: 'link', icon: ICONS.link, title: 'Link (Cmd+K)', action: 'link' },
 ]
 
 /**
@@ -87,6 +108,58 @@ function insertLink(view) {
 }
 
 /**
+ * Apply a line prefix (for headings, lists, etc.)
+ * Replaces any existing prefix on the line
+ */
+function applyLinePrefix(view, prefix) {
+  const { from, to } = view.state.selection.main
+  const doc = view.state.doc
+
+  // Get all lines in selection
+  const startLine = doc.lineAt(from)
+  const endLine = doc.lineAt(to)
+
+  const changes = []
+  let newSelectionStart = from
+  let offsetAdjustment = 0
+
+  for (let lineNum = startLine.number; lineNum <= endLine.number; lineNum++) {
+    const line = doc.line(lineNum)
+    const lineText = line.text
+
+    // Remove existing prefix patterns (headings, lists, tasks)
+    const prefixMatch = lineText.match(/^(\s*)(#{1,6}\s+|- \[[ x]\] |- |\* |\d+\. )?(.*)$/)
+    const indent = prefixMatch[1] || ''
+    const existingPrefix = prefixMatch[2] || ''
+    const content = prefixMatch[3] || ''
+
+    // Calculate new line content
+    const newLineText = indent + prefix + content
+
+    if (lineNum === startLine.number) {
+      // Adjust selection start based on prefix change
+      const prefixDiff = prefix.length - existingPrefix.length
+      newSelectionStart = from + prefixDiff
+    }
+
+    changes.push({
+      from: line.from,
+      to: line.to,
+      insert: newLineText
+    })
+
+    offsetAdjustment += (prefix.length - existingPrefix.length)
+  }
+
+  view.dispatch({
+    changes,
+    selection: { anchor: newSelectionStart }
+  })
+
+  view.focus()
+}
+
+/**
  * Handle button click based on button configuration
  */
 function handleButtonClick(view, button) {
@@ -94,6 +167,8 @@ function handleButtonClick(view, button) {
     insertLink(view)
   } else if (button.marker) {
     toggleMark(view, button.marker)
+  } else if (button.prefix) {
+    applyLinePrefix(view, button.prefix)
   }
 }
 
@@ -172,30 +247,98 @@ const floatingToolbarPlugin = ViewPlugin.fromClass(
       toolbar.setAttribute('role', 'toolbar')
       toolbar.setAttribute('aria-label', 'Text formatting')
 
+      // Apply inline styles (toolbar is appended to body, outside CodeMirror's theme scope)
+      Object.assign(toolbar.style, {
+        position: 'fixed',
+        zIndex: '10000',
+        display: 'flex',
+        alignItems: 'center',
+        gap: '2px',
+        backgroundColor: '#ffffff',
+        border: '1px solid #e9e9e7',
+        borderRadius: '8px',
+        boxShadow: '0 4px 16px rgba(0, 0, 0, 0.12)',
+        padding: '4px',
+        fontFamily: 'Inter, -apple-system, BlinkMacSystemFont, sans-serif'
+      })
+
+      // Check for dark mode
+      const isDarkMode = document.body.classList.contains('dark-mode') ||
+        window.matchMedia('(prefers-color-scheme: dark)').matches
+      if (isDarkMode) {
+        Object.assign(toolbar.style, {
+          backgroundColor: '#1e1e1e',
+          borderColor: '#3d3d3d',
+          boxShadow: '0 4px 16px rgba(0, 0, 0, 0.4)'
+        })
+      }
+
       for (const button of TOOLBAR_BUTTONS) {
+        // Handle separator
+        if (button.isSeparator) {
+          const sep = document.createElement('div')
+          Object.assign(sep.style, {
+            width: '1px',
+            height: '20px',
+            backgroundColor: isDarkMode ? '#444444' : '#e0e0e0',
+            margin: '0 4px'
+          })
+          toolbar.appendChild(sep)
+          continue
+        }
+
         const btn = document.createElement('button')
         btn.className = 'cm-floating-toolbar-btn'
         btn.setAttribute('type', 'button')
         btn.setAttribute('data-button-id', button.id)
         btn.setAttribute('title', button.title)
         btn.setAttribute('aria-label', button.title)
-        btn.textContent = button.label
+        btn.innerHTML = button.icon
 
-        // Apply styling classes for specific buttons
-        if (button.id === 'bold') {
-          btn.classList.add('cm-floating-toolbar-btn-bold')
-        } else if (button.id === 'italic') {
-          btn.classList.add('cm-floating-toolbar-btn-italic')
-        } else if (button.id === 'strikethrough') {
-          btn.classList.add('cm-floating-toolbar-btn-strikethrough')
-        } else if (button.id === 'code') {
-          btn.classList.add('cm-floating-toolbar-btn-code')
+        // Base button styles
+        Object.assign(btn.style, {
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          width: '32px',
+          height: '32px',
+          border: 'none',
+          borderRadius: '6px',
+          backgroundColor: 'transparent',
+          color: isDarkMode ? '#e0e0e0' : '#2c3e50',
+          cursor: 'pointer',
+          transition: 'background-color 0.1s ease, color 0.1s ease'
+        })
+
+        // Apply highlight button special styling
+        if (button.id === 'highlight') {
+          btn.style.backgroundColor = 'rgba(255, 235, 59, 0.3)'
         }
 
-        // Check if format is active and add active class
+        // Check if format is active
         if (button.marker && isFormatActive(this.view, button.marker)) {
-          btn.classList.add('cm-floating-toolbar-btn-active')
+          btn.style.backgroundColor = isDarkMode ? '#2d4a7c' : '#e8f0fe'
+          btn.style.color = isDarkMode ? '#6bb3f8' : '#4572DE'
+          btn.dataset.active = 'true'
         }
+
+        // Get default background for this button
+        const getDefaultBg = () => {
+          if (button.id === 'highlight') return 'rgba(255, 235, 59, 0.3)'
+          return 'transparent'
+        }
+
+        // Hover effects
+        btn.addEventListener('mouseenter', () => {
+          if (btn.dataset.active !== 'true') {
+            btn.style.backgroundColor = isDarkMode ? '#333333' : '#f5f5f5'
+          }
+        })
+        btn.addEventListener('mouseleave', () => {
+          if (btn.dataset.active !== 'true') {
+            btn.style.backgroundColor = getDefaultBg()
+          }
+        })
 
         // Handle click
         btn.addEventListener('mousedown', (e) => {
@@ -215,16 +358,24 @@ const floatingToolbarPlugin = ViewPlugin.fromClass(
     updateActiveStates() {
       if (!this.toolbar) return
 
+      const isDarkMode = document.body.classList.contains('dark-mode') ||
+        window.matchMedia('(prefers-color-scheme: dark)').matches
+
       const buttons = this.toolbar.querySelectorAll('.cm-floating-toolbar-btn')
       buttons.forEach(btn => {
         const buttonId = btn.getAttribute('data-button-id')
         const buttonConfig = TOOLBAR_BUTTONS.find(b => b.id === buttonId)
 
         if (buttonConfig && buttonConfig.marker) {
-          if (isFormatActive(this.view, buttonConfig.marker)) {
-            btn.classList.add('cm-floating-toolbar-btn-active')
+          const isActive = isFormatActive(this.view, buttonConfig.marker)
+          if (isActive) {
+            btn.style.backgroundColor = isDarkMode ? '#2d4a7c' : '#e8f0fe'
+            btn.style.color = isDarkMode ? '#6bb3f8' : '#4572DE'
+            btn.dataset.active = 'true'
           } else {
-            btn.classList.remove('cm-floating-toolbar-btn-active')
+            btn.style.backgroundColor = buttonConfig.id === 'highlight' ? 'rgba(255, 235, 59, 0.3)' : 'transparent'
+            btn.style.color = isDarkMode ? '#e0e0e0' : '#2c3e50'
+            btn.dataset.active = 'false'
           }
         }
       })
@@ -314,6 +465,7 @@ function createLinkCommand(view) {
 const floatingToolbarKeymap = keymap.of([
   { key: 'Mod-b', run: createFormatCommand('**') },
   { key: 'Mod-i', run: createFormatCommand('*') },
+  { key: 'Mod-Shift-h', run: createFormatCommand('==') },
   { key: 'Mod-`', run: createFormatCommand('`') },
   { key: 'Mod-k', run: createLinkCommand },
 ])
@@ -381,6 +533,11 @@ const floatingToolbarStyles = EditorView.theme({
   '.cm-floating-toolbar-btn-code': {
     fontFamily: 'SFMono-Regular, Consolas, "Liberation Mono", Menlo, monospace',
     fontSize: '12px'
+  },
+
+  '.cm-floating-toolbar-btn-highlight': {
+    backgroundColor: 'rgba(255, 235, 59, 0.3)',
+    fontWeight: '600'
   },
 
   // Dark mode support through CSS variables
