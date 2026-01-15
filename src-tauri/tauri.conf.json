@@ -1,0 +1,54 @@
+{
+  "identifier": "com.vault.app",
+  "productName": "Vault",
+  "version": "0.1.0",
+  "build": {
+    "beforeDevCommand": "npm run build:mcp && npm run dev",
+    "beforeBuildCommand": "npm run build:mcp && npm run build",
+    "frontendDist": "../dist",
+    "devUrl": "http://localhost:5173"
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "icon": [
+      "icons/icon.png"
+    ],
+    "resources": [],
+    "externalBin": [
+      "../mcp-servers/filesystem-server-rust/target/release/mcp-filesystem-server",
+      "../mcp-servers/search-server-rust/target/release/mcp-search-server"
+    ]
+  },
+  "app": {
+    "macOSPrivateApi": true,
+    "security": {
+      "csp": null,
+      "capabilities": ["main"]
+    },
+    "windows": [
+      {
+        "title": "Vault",
+        "width": 1200,
+        "height": 800,
+        "minWidth": 800,
+        "minHeight": 600,
+        "label": "main",
+        "transparent": true,
+        "decorations": true,
+        "titleBarStyle": "Overlay",
+        "hiddenTitle": true,
+        "backgroundColor": "#ffffff",
+        "theme": "Light"
+      }
+    ]
+  },
+  "plugins": {
+    "fs": {
+      "requireLiteralLeadingDot": false
+    },
+    "shell": {
+      "open": true
+    }
+  }
+}
