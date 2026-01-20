@@ -135,23 +135,24 @@ function createWikiLinkDecoration(match, view, pos) {
 
   if (isActive) {
     // Edit mode: show raw markdown but keep clickable styling
-    const decoration = Decoration.mark({
+    // MatchDecorator expects a Decoration, not a Range<Decoration>
+    return Decoration.mark({
       class: isTid ? `${cssClass} cm-tid-link` : cssClass,
       attributes: {
         'data-wikilink': baseName,
         'data-exists': exists.toString(),
         'data-cache-key': cacheKey,
-        title: exists 
-          ? `Navigate to "${baseName}"\nClick to open` 
+        title: exists
+          ? `Navigate to "${baseName}"\nClick to open`
           : cssClass === 'cm-wikilink-checking'
             ? `Checking "${baseName}"...`
             : `"${baseName}" doesn't exist\nClick to create`
       }
     })
-    return decoration.range(from, to)
   }
 
   // Preview mode: replace with a compact label
+  // MatchDecorator expects a Decoration, not a Range<Decoration>
   const label = computeDisplayLabelFromNoteName(noteName)
   const widget = new InlineWikiLinkWidget({
     label,
@@ -160,7 +161,7 @@ function createWikiLinkDecoration(match, view, pos) {
     exists,
     cacheKey
   })
-  return Decoration.replace({ widget }).range(from, to)
+  return Decoration.replace({ widget })
 }
 
 // Async function to check note existence and update view
