@@ -70,6 +70,9 @@ impl Vault {
                 } else if ext == Some("json") {
                     // Adding JSON file
                     items.push(path.to_path_buf());
+                } else if ext == Some("excalidraw") {
+                    // Adding Excalidraw sketch file
+                    items.push(path.to_path_buf());
                 }
             }
         }

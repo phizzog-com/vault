@@ -433,8 +433,10 @@
   }
 }
 
-/* Remove padding from lines with widgets to prevent "double spacing" */
-.cm-line:has(.cm-horizontal-rule) {
+/* Remove padding from lines with block widgets to prevent click target misalignment */
+.cm-line:has(.cm-horizontal-rule),
+.cm-line:has(.cm-table-formatted),
+.cm-line:has(.cm-code-block-formatted) {
   padding: 0 !important;
   margin: 0 !important;
   background: transparent !important;

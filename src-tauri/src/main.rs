@@ -310,6 +310,59 @@ async fn read_file_base64(path: String) -> Result<String, String> {
 }
 
 #[tauri::command]
+async fn create_new_sketch(
+    file_name: String,
+    window: tauri::Window,
+    refactored_state: State<'_, RefactoredAppState>,
+) -> Result<String, String> {
+    let window_id = extract_window_id(&window);
+
+    let window_state = refactored_state
+        .get_window_state(&window_id)
+        .await
+        .ok_or("Window not found")?;
+
+    let vault_lock = window_state.vault.lock().await;
+    let vault = vault_lock.as_ref().ok_or("No vault opened")?;
+
+    let sketches_path = vault.path().join("Sketches");
+    if !sketches_path.exists() {
+        tokio::fs::create_dir_all(&sketches_path)
+            .await
+            .map_err(|e| format!("Failed to create Sketches folder: {}", e))?;
+    }
+
+    let sketch_file = sketches_path.join(&file_name);
+    let empty_sketch = serde_json::json!({
+        "type": "excalidraw",
+        "version": 2,
+        "source": "vault-desktop",
+        "elements": [],
+        "appState": { "viewBackgroundColor": "#ffffff" },
+        "files": {}
+    });
+
+    tokio::fs::write(&sketch_file, empty_sketch.to_string())
+        .await
+        .map_err(|e| format!("Failed to create sketch: {}", e))?;
+
+    Ok(format!("Sketches/{}", file_name))
+}
+
+#[tauri::command]
+async fn write_binary_file(path: String, data: String) -> Result<(), String> {
+    use base64::{engine::general_purpose, Engine as _};
+
+    let bytes = general_purpose::STANDARD
+        .decode(&data)
+        .map_err(|e| format!("Failed to decode base64: {}", e))?;
+
+    tokio::fs::write(&path, bytes)
+        .await
+        .map_err(|e| format!("Failed to write file: {}", e))
+}
+
+#[tauri::command]
 async fn start_file_watcher(
     vault_path: String,
     window: tauri::Window,
@@ -1656,6 +1709,7 @@ fn main() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_store::Builder::default().build())
+        .plugin(tauri_plugin_clipboard_manager::init())
         .invoke_handler(tauri::generate_handler![
             open_vault,
             create_vault,
@@ -1683,6 +1737,8 @@ fn main() {
             save_pasted_image,
             read_image_as_base64,
             read_file_base64,
+            create_new_sketch,
+            write_binary_file,
             editor::save_editor_preference,
             editor::get_editor_preferences,
             editor::list_theme_files,

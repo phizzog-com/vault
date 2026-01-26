@@ -754,6 +754,11 @@ body.resizing-sidebar {
   color: #3b82f6;
 }
 
+.file-type-badge.sketch {
+  background-color: rgba(249, 115, 22, 0.15);
+  color: #f97316;
+}
+
 .tree-label {
   flex: 1;
   color: var(--text-primary);

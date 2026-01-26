@@ -2511,6 +2511,8 @@ function displayFileTree(fileTree) {
         fileIcon = '<span class="file-type-badge csv">CSV</span>';
       } else if (ext === 'json') {
         fileIcon = '<span class="file-type-badge json">JSON</span>';
+      } else if (ext === 'excalidraw') {
+        fileIcon = '<span class="file-type-badge sketch">Sketch</span>';
       } else if (ext === 'md' || ext === 'markdown') {
         fileIcon = `<span class="tree-icon file-icon">${icons.fileText({ size: 16 })}</span>`;
       } else if (ext === 'txt') {
@@ -2520,7 +2522,7 @@ function displayFileTree(fileTree) {
       }
 
       // Remove file extension for display
-      const displayName = file.name.replace(/\.(md|markdown|txt|doc|docx|pdf|csv|json)$/i, '');
+      const displayName = file.name.replace(/\.(md|markdown|txt|doc|docx|pdf|csv|json|excalidraw)$/i, '');
 
       html += `
         <div class="tree-item file" data-path="${file.path}" style="padding-left: ${fileIndent}px;" data-file-path="${escapedPath}" draggable="true" ondragstart="handleFileDragStart(event)" ondrag="handleFileDrag(event)" ondragend="handleFileDragEnd(event)" title="${file.name}">
@@ -3342,6 +3344,9 @@ async function initializeApp() {
             Rename
           </div>
           <div class="context-menu-separator"></div>
+          <div class="context-menu-item" data-action="copy-path">
+            Copy path
+          </div>
           <div class="context-menu-item" data-action="reveal">
             View in Finder
           </div>
@@ -3363,6 +3368,9 @@ async function initializeApp() {
             Rename
           </div>
           <div class="context-menu-separator"></div>
+          <div class="context-menu-item" data-action="copy-path">
+            Copy path
+          </div>
           <div class="context-menu-item" data-action="reveal">
             View in Finder
           </div>
@@ -3541,6 +3549,9 @@ async function initializeApp() {
               break;
             case 'rename':
               window.renameFile();
+              break;
+            case 'copy-path':
+              window.copyPathToClipboard();
               break;
             case 'reveal':
               window.revealInFinder();
@@ -3749,6 +3760,9 @@ async function initializeApp() {
               break;
             case 'rename':
               window.renameFile(); // Reuse rename flow
+              break;
+            case 'copy-path':
+              window.copyPathToClipboard();
               break;
             case 'reveal':
               window.revealInFinder();
@@ -6039,16 +6053,35 @@ if (document.readyState === 'loading') {
 // Reveal in Finder function
 window.revealInFinder = async function() {
   if (!contextMenuTarget) return;
-  
+
   const targetPath = contextMenuTarget;
-  
+
   try {
     await invoke('reveal_in_finder', { path: targetPath });
     console.log('File revealed in Finder:', targetPath);
   } catch (error) {
     console.error('Failed to reveal file in Finder:', error);
   }
-  
+
   window.hideContextMenu();
   contextMenuTarget = null; // Clear after use
+};
+
+// Copy path to clipboard function
+window.copyPathToClipboard = async function() {
+  if (!contextMenuTarget) return;
+
+  const targetPath = contextMenuTarget;
+
+  try {
+    await navigator.clipboard.writeText(targetPath);
+    console.log('Path copied to clipboard:', targetPath);
+    showNotification('Path copied to clipboard', 'success');
+  } catch (error) {
+    console.error('Failed to copy path to clipboard:', error);
+    showNotification('Failed to copy path', 'error');
+  }
+
+  window.hideContextMenu();
+  contextMenuTarget = null;
 };

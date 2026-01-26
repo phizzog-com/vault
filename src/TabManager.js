@@ -2,6 +2,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { MarkdownEditor } from './editor/markdown-editor.js';
 import { PDFTab } from './pdf/PDFTab.js';
 import { CsvEditor } from './csv/CsvEditor.js';
+import { SketchTab } from './sketch/SketchTab.js';
 
 // Import CSV editor styles
 import './csv/csv-editor.css';
@@ -87,9 +88,11 @@ export class TabManager {
         let editor = null;
         let pdfTab = null;
         let csvEditor = null;
+        let sketchTab = null;
 
         // Determine if this is a CSV file (for type assignment, even if opening as plain text)
         const isCsvFile = filePath && filePath.toLowerCase().endsWith('.csv');
+        const isExcalidraw = filePath && filePath.toLowerCase().endsWith('.excalidraw');
 
         // Check if this is a PDF file
         if (isPDF || (filePath && filePath.toLowerCase().endsWith('.pdf'))) {
@@ -121,6 +124,18 @@ export class TabManager {
                 console.error('Error creating CSV tab:', error);
                 editorContainer.innerHTML = `<div class="error-state">Error loading CSV: ${error.message}</div>`;
             });
+        } else if (isExcalidraw) {
+            // Excalidraw sketch file
+            console.log('Creating Sketch tab for:', filePath);
+            sketchTab = new SketchTab(filePath, this, this.panes[0].id);
+            editorContainer.__sketchTabInstance = sketchTab;
+
+            sketchTab.createContent().then(sketchContainer => {
+                editorContainer.appendChild(sketchContainer);
+            }).catch(error => {
+                console.error('Error creating Sketch tab:', error);
+                editorContainer.innerHTML = `<div class="error-state">Error loading sketch: ${error.message}</div>`;
+            });
         } else {
             // For regular files (including CSV with plugin disabled), create markdown editor
             if (isCsvFile && !openAsCsv) {
@@ -136,6 +151,8 @@ export class TabManager {
         } else if (isCsvFile && openAsCsv) {
             // Only set CSV type when actually using CSV editor
             tabType = 'csv';
+        } else if (isExcalidraw) {
+            tabType = 'sketch';
         }
         // Note: CSV files with plugin disabled remain as 'markdown' type (plain text)
 
@@ -146,6 +163,7 @@ export class TabManager {
             editor,
             pdfTab,
             csvEditor,
+            sketchTab,
             editorContainer,
             isDirty: false,
             content: content,
@@ -155,6 +173,11 @@ export class TabManager {
                 currentIndex: 0
             }
         };
+
+        // Set tabId on sketchTab for dirty state management
+        if (sketchTab) {
+            sketchTab.tabId = tabId;
+        }
 
         this.tabs.set(tabId, tab);
         this.tabOrder.push(tabId);
@@ -202,12 +225,14 @@ export class TabManager {
         this.activeTabId = tabId;
         this.panes[0].activeTabId = tabId;
         
-        // Focus the editor, PDF viewer, or CSV editor
+        // Focus the editor, PDF viewer, CSV editor, or sketch tab
         setTimeout(() => {
             if (tab.type === 'pdf' && tab.pdfTab) {
                 tab.pdfTab.focus();
             } else if (tab.type === 'csv' && tab.csvEditor) {
                 tab.csvEditor.focus();
+            } else if (tab.type === 'sketch' && tab.sketchTab) {
+                tab.sketchTab.focus();
             } else if (tab.editor) {
                 tab.editor.focus();
             }
@@ -238,6 +263,11 @@ export class TabManager {
                 hasUnsavedChanges = tab.csvEditor.hasUnsavedChanges();
             }
 
+            // For sketch tabs, check the sketchTab's dirty state
+            if (tab.type === 'sketch' && tab.sketchTab) {
+                hasUnsavedChanges = tab.sketchTab.hasUnsavedChanges();
+            }
+
             if (hasUnsavedChanges) {
                 const confirmed = confirm(`"${tab.title}" has unsaved changes. Close anyway?`);
                 if (!confirmed) {
@@ -255,6 +285,12 @@ export class TabManager {
         if (tab.type === 'csv' && tab.csvEditor) {
             console.log('Destroying CSV editor for tab:', tabId);
             tab.csvEditor.unmount();
+        }
+
+        // Clean up sketch tab if needed
+        if (tab.type === 'sketch' && tab.sketchTab) {
+            console.log('Destroying sketch tab for:', tabId);
+            tab.sketchTab.destroy();
         }
 
         // Clean up markdown editor if needed

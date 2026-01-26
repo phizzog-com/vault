@@ -11,28 +11,72 @@ class TableWidget extends WidgetType {
     this.tableRows = tableRows
   }
 
+  // Allow mouse events to pass through for text selection within the table
+  ignoreEvent(event) {
+    const selectionEvents = ['mousedown', 'mouseup', 'mousemove', 'click', 'dblclick', 'selectstart']
+    return selectionEvents.includes(event.type)
+  }
+
   toDOM() {
     const table = document.createElement('table')
     table.className = 'cm-table-formatted'
-    
+
+    // Make table focusable to preserve text selection
+    table.setAttribute('tabindex', '-1')
+
+    // Prevent CodeMirror from stealing focus on mouse events
+    // This preserves native text selection within the table
+    table.addEventListener('mousedown', (e) => {
+      e.stopPropagation()
+      // Focus the table so it can receive keyboard events (for copy)
+      table.focus()
+    })
+    table.addEventListener('mouseup', (e) => {
+      e.stopPropagation()
+    })
+    table.addEventListener('click', (e) => {
+      e.stopPropagation()
+    })
+
+    // Handle copy event to copy native selection to clipboard
+    table.addEventListener('copy', (e) => {
+      const selection = window.getSelection()
+      if (selection && selection.toString()) {
+        e.preventDefault()
+        e.clipboardData.setData('text/plain', selection.toString())
+      }
+    })
+
+    // Handle keydown for Cmd+C / Ctrl+C
+    table.addEventListener('keydown', (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'c') {
+        const selection = window.getSelection()
+        if (selection && selection.toString()) {
+          e.preventDefault()
+          e.stopPropagation()
+          navigator.clipboard.writeText(selection.toString())
+        }
+      }
+    })
+
     // Parse table structure
     const headerRow = this.tableRows[0]
     const separatorRow = this.tableRows[1]
     const dataRows = this.tableRows.slice(2)
-    
+
     // Parse header
     const headerCells = this.parseTableRow(headerRow)
-    
+
     // Parse alignment from separator row
     const alignments = this.parseTableAlignment(separatorRow)
-    
+
     // Create header
     const thead = document.createElement('thead')
     const headerTr = document.createElement('tr')
-    
+
     // Ensure we have at least as many header cells as alignment columns
     const maxColumns = Math.max(headerCells.length, alignments.length)
-    
+
     for (let i = 0; i < maxColumns; i++) {
       const th = document.createElement('th')
       const cellContent = headerCells[i] || ''
@@ -44,14 +88,14 @@ class TableWidget extends WidgetType {
     }
     thead.appendChild(headerTr)
     table.appendChild(thead)
-    
+
     // Create body
     if (dataRows.length > 0) {
       const tbody = document.createElement('tbody')
       dataRows.forEach(row => {
         const cells = this.parseTableRow(row)
         const tr = document.createElement('tr')
-        
+
         // Ensure we have at least as many cells as columns
         for (let i = 0; i < maxColumns; i++) {
           const td = document.createElement('td')
@@ -66,7 +110,7 @@ class TableWidget extends WidgetType {
       })
       table.appendChild(tbody)
     }
-    
+
     return table
   }
   
@@ -1228,48 +1272,41 @@ export const inlineFormattingExtension = Prec.highest(ViewPlugin.fromClass(
  * Now includes heading styles alongside inline formatting
  */
 export const inlineFormattingStyles = EditorView.theme({
-  // Heading styles with proper sizing and no indentation issues
+  // Heading styles - inherit line-height to align click targets with text
   '.cm-heading-formatted': {
     fontWeight: '600 !important',
-    color: 'var(--md-heading-color, #1a202c) !important',
-    display: 'inline !important'
+    color: 'var(--md-heading-color, #1a202c) !important'
   },
-  
+
   '.cm-heading-1-formatted': {
     fontSize: '1.875em !important',
-    fontWeight: '700 !important',
-    lineHeight: '1.1 !important'
+    fontWeight: '700 !important'
   },
-  
+
   '.cm-heading-2-formatted': {
     fontSize: '1.5em !important',
-    fontWeight: '600 !important',
-    lineHeight: '1.15 !important'
+    fontWeight: '600 !important'
   },
-  
+
   '.cm-heading-3-formatted': {
     fontSize: '1.25em !important',
-    fontWeight: '600 !important',
-    lineHeight: '1.2 !important'
+    fontWeight: '600 !important'
   },
-  
+
   '.cm-heading-4-formatted': {
     fontSize: '1.125em !important',
-    fontWeight: '600 !important',
-    lineHeight: '1.25 !important'
+    fontWeight: '600 !important'
   },
-  
+
   '.cm-heading-5-formatted': {
     fontSize: '1em !important',
-    fontWeight: '600 !important',
-    lineHeight: '1.3 !important'
+    fontWeight: '600 !important'
   },
-  
+
   '.cm-heading-6-formatted': {
     fontSize: '0.875em !important',
     fontWeight: '600 !important',
-    color: 'var(--md-heading-muted, #6a737d) !important',
-    lineHeight: '1.3 !important'
+    color: 'var(--md-heading-muted, #6a737d) !important'
   },
 
   // Blockquote formatting with left border and subtle background
@@ -1335,13 +1372,16 @@ export const inlineFormattingStyles = EditorView.theme({
     borderCollapse: 'collapse !important',
     width: 'auto !important',
     maxWidth: '100% !important',
-    margin: '1em 0 !important',
+    margin: '0.5em 0 !important',
     border: '2px solid var(--border-color, #e9e9e7) !important',
     borderRadius: '8px !important',
     overflow: 'hidden !important',
     fontSize: '14px !important',
     fontFamily: 'inherit !important',
-    boxShadow: '0 2px 8px rgba(0, 0, 0, 0.1) !important'
+    boxShadow: '0 2px 8px rgba(0, 0, 0, 0.1) !important',
+    userSelect: 'text !important',
+    WebkitUserSelect: 'text !important',
+    cursor: 'text !important'
   },
   
   '.cm-table-formatted th': {
@@ -1352,7 +1392,10 @@ export const inlineFormattingStyles = EditorView.theme({
     borderBottom: '2px solid var(--border-color, #e9e9e7) !important',
     borderRight: '1px solid var(--border-color, #e9e9e7) !important',
     minWidth: '40px !important',
-    minHeight: '20px !important'
+    minHeight: '20px !important',
+    userSelect: 'text !important',
+    WebkitUserSelect: 'text !important',
+    cursor: 'text !important'
   },
   
   '.cm-table-formatted th:last-child': {
@@ -1369,7 +1412,10 @@ export const inlineFormattingStyles = EditorView.theme({
     wordBreak: 'break-word !important',
     overflowWrap: 'anywhere !important',
     overflow: 'visible !important',
-    textOverflow: 'unset !important'
+    textOverflow: 'unset !important',
+    userSelect: 'text !important',
+    WebkitUserSelect: 'text !important',
+    cursor: 'text !important'
   },
   
   '.cm-table-formatted td:last-child': {
