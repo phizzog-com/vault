@@ -51,11 +51,19 @@ function looksLikeMarkdownAuthoredText(value = '') {
     return true;
   }
 
-  if (/\*\*[^*]+?\*\*|__[^_]+?__|~~[^~]+?~~|`[^`]+`|\[[^\]]+\]\([^)]+\)/u.test(text)) {
+  if (/\*\*[^*]+?\*\*|__[^_]+?__|~~[^~]+?~~|==[^=\n]+?==|`[^`]+`|\[[^\]]+\]\([^)]+\)/u.test(text)) {
     return true;
   }
 
   return false;
+}
+
+function wrapWithHighlightSyntax(text = '') {
+  const value = String(text);
+  if (value.startsWith('==') && value.endsWith('==')) {
+    return value;
+  }
+  return `==${value}==`;
 }
 
 function applyMarks(text, marks = []) {
@@ -76,6 +84,9 @@ function applyMarks(text, marks = []) {
       case 'strikethrough':
         result = `~~${result}~~`;
         break;
+      case 'highlight':
+        result = wrapWithHighlightSyntax(result);
+        break;
       case 'code':
         result = `\`${result}\``;
         break;
@@ -86,6 +97,10 @@ function applyMarks(text, marks = []) {
         linkMarks.push(mark);
         break;
       case 'textStyle':
+        if (mark?.attrs?.backgroundColor) {
+          result = wrapWithHighlightSyntax(result);
+        }
+        break;
       case 'author_id':
       default:
         break;

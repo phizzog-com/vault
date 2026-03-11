@@ -4,6 +4,19 @@ import { Decoration, EditorView, ViewPlugin, WidgetType } from '@codemirror/view
 import { highlightTree } from '@lezer/highlight'
 import { languages } from '@codemirror/language-data'
 
+function escapeHtml(text = '') {
+  return String(text)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+}
+
+function escapeAttribute(value = '') {
+  return escapeHtml(value)
+}
+
 // Table widget for rendering markdown tables as HTML tables
 class TableWidget extends WidgetType {
   constructor(tableRows) {
@@ -166,11 +179,19 @@ class TableWidget extends WidgetType {
   }
   
   parseInlineFormatting(text) {
-    // Basic inline formatting - can be enhanced later
-    return text
+    const escaped = escapeHtml(text)
+
+    return escaped
+      .replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_, label, href) => (
+        `<a href="${escapeAttribute(href)}" target="_blank" rel="noopener noreferrer">${label}</a>`
+      ))
+      .replace(/\*\*\*([^*]+)\*\*\*/g, '<strong><em>$1</em></strong>')
       .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
-      .replace(/\*([^*]+)\*/g, '<em>$1</em>')
+      .replace(/~~([^~]+)~~/g, '<s>$1</s>')
+      .replace(/==([^=\n]+)==/g, '<mark class="cm-table-highlight">$1</mark>')
       .replace(/`([^`]+)`/g, '<code>$1</code>')
+      .replace(/\*([^*]+)\*/g, '<em>$1</em>')
+      .replace(/_([^_]+)_/g, '<u>$1</u>')
   }
 
   eq(other) {
@@ -701,8 +722,18 @@ export const inlineFormattingExtension = Prec.highest(ViewPlugin.fromClass(
       // Users format text using the '/' slash command menu or floating toolbar
 
       // Process heading formatting first (higher priority)
-      if (this.processHeadingFormatting(decorations, atomicDecorations, text, lineStart)) {
-        return // If it's a heading, don't process inline formatting
+      const headingInfo = this.processHeadingFormatting(decorations, atomicDecorations, text, lineStart)
+      if (headingInfo) {
+        // Headings can still contain inline markdown like **bold** or ==highlight==.
+        // Process only the heading content segment so the leading # markers stay hidden
+        // while the inline markers inside the heading are also formatted.
+        this.processInlineFormatting(
+          decorations,
+          atomicDecorations,
+          headingInfo.content,
+          headingInfo.contentStart
+        )
+        return
       }
 
       // Process blockquote formatting (also higher priority)
@@ -717,7 +748,7 @@ export const inlineFormattingExtension = Prec.highest(ViewPlugin.fromClass(
       // Match headings: # ## ### etc.
       const headingMatch = text.match(/^(\s*)(#{1,6})\s+(.+)$/)
       if (!headingMatch) {
-        return false
+        return null
       }
 
       const indent = headingMatch[1] // Any leading whitespace
@@ -753,7 +784,10 @@ export const inlineFormattingExtension = Prec.highest(ViewPlugin.fromClass(
         })
       })
 
-      return true // Indicates this line was processed as a heading
+      return {
+        content,
+        contentStart
+      }
     }
 
     processBlockquoteFormatting(decorations, atomicDecorations, text, lineStart) {
@@ -1365,6 +1399,14 @@ export const inlineFormattingStyles = EditorView.theme({
   '.cm-strong-formatted': {
     fontWeight: '600 !important'
   },
+
+  '.cm-heading-formatted .cm-strong-formatted, .cm-heading-formatted.cm-strong-formatted': {
+    fontWeight: '700 !important'
+  },
+
+  '.cm-heading-1-formatted .cm-strong-formatted, .cm-heading-1-formatted.cm-strong-formatted': {
+    fontWeight: '800 !important'
+  },
   
   '.cm-emphasis-formatted': {
     fontStyle: 'italic !important'
@@ -1482,6 +1524,23 @@ export const inlineFormattingStyles = EditorView.theme({
     borderRadius: '3px !important',
     fontSize: '13px !important',
     fontFamily: 'SFMono-Regular, Consolas, "Liberation Mono", Menlo, monospace !important'
+  },
+
+  '.cm-table-formatted a': {
+    color: 'var(--link-color, #2563eb) !important',
+    textDecoration: 'underline !important',
+    textUnderlineOffset: '2px !important'
+  },
+
+  '.cm-table-formatted a:hover': {
+    color: 'var(--link-hover, #1d4ed8) !important'
+  },
+
+  '.cm-table-formatted .cm-table-highlight': {
+    color: 'inherit !important',
+    backgroundColor: 'rgba(253, 240, 209, 0.95) !important',
+    borderRadius: '0.22em !important',
+    padding: '0.02em 0.08em !important'
   },
   
   // Responsive behavior for smaller screens

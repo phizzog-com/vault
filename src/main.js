@@ -735,6 +735,51 @@ function getActiveContentSource() {
   return getActiveTextEditor();
 }
 
+function getActiveMarkdownExportTarget() {
+  const activeTab = getActiveTab();
+  if (activeTab?.type === 'markdown' && activeTab.editor && activeTab.filePath) {
+    return {
+      editor: activeTab.editor,
+      filePath: activeTab.filePath
+    };
+  }
+
+  if (currentEditor && currentFile) {
+    return {
+      editor: currentEditor,
+      filePath: currentFile
+    };
+  }
+
+  return null;
+}
+
+function getExportDefaultDirectory(filePath) {
+  if (!filePath) {
+    return window.currentVaultPath || null;
+  }
+
+  const normalizedPath = String(filePath).replace(/\\/g, '/');
+  const isAbsolutePath = normalizedPath.startsWith('/') || /^[A-Za-z]:\//.test(normalizedPath);
+
+  if (isAbsolutePath) {
+    const lastSlash = normalizedPath.lastIndexOf('/');
+    return lastSlash > 0 ? normalizedPath.slice(0, lastSlash) : normalizedPath;
+  }
+
+  const vaultRoot = window.currentVaultPath ? String(window.currentVaultPath).replace(/\\/g, '/').replace(/\/$/, '') : '';
+  if (!vaultRoot) {
+    return null;
+  }
+
+  const lastSlash = normalizedPath.lastIndexOf('/');
+  if (lastSlash === -1) {
+    return vaultRoot;
+  }
+
+  return `${vaultRoot}/${normalizedPath.slice(0, lastSlash)}`;
+}
+
 function syncGlobalEditorState(tab = null) {
   currentFile = tab?.filePath || null;
   currentEditor = tab?.type === 'markdown' ? tab.editor : null;
@@ -5282,21 +5327,24 @@ window.exportToPDF = async function() {
     dropdown.classList.add('hidden');
   }
   
-  if (!currentEditor || !currentFile) {
+  const exportTarget = getActiveMarkdownExportTarget();
+  if (!exportTarget) {
     console.error('❌ No editor or file available for export');
     showNotification('Please open a file before exporting', 'error');
     return;
   }
+
+  const { editor, filePath } = exportTarget;
   
   try {
     // Ensure editor is initialized before getting content
-    if (!currentEditor.view || !currentEditor.view.state) {
+    if (!editor.view || !editor.view.state) {
       console.warn('Editor view not ready, waiting...');
       // Wait a bit for editor to initialize
       await new Promise(resolve => setTimeout(resolve, 500));
       
       // Check again
-      if (!currentEditor.view || !currentEditor.view.state) {
+      if (!editor.view || !editor.view.state) {
         console.error('❌ Editor still not initialized');
         showNotification('Editor not ready yet, please try again', 'error');
         return;
@@ -5304,15 +5352,16 @@ window.exportToPDF = async function() {
     }
     
     // Get the markdown content
-    const markdownContent = currentEditor.getContent();
+    const markdownContent = editor.getContent();
     
     // Extract filename without extension for default export name
-    const fileName = currentFile.split('/').pop().replace('.md', '');
+    const fileName = filePath.split('/').pop().replace('.md', '');
     
     // Show save dialog
     const outputPath = await invoke('select_export_location', {
       fileName: fileName,
-      extension: 'pdf'
+      extension: 'pdf',
+      defaultDirectory: getExportDefaultDirectory(filePath)
     });
     
     if (!outputPath) {
@@ -5352,21 +5401,24 @@ window.exportToHTML = async function() {
     dropdown.classList.add('hidden');
   }
   
-  if (!currentEditor || !currentFile) {
+  const exportTarget = getActiveMarkdownExportTarget();
+  if (!exportTarget) {
     console.error('❌ No editor or file available for export');
     showNotification('Please open a file before exporting', 'error');
     return;
   }
+
+  const { editor, filePath } = exportTarget;
   
   try {
     // Ensure editor is initialized before getting content
-    if (!currentEditor.view || !currentEditor.view.state) {
+    if (!editor.view || !editor.view.state) {
       console.warn('Editor view not ready, waiting...');
       // Wait a bit for editor to initialize
       await new Promise(resolve => setTimeout(resolve, 500));
       
       // Check again
-      if (!currentEditor.view || !currentEditor.view.state) {
+      if (!editor.view || !editor.view.state) {
         console.error('❌ Editor still not initialized');
         showNotification('Editor not ready yet, please try again', 'error');
         return;
@@ -5374,15 +5426,16 @@ window.exportToHTML = async function() {
     }
     
     // Get the markdown content
-    const markdownContent = currentEditor.getContent();
+    const markdownContent = editor.getContent();
     
     // Extract filename without extension for default export name
-    const fileName = currentFile.split('/').pop().replace('.md', '');
+    const fileName = filePath.split('/').pop().replace('.md', '');
     
     // Show save dialog
     const outputPath = await invoke('select_export_location', {
       fileName: fileName,
-      extension: 'html'
+      extension: 'html',
+      defaultDirectory: getExportDefaultDirectory(filePath)
     });
     
     if (!outputPath) {
@@ -5453,21 +5506,24 @@ window.exportToWord = async function() {
     dropdown.classList.add('hidden');
   }
   
-  if (!currentEditor || !currentFile) {
+  const exportTarget = getActiveMarkdownExportTarget();
+  if (!exportTarget) {
     console.error('❌ No editor or file available for export');
     showNotification('Please open a file before exporting', 'error');
     return;
   }
+
+  const { editor, filePath } = exportTarget;
   
   try {
     // Ensure editor is initialized before getting content
-    if (!currentEditor.view || !currentEditor.view.state) {
+    if (!editor.view || !editor.view.state) {
       console.warn('Editor view not ready, waiting...');
       // Wait a bit for editor to initialize
       await new Promise(resolve => setTimeout(resolve, 500));
       
       // Check again
-      if (!currentEditor.view || !currentEditor.view.state) {
+      if (!editor.view || !editor.view.state) {
         console.error('❌ Editor still not initialized');
         showNotification('Editor not ready yet, please try again', 'error');
         return;
@@ -5475,15 +5531,16 @@ window.exportToWord = async function() {
     }
     
     // Get the markdown content
-    const markdownContent = currentEditor.getContent();
+    const markdownContent = editor.getContent();
     
     // Extract filename without extension for default export name
-    const fileName = currentFile.split('/').pop().replace('.md', '');
+    const fileName = filePath.split('/').pop().replace('.md', '');
     
     // Show save dialog
     const outputPath = await invoke('select_export_location', {
       fileName: fileName,
-      extension: 'doc'
+      extension: 'doc',
+      defaultDirectory: getExportDefaultDirectory(filePath)
     });
     
     if (!outputPath) {

@@ -164,6 +164,15 @@
   white-space: pre-wrap;
 }
 
+.boxnote-note-body mark.boxnote-highlight {
+  color: inherit;
+  background: rgba(253, 240, 209, 0.95);
+  border-radius: 0.22em;
+  padding: 0.02em 0.08em;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+}
+
 .boxnote-note-body ul,
 .boxnote-note-body ol {
   margin: 0;

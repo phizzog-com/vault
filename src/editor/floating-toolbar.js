@@ -14,6 +14,7 @@
 
 import { EditorView, ViewPlugin } from '@codemirror/view'
 import { keymap } from '@codemirror/view'
+import { syntaxTree } from '@codemirror/language'
 
 // Lucide SVG icons (16x16, viewBox 0 0 24 24)
 const ICONS = {
@@ -56,6 +57,256 @@ function isFormatActive(view, marker) {
   return before === marker && after === marker
 }
 
+function selectionOverlapsRange(selection, from, to) {
+  return to > selection.from && from < selection.to
+}
+
+function selectionInsideMarkerRange(view, marker) {
+  return Boolean(findMarkerRange(view, marker))
+}
+
+function adjustPositionForRemovals(pos, removals) {
+  let adjusted = pos
+
+  for (const removal of removals) {
+    const length = removal.to - removal.from
+
+    if (pos >= removal.to) {
+      adjusted -= length
+      continue
+    }
+
+    if (pos > removal.from) {
+      adjusted = removal.from
+      break
+    }
+  }
+
+  return adjusted
+}
+
+function findSyntaxMarkRange(view, marker) {
+  const selection = view.state.selection.main
+  if (selection.empty) return null
+
+  const nodeNamesByMarker = {
+    '**': ['StrongEmphasis'],
+    '*': ['Emphasis'],
+    '~~': ['Strikethrough'],
+    '`': ['InlineCode'],
+  }
+
+  const matchingNodeNames = nodeNamesByMarker[marker]
+  if (!matchingNodeNames) {
+    return null
+  }
+
+  let bestMatch = null
+  const tree = syntaxTree(view.state)
+  tree.iterate({
+    from: selection.from,
+    to: selection.to,
+    enter: (node) => {
+      if (!matchingNodeNames.includes(node.name)) {
+        return
+      }
+
+      if (!selectionOverlapsRange(selection, node.from, node.to)) {
+        return
+      }
+
+      const candidate = {
+        openFrom: node.from,
+        openTo: node.from + marker.length,
+        closeFrom: node.to - marker.length,
+        closeTo: node.to,
+      }
+
+      if (!bestMatch || (candidate.closeTo - candidate.openFrom) < (bestMatch.closeTo - bestMatch.openFrom)) {
+        bestMatch = candidate
+      }
+    }
+  })
+
+  return bestMatch
+}
+
+function findMarkerRange(view, marker) {
+  const selection = view.state.selection.main
+  if (selection.empty) return null
+
+  const syntaxRange = findSyntaxMarkRange(view, marker)
+  if (syntaxRange) {
+    return syntaxRange
+  }
+
+  const doc = view.state.doc.toString()
+  let searchFrom = 0
+  let bestMatch = null
+
+  while (searchFrom < doc.length) {
+    const start = doc.indexOf(marker, searchFrom)
+    if (start === -1) {
+      break
+    }
+
+    const contentStart = start + marker.length
+    const closeFrom = doc.indexOf(marker, contentStart)
+    if (closeFrom === -1) {
+      break
+    }
+
+    if (selectionOverlapsRange(selection, contentStart, closeFrom)) {
+      const candidate = {
+        openFrom: start,
+        openTo: contentStart,
+        closeFrom,
+        closeTo: closeFrom + marker.length,
+      }
+
+      if (!bestMatch || (candidate.closeTo - candidate.openFrom) < (bestMatch.closeTo - bestMatch.openFrom)) {
+        bestMatch = candidate
+      }
+    }
+
+    searchFrom = closeFrom + marker.length
+  }
+
+  return bestMatch
+}
+
+function findSingleStructuredLineContentRange(view) {
+  const selection = view.state.selection.main
+  if (selection.empty) return null
+
+  const doc = view.state.doc
+  const startLine = doc.lineAt(selection.from)
+  const endLinePos = Math.max(selection.to - 1, selection.from)
+  const endLine = doc.lineAt(endLinePos)
+
+  if (startLine.number !== endLine.number) {
+    return null
+  }
+
+  if (selection.from !== startLine.from || selection.to !== startLine.to) {
+    return null
+  }
+
+  const match = startLine.text.match(/^(\s*(?:#{1,6}\s+|- \[[ xX]\]\s+|[-*+]\s+|\d+\.\s+|>\s+))(.*)$/)
+  if (!match || !match[2]) {
+    return null
+  }
+
+  return {
+    from: startLine.from + match[1].length,
+    to: startLine.to
+  }
+}
+
+function selectedLinesMatch(view, matcher) {
+  const selection = view.state.selection.main
+  if (selection.empty) return false
+
+  const doc = view.state.doc
+  const startLine = doc.lineAt(selection.from)
+  const endLinePos = Math.max(selection.from, selection.to - 1)
+  const endLine = doc.lineAt(endLinePos)
+  let foundContentLine = false
+
+  for (let lineNumber = startLine.number; lineNumber <= endLine.number; lineNumber += 1) {
+    const line = doc.line(lineNumber)
+    if (!line.text.trim()) continue
+    foundContentLine = true
+    if (!matcher(line.text)) {
+      return false
+    }
+  }
+
+  return foundContentLine
+}
+
+function getSyntaxActiveButtons(view) {
+  const selection = view.state.selection.main
+  const active = new Set()
+  if (selection.empty) return active
+
+  const tree = syntaxTree(view.state)
+  tree.iterate({
+    from: selection.from,
+    to: selection.to,
+    enter: (node) => {
+      if (!selectionOverlapsRange(selection, node.from, node.to)) {
+        return
+      }
+
+      switch (node.name) {
+        case 'StrongEmphasis':
+          active.add('bold')
+          break
+        case 'Emphasis':
+          active.add('italic')
+          break
+        case 'Highlight':
+          active.add('highlight')
+          break
+        case 'Strikethrough':
+          active.add('strikethrough')
+          break
+        case 'InlineCode':
+          active.add('code')
+          break
+        case 'Link':
+          active.add('link')
+          break
+        default:
+          break
+      }
+    }
+  })
+
+  return active
+}
+
+function getFallbackActiveButtons(view) {
+  const active = new Set()
+
+  if (selectionInsideMarkerRange(view, '==')) {
+    active.add('highlight')
+  }
+
+  return active
+}
+
+function getLinePrefixActiveButtons(view) {
+  const active = new Set()
+
+  if (selectedLinesMatch(view, (line) => /^\s*#\s+/.test(line))) {
+    active.add('h1')
+  }
+  if (selectedLinesMatch(view, (line) => /^\s*##\s+/.test(line))) {
+    active.add('h2')
+  }
+  if (selectedLinesMatch(view, (line) => /^\s*###\s+/.test(line))) {
+    active.add('h3')
+  }
+  if (selectedLinesMatch(view, (line) => /^\s*-\s+\[[ xX]\]\s+/.test(line))) {
+    active.add('task')
+  }
+  if (selectedLinesMatch(view, (line) => /^\s*[-*+]\s+(?!\[[ xX]\]\s+)/.test(line))) {
+    active.add('bullet')
+  }
+
+  return active
+}
+
+function getActiveToolbarButtons(view) {
+  const active = getSyntaxActiveButtons(view)
+  getFallbackActiveButtons(view).forEach((buttonId) => active.add(buttonId))
+  getLinePrefixActiveButtons(view).forEach((buttonId) => active.add(buttonId))
+
+  return active
+}
+
 /**
  * Toggle a formatting marker around the selection
  * If already wrapped, remove the markers; otherwise add them
@@ -65,20 +316,43 @@ function toggleMark(view, marker) {
   const text = view.state.sliceDoc(from, to)
   const markerLen = marker.length
 
-  // Check if already wrapped
-  const before = view.state.sliceDoc(from - markerLen, from)
-  const after = view.state.sliceDoc(to, to + markerLen)
+  const activeRange = findMarkerRange(view, marker)
 
-  if (before === marker && after === marker) {
-    // Remove markers
+  if (activeRange) {
+    const removals = [
+      { from: activeRange.openFrom, to: activeRange.openTo },
+      { from: activeRange.closeFrom, to: activeRange.closeTo }
+    ]
+
     view.dispatch({
-      changes: [
-        { from: from - markerLen, to: from, insert: '' },
-        { from: to, to: to + markerLen, insert: '' }
-      ],
-      selection: { anchor: from - markerLen, head: to - markerLen }
+      changes: removals.map(({ from: removalFrom, to: removalTo }) => ({
+        from: removalFrom,
+        to: removalTo,
+        insert: ''
+      })),
+      selection: {
+        anchor: adjustPositionForRemovals(from, removals),
+        head: adjustPositionForRemovals(to, removals)
+      }
     })
   } else {
+    const structuredContentRange = findSingleStructuredLineContentRange(view)
+
+    if (structuredContentRange) {
+      view.dispatch({
+        changes: [
+          { from: structuredContentRange.from, to: structuredContentRange.from, insert: marker },
+          { from: structuredContentRange.to, to: structuredContentRange.to, insert: marker }
+        ],
+        selection: {
+          anchor: structuredContentRange.from + markerLen,
+          head: structuredContentRange.to + markerLen
+        }
+      })
+      view.focus()
+      return
+    }
+
     // Add markers, keep selection on the text
     view.dispatch({
       changes: { from, to, insert: marker + text + marker },
@@ -315,8 +589,10 @@ const floatingToolbarPlugin = ViewPlugin.fromClass(
           btn.style.backgroundColor = 'rgba(255, 235, 59, 0.3)'
         }
 
+        const activeButtons = getActiveToolbarButtons(this.view)
+
         // Check if format is active
-        if (button.marker && isFormatActive(this.view, button.marker)) {
+        if (activeButtons.has(button.id)) {
           btn.style.backgroundColor = isDarkMode ? '#2d4a7c' : '#e8f0fe'
           btn.style.color = isDarkMode ? '#6bb3f8' : '#4572DE'
           btn.dataset.active = 'true'
@@ -360,23 +636,24 @@ const floatingToolbarPlugin = ViewPlugin.fromClass(
 
       const isDarkMode = document.body.classList.contains('dark-mode') ||
         window.matchMedia('(prefers-color-scheme: dark)').matches
+      const activeButtons = getActiveToolbarButtons(this.view)
 
       const buttons = this.toolbar.querySelectorAll('.cm-floating-toolbar-btn')
       buttons.forEach(btn => {
         const buttonId = btn.getAttribute('data-button-id')
         const buttonConfig = TOOLBAR_BUTTONS.find(b => b.id === buttonId)
 
-        if (buttonConfig && buttonConfig.marker) {
-          const isActive = isFormatActive(this.view, buttonConfig.marker)
-          if (isActive) {
-            btn.style.backgroundColor = isDarkMode ? '#2d4a7c' : '#e8f0fe'
-            btn.style.color = isDarkMode ? '#6bb3f8' : '#4572DE'
-            btn.dataset.active = 'true'
-          } else {
-            btn.style.backgroundColor = buttonConfig.id === 'highlight' ? 'rgba(255, 235, 59, 0.3)' : 'transparent'
-            btn.style.color = isDarkMode ? '#e0e0e0' : '#1f2937'
-            btn.dataset.active = 'false'
-          }
+        if (!buttonConfig) return
+
+        const isActive = activeButtons.has(buttonConfig.id)
+        if (isActive) {
+          btn.style.backgroundColor = isDarkMode ? '#2d4a7c' : '#e8f0fe'
+          btn.style.color = isDarkMode ? '#6bb3f8' : '#4572DE'
+          btn.dataset.active = 'true'
+        } else {
+          btn.style.backgroundColor = buttonConfig.id === 'highlight' ? 'rgba(255, 235, 59, 0.3)' : 'transparent'
+          btn.style.color = isDarkMode ? '#e0e0e0' : '#1f2937'
+          btn.dataset.active = 'false'
         }
       })
     }
@@ -565,6 +842,8 @@ export function floatingToolbarExtension() {
 export {
   TOOLBAR_BUTTONS,
   isFormatActive,
+  findMarkerRange,
+  getActiveToolbarButtons,
   toggleMark,
   insertLink
 }

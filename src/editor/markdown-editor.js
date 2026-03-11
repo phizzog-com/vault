@@ -91,7 +91,6 @@ export class MarkdownEditor {
     // Stored frontmatter for body-only editing
     this.frontmatterRaw = ''
     this.frontmatterFields = new Map()
-    
     // Make reload method available globally for bullet-list extension
     window.reloadCurrentFile = async () => {
       if (this.currentFile) {
@@ -1033,8 +1032,7 @@ export class MarkdownEditor {
       state: this.state,
       parent: this.container
     })
-    
-    
+
     // Clear selection on initial load to avoid showing raw markdown
     this.clearInitialSelection()
   }
@@ -1220,7 +1218,6 @@ export class MarkdownEditor {
       },
       effects: effects.length > 0 ? effects : undefined
     });
-    
     // Restore scroll position if it was preserved
     if (preserveScroll) {
       requestAnimationFrame(() => {
@@ -1978,6 +1975,7 @@ export class MarkdownEditor {
       // Remove any custom event listeners from the container
       this.container.removeEventListener('click', this.handleClick);
       this.container.removeEventListener('keydown', this.handleKeyDown);
+      this.container.classList.remove('markdown-editor-boxnote-converted');
     }
     
     // Clear references to prevent memory leaks
@@ -1987,6 +1985,7 @@ export class MarkdownEditor {
     
     // Destroy the CodeMirror view
     if (this.view) {
+      this.view.dom.classList.remove('cm-boxnote-converted');
       this.view.destroy();
       this.view = null;
     }

@@ -1739,6 +1739,7 @@ async fn select_export_location(
     app: tauri::AppHandle,
     file_name: String,
     extension: String,
+    default_directory: Option<String>,
 ) -> Result<Option<String>, String> {
     use std::sync::mpsc;
     use std::sync::{Arc, Mutex};
@@ -1750,11 +1751,21 @@ async fn select_export_location(
     let (tx, rx) = mpsc::channel();
     let tx = Arc::new(Mutex::new(Some(tx)));
 
-    app.dialog()
+    let mut dialog = app
+        .dialog()
         .file()
         .set_title(&format!("Export as {}", extension.to_uppercase()))
-        .set_file_name(&format!("{}.{}", file_name, extension))
-        .save_file(move |result| {
+        .set_file_name(&format!("{}.{}", file_name, extension));
+
+    if let Some(directory) = default_directory
+        .as_deref()
+        .map(str::trim)
+        .filter(|directory| !directory.is_empty())
+    {
+        dialog = dialog.set_directory(PathBuf::from(directory));
+    }
+
+    dialog.save_file(move |result| {
             println!("📁 Export dialog callback received: {:?}", result);
             if let Some(sender) = tx.lock().unwrap().take() {
                 let send_result = sender.send(result);

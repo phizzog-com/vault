@@ -30,6 +30,7 @@ export const KNOWN_BOX_MARK_TYPES = new Set([
   'underline',
   'strike',
   'strikethrough',
+  'highlight',
   'code',
   'link',
   'textStyle',
@@ -94,6 +95,11 @@ function buildTextStyle(mark) {
   }
 
   return styleParts.join('; ');
+}
+
+function buildHighlightStyle(mark) {
+  const color = sanitizeStyleValue(mark?.attrs?.color);
+  return color ? `background-color: ${color};` : '';
 }
 
 function collectUnsupportedContent(node, report) {
@@ -177,6 +183,11 @@ function applyMarks(text, marks = []) {
       case 'strike':
       case 'strikethrough':
         return `<s>${html}</s>`;
+      case 'highlight': {
+        const style = buildHighlightStyle(mark);
+        const styleAttr = style ? ` style="${escapeAttribute(style)}"` : '';
+        return `<mark class="boxnote-highlight"${styleAttr}>${html}</mark>`;
+      }
       case 'code':
         return `<code>${html}</code>`;
       case 'link': {

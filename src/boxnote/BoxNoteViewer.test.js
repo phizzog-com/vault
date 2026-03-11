@@ -70,4 +70,40 @@ describe('BoxNoteViewer', () => {
     expect(viewer.getContent()).toContain('Document Heading');
     expect(viewer.getContent()).toContain('Body copy.');
   });
+
+  it('renders native Box highlight marks without showing unsupported-content warnings', async () => {
+    mockInvoke.mockImplementation(async (command) => {
+      if (command === 'read_file_content') {
+        return JSON.stringify({
+          schema_version: 1,
+          version: 4,
+          doc: {
+            type: 'doc',
+            content: [
+              {
+                type: 'paragraph',
+                content: [
+                  {
+                    type: 'text',
+                    text: 'Highlighted guidance',
+                    marks: [{ type: 'highlight', attrs: { color: '#fdf0d1' } }],
+                  },
+                ],
+              },
+            ],
+          },
+          comments: [],
+          annotations: [],
+        });
+      }
+
+      throw new Error(`Unexpected command: ${command}`);
+    });
+
+    const viewer = new BoxNoteViewer('Shared/switch apple developer account.boxnote', null, 'pane-1');
+    const container = await viewer.mount();
+
+    expect(container.querySelector('.boxnote-warning-banner')?.classList.contains('hidden')).toBe(true);
+    expect(container.querySelector('.boxnote-note-body mark.boxnote-highlight')?.textContent).toBe('Highlighted guidance');
+  });
 });

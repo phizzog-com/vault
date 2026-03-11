@@ -148,6 +148,52 @@ describe('boxnote-to-markdown', () => {
     expect(markdown).not.toContain('\\[x\\]');
   });
 
+  it('converts native Box highlight marks into Vault ==highlight== syntax', () => {
+    const doc = {
+      type: 'doc',
+      content: [
+        {
+          type: 'paragraph',
+          content: [
+            {
+              type: 'text',
+              text: 'Highlighted guidance',
+              marks: [{ type: 'highlight', attrs: { color: '#fdf0d1' } }],
+            },
+          ],
+        },
+      ],
+    };
+
+    const markdown = boxNoteToMarkdown(doc);
+
+    expect(markdown).toContain('==Highlighted guidance==');
+  });
+
+  it('converts Box textStyle background highlights into Vault ==highlight== syntax', () => {
+    const doc = {
+      type: 'doc',
+      content: [
+        {
+          type: 'paragraph',
+          content: [
+            { type: 'text', text: 'Keep ' },
+            {
+              type: 'text',
+              text: 'this highlighted',
+              marks: [{ type: 'textStyle', attrs: { backgroundColor: '#fdf0d1' } }],
+            },
+            { type: 'text', text: ' in markdown.' },
+          ],
+        },
+      ],
+    };
+
+    const markdown = boxNoteToMarkdown(doc);
+
+    expect(markdown).toContain('Keep ==this highlighted== in markdown.');
+  });
+
   it('writes a converted markdown file next to the original note', async () => {
     mockInvoke.mockImplementation(async (command, args) => {
       if (command === 'read_file_content') {

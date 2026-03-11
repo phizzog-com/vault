@@ -130,4 +130,34 @@ describe('boxnote-adapter', () => {
     expect(html).toContain('<s>Strikethrough</s>');
     expect(html).toContain('<s><em><strong>emphasis with strikethrough nested</strong></em></s>');
   });
+
+  it('treats native Box highlight marks as supported content and renders their color', () => {
+    const highlightedNote = {
+      ...sampleNote,
+      doc: {
+        type: 'doc',
+        content: [
+          {
+            type: 'paragraph',
+            content: [
+              {
+                type: 'text',
+                text: 'Highlighted summary',
+                marks: [{ type: 'highlight', attrs: { color: '#fdf0d1' } }],
+              },
+            ],
+          },
+        ],
+      },
+    };
+
+    const parsed = parseBoxNoteFileContent(JSON.stringify(highlightedNote));
+    const html = renderBoxNoteToHtml(parsed.doc);
+
+    expect(parsed.hasUnsupportedContent).toBe(false);
+    expect(parsed.unsupportedMarks).toEqual([]);
+    expect(html).toContain('<mark class="boxnote-highlight"');
+    expect(html).toContain('background-color: #fdf0d1;');
+    expect(html).toContain('Highlighted summary');
+  });
 });
